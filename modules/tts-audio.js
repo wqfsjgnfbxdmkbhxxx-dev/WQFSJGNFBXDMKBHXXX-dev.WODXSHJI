@@ -88,6 +88,7 @@
   let currentCallTtsObjectUrl = null;
   let currentChatTtsObjectUrl = null;
   let callTtsAbortController = null;
+  const callTtsControllers = new Set();
   let callTtsGeneration = 0;
   let chatTtsGeneration = 0;
   let activeTtsCacheReader = null;
@@ -212,6 +213,14 @@
       callTtsAbortController.abort();
       callTtsAbortController = null;
     }
+    // 中止所有进行中的（含预取）通话 TTS 请求，避免旧结果串入新通话。
+    callTtsControllers.forEach((c) => { try { c.abort(); } catch (_) {} });
+    callTtsControllers.clear();
+    // 清除队列中残留的预取状态，防止旧 promise 被后续复用。
+    for (const job of ttsQueue) {
+      job.bytesPromise = null;
+      job.bytesError = null;
+    }
     ttsQueue.length = 0;
     isTtsPlaying = false;
     stopActiveCallAudioSource();
@@ -331,35 +340,20 @@
     stopChatMessageTtsOnly();
   }
 
-  async function processNextTts() {
-    if (ttsQueue.length === 0) {
-      isTtsPlaying = false;
-      return;
-    }
-
-    isTtsPlaying = true;
-    const job = ttsQueue.shift();
+  // 请求单条通话 TTS 的音频字节。成功返回 Uint8Array；
+  // 因 generation 变化 / abort / 缺 apiKey|voiceId / 无 audioHex 返回 null（可安全跳过）；
+  // 网络或 API 业务错误则抛出（供调用方决定重试）。绝不改动 MiniMax endpoint / 请求体格式。
+  async function fetchCallTtsBytes(job, generation) {
     const { text, voiceId } = job;
     const voice = job.voice || null;
-    const generation = callTtsGeneration;
+    const { minimaxGroupId, minimaxApiKey } = state.apiConfig;
+    if (!minimaxApiKey || !voiceId) return null;
+    if (generation !== callTtsGeneration) return null;
+    const savedDomain = state.apiConfig.minimaxDomain || localStorage.getItem('minimax-domain') || 'https://api.minimax.chat';
+    const modelId = state.apiConfig.minimaxModel || "speech-01-hd";
     const controller = new AbortController();
-    callTtsAbortController = controller;
-
+    callTtsControllers.add(controller);
     try {
-      const { minimaxGroupId, minimaxApiKey } = state.apiConfig;
-      console.log('[通话TTS诊断] processNextTts 进入 | 剩余 queueLength:', ttsQueue.length, '| voiceIdExists:', !!voiceId, '| groupId:', !!minimaxGroupId, '| apiKey:', !!minimaxApiKey);
-      if (!minimaxApiKey || !voiceId) {
-        console.log('[通话TTS诊断] processNextTts 提前结束：缺少 apiKey / voiceId');
-        processNextTts();
-        return;
-      }
-
-      console.log(`[TTS队列] 正在朗读 (剩余${ttsQueue.length}条): ${text}`);
-
-      const savedDomain = state.apiConfig.minimaxDomain || localStorage.getItem('minimax-domain') || 'https://api.minimax.chat';
-      const modelId = state.apiConfig.minimaxModel || "speech-01-hd";
-
-      console.log('[通话TTS诊断] fetch 开始 | endpoint:', `${savedDomain}/v1/t2a_v2`);
       const response = await fetch(`${savedDomain}/v1/t2a_v2?GroupId=${minimaxGroupId}`, {
         method: 'POST',
         headers: {
@@ -375,26 +369,97 @@
         })),
         signal: controller.signal
       });
-
-      console.log('[通话TTS诊断] fetch 返回 | ok:', response.ok, '| status:', response.status);
       if (!response.ok) throw new Error("API请求失败");
-
       const data = await response.json();
-      console.log('[通话TTS诊断] JSON 解析成功 | base_resp.status_code:', data && data.base_resp ? data.base_resp.status_code : '(无 base_resp)');
-      if (controller.signal.aborted || generation !== callTtsGeneration) { console.log('[通话TTS诊断] 中止：已 abort 或 generation 变化（挂断/切换）'); return; }
+      if (controller.signal.aborted || generation !== callTtsGeneration) return null;
       if (data.base_resp && data.base_resp.status_code !== 0) throw new Error(data.base_resp.status_msg);
+      const audioHex = data.data && data.data.audio;
+      if (!audioHex) return null;
+      return hexToUint8Array(audioHex);
+    } finally {
+      callTtsControllers.delete(controller);
+    }
+  }
 
-      const audioHex = data.data?.audio;
-      console.log('[通话TTS诊断] audioHex | exists:', !!audioHex, '| length:', audioHex ? audioHex.length : 0);
-      if (!audioHex) {
-        console.log('[通话TTS诊断] 中止：MiniMax 未返回 audioHex');
+  // 确保 job 的音频请求已发起（幂等：正在进行的 prefetch 不会被重复触发）。
+  // 返回 resolve 为 Uint8Array 或 null 的 promise；失败时置 job.bytesError 并 resolve null。
+  function ensureJobFetch(job, generation) {
+    if (!job.bytesPromise) {
+      job.bytesGeneration = generation;
+      job.bytesPromise = fetchCallTtsBytes(job, generation).catch((error) => {
+        job.bytesError = error;
+        console.warn('[通话TTS] 预取/请求失败:', error && error.name, '|', error && error.message);
+        return null;
+      });
+    }
+    return job.bytesPromise;
+  }
+
+  // 后台预取队列中的下一条（最多 1 条）。generation 变化时不预取。
+  function prefetchNextTts(generation) {
+    if (generation !== callTtsGeneration) return;
+    const next = ttsQueue[0];
+    if (next && !next.bytesPromise) {
+      ensureJobFetch(next, generation);
+    }
+  }
+
+  async function processNextTts() {
+    if (ttsQueue.length === 0) {
+      isTtsPlaying = false;
+      return;
+    }
+
+    isTtsPlaying = true;
+    const job = ttsQueue.shift();
+    const { text, voiceId } = job;
+    const generation = callTtsGeneration;
+
+    try {
+      const { minimaxApiKey } = state.apiConfig;
+      console.log('[通话TTS诊断] processNextTts 进入 | 剩余 queueLength:', ttsQueue.length, '| voiceIdExists:', !!voiceId, '| apiKey:', !!minimaxApiKey);
+      if (!minimaxApiKey || !voiceId) {
+        console.log('[通话TTS诊断] processNextTts 提前结束：缺少 apiKey / voiceId');
         processNextTts();
         return;
       }
 
-      const audioBytes = hexToUint8Array(audioHex);
+      console.log(`[TTS队列] 正在朗读 (剩余${ttsQueue.length}条): ${text}`);
+
+      // 取音频：优先使用已完成/进行中的预取；否则现在请求。
+      let audioBytes = null;
+      try {
+        audioBytes = await ensureJobFetch(job, generation);
+      } catch (_) {
+        audioBytes = null;
+      }
+      // 预取曾失败（网络/API 错误）→ 真正轮到本条时重试一次全新请求，避免队列卡死。
+      if (!audioBytes && job.bytesError && generation === callTtsGeneration) {
+        job.bytesPromise = null;
+        job.bytesError = null;
+        try {
+          audioBytes = await ensureJobFetch(job, generation);
+        } catch (_) {
+          audioBytes = null;
+        }
+      }
+
+      // 挂断 / 新通话：丢弃旧结果，不播放、不推进新队列。
+      if (generation !== callTtsGeneration) {
+        console.log('[通话TTS诊断] 中止：generation 变化（挂断/切换）');
+        return;
+      }
+      if (!audioBytes) {
+        console.log('[通话TTS诊断] 本条无音频，跳到下一条');
+        processNextTts();
+        return;
+      }
+
       const audioBlob = new Blob([audioBytes], { type: 'audio/mpeg' });
-      console.log('[通话TTS诊断] Blob 生成 | size:', audioBlob.size, '| type:', audioBlob.type);
+      console.log('[通话TTS诊断] 音频就绪 | size:', audioBlob.size);
+
+      // 在开始播放当前条的同时，后台预取下一条（最多 1 条）。
+      prefetchNextTts(generation);
 
       // 优先使用通话专用 AudioContext（Web Audio）播放，规避 Android <audio> autoplay 限制。
       // 若上下文不可用 / 解码失败，则回退到 <audio>#call-tts-audio-player 原路径。
@@ -436,8 +501,6 @@
         console.error("TTS生成失败:", error);
         processNextTts(); // 失败也继续下一条
       }
-    } finally {
-      if (callTtsAbortController === controller) callTtsAbortController = null;
     }
   }
 

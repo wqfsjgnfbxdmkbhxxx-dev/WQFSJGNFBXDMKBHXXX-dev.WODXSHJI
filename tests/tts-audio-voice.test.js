@@ -153,7 +153,7 @@ function makeAudioCtxImpl(opts = {}) {
     constructor() { this.onended = null; }
     connect() {}
     disconnect() {}
-    start() { events.started++; }
+    start() { events.started++; if (this.onended) setTimeout(() => { if (this.onended) this.onended(); }, 1); }
     stop() { events.stopped++; }
   }
   class AudioCtxMock {
@@ -241,5 +241,61 @@ test('Test-fallback: 无 AudioContext 时回退 <audio> 仍能发起播放', asy
   await new Promise((r) => setTimeout(r, 30));
   assert.ok(h.fetchCalls.length >= 1); // 仍发起 MiniMax 请求并走 <audio> 回退
 });
+
+// ===== STEP: Prefetch 预取 =====
+
+test('Prefetch1: 播放当前条时会预取下一条（多句共 N 条产生 N 次请求且顺序不变）', async () => {
+  const Impl = makeAudioCtxImpl({ initialState: 'running' });
+  const chats = { c1: { id: 'c1', settings: { minimaxVoiceId: 'v', enableTts: true } } };
+  const h = createHarness({
+    apiConfig: { minimaxGroupId: 'g1', minimaxApiKey: 'sk-x', minimaxModel: 'speech-01-hd' },
+    chats, activeChatId: 'c1', audioContextImpl: Impl,
+  });
+  await h.context.window.unlockCallAudioContext();
+  // 连续三句（同一 AI 回复内多句）
+  h.context.window.playVideoCallPureTTS('句1', 'v');
+  h.context.window.playVideoCallPureTTS('句2', 'v');
+  h.context.window.playVideoCallPureTTS('句3', 'v');
+  await new Promise((r) => setTimeout(r, 80));
+  // 每句各请求一次（去重），共 3 次，无重复
+  const texts = h.fetchCalls.map((c) => c.body.text);
+  assert.equal(h.fetchCalls.length, 3);
+  assert.deepEqual(texts, ['句1', '句2', '句3']);
+});
+
+test('Prefetch2: 已预取成功的条目不会二次请求 MiniMax', async () => {
+  const Impl = makeAudioCtxImpl({ initialState: 'running' });
+  const chats = { c1: { id: 'c1', settings: { minimaxVoiceId: 'v', enableTts: true } } };
+  const h = createHarness({
+    apiConfig: { minimaxGroupId: 'g1', minimaxApiKey: 'sk-x', minimaxModel: 'speech-01-hd' },
+    chats, activeChatId: 'c1', audioContextImpl: Impl,
+  });
+  await h.context.window.unlockCallAudioContext();
+  h.context.window.playVideoCallPureTTS('甲', 'v');
+  h.context.window.playVideoCallPureTTS('乙', 'v');
+  await new Promise((r) => setTimeout(r, 80));
+  // 只应各 1 次，'乙' 被预取后播放时不重复
+  const yiCount = h.fetchCalls.filter((c) => c.body.text === '乙').length;
+  assert.equal(yiCount, 1);
+});
+
+test('Prefetch3: 挂断 stopTtsQueue 后进行中的预取结果不会串入新通话', async () => {
+  const Impl = makeAudioCtxImpl({ initialState: 'running' });
+  const chats = { c1: { id: 'c1', settings: { minimaxVoiceId: 'v', enableTts: true } } };
+  const h = createHarness({
+    apiConfig: { minimaxGroupId: 'g1', minimaxApiKey: 'sk-x', minimaxModel: 'speech-01-hd' },
+    chats, activeChatId: 'c1', audioContextImpl: Impl,
+  });
+  await h.context.window.unlockCallAudioContext();
+  h.context.window.playVideoCallPureTTS('X', 'v');
+  h.context.window.playVideoCallPureTTS('Y', 'v');
+  await new Promise((r) => setTimeout(r, 5));
+  h.context.window.stopTtsQueue();
+  const startedAfterStop = Impl._events.started;
+  await new Promise((r) => setTimeout(r, 60));
+  // 挂断后不应再有新的 start（旧预取结果被 generation 拦截）
+  assert.ok(Impl._events.started - startedAfterStop <= 0);
+});
+
 
 
