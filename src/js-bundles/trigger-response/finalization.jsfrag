@@ -1,0 +1,869 @@
+            continue;
+
+          case 'change_group_avatar':
+            if (chat.isGroup && msgData.avatar_name) {
+              const avatarName = msgData.avatar_name;
+              const library = chat.settings.groupAvatarLibrary || [];
+              const foundAvatar = library.find(avatar => avatar.name === avatarName);
+
+              if (foundAvatar) {
+                chat.settings.groupAvatar = foundAvatar.url;
+
+                const changerMember = chat.members.find(m => m.originalName === msgData.name);
+                const changerDisplayName = changerMember ? changerMember.groupNickname : msgData.name;
+
+                const systemMessage = {
+                  role: 'system',
+                  type: 'pat_message',
+                  content: `${changerDisplayName} 更换了群头像`,
+                  timestamp: messageTimestamp++
+                };
+                chat.history.push(systemMessage);
+
+                if (isViewingThisChat) {
+                  appendMessage(systemMessage, chat);
+                }
+              } else {
+                console.warn(`AI 尝试使用一个不存在的群头像: "${avatarName}"`);
+              }
+            }
+            continue;
+          case 'system_message':
+            aiMessage = {
+              role: 'system',
+              type: 'pat_message',
+              content: msgData.content,
+              timestamp: Date.now()
+            };
+            break;
+          case 'share_link':
+            aiMessage = {
+              ...baseMessage,
+              type: 'share_link',
+              title: msgData.title,
+              description: msgData.description,
+              source_name: msgData.source_name,
+              content: msgData.content
+            };
+            break;
+          case 'quote_reply': {
+            let originalMessage = null;
+
+
+            if (msgData.target_content) {
+              originalMessage = [...chat.history].reverse().find(m =>
+                !m.isHidden &&
+                (
+                  m.content === msgData.target_content ||
+                  (typeof m.content === 'string' && m.content.trim() === msgData.target_content.trim())
+                )
+              );
+
+              if (!originalMessage) {
+                console.warn(`[本轮引用失败] AI ${msgData.name} 尝试引用内容 "${(msgData.target_content || '').substring(0, 20)}..."，但在本轮历史中未找到。`);
+              }
+            }
+
+
+            else if (msgData.target_timestamp) {
+              originalMessage = chat.history.find(m => m.timestamp === msgData.target_timestamp);
+            }
+
+
+            if (originalMessage) {
+
+
+              let quotedSenderDisplayName;
+
+              if (originalMessage.role === 'user') {
+
+                quotedSenderDisplayName = chat.settings.myNickname || '我';
+              } else {
+
+                if (chat.isGroup) {
+
+                  quotedSenderDisplayName = getDisplayNameInGroup(chat, originalMessage.senderName);
+                } else {
+
+                  quotedSenderDisplayName = chat.name;
+                }
+              }
+
+              const quoteContext = {
+                timestamp: originalMessage.timestamp,
+                senderName: quotedSenderDisplayName,
+
+                content: String(originalMessage.content || '').substring(0, 50)
+              };
+
+
+              aiMessage = {
+                ...baseMessage,
+                content: msgData.reply_content,
+                quote: quoteContext
+              };
+            } else {
+
+              console.warn(`引用回复失败: 找不到目标消息 (Content: ${msgData.target_content}, TS: ${msgData.target_timestamp})`);
+              aiMessage = {
+                ...baseMessage,
+                content: msgData.reply_content
+              };
+            }
+            break;
+          }
+          case 'send_and_recall': {
+            if (!isViewingThisChat) continue;
+            const tempMessageData = {
+              ...baseMessage,
+              content: msgData.content
+            };
+            const tempMessageElement = createMessageElement(tempMessageData, chat);
+            appendMessage(tempMessageData, chat, true);
+            await new Promise(resolve => setTimeout(resolve, Math.random() * 2000 + 500));
+            const bubbleWrapper = document.querySelector(`.message-bubble[data-timestamp="${tempMessageData.timestamp}"]`)?.closest('.message-wrapper');
+            if (bubbleWrapper) {
+              bubbleWrapper.classList.add('recalled-animation');
+              await new Promise(resolve => setTimeout(resolve, 300));
+              const recalledMessage = {
+                role: 'assistant',
+                senderName: msgData.name || chat.name,
+                type: 'recalled_message',
+                content: '对方撤回了一条消息',
+                timestamp: tempMessageData.timestamp,
+                recalledData: {
+                  originalType: 'text',
+                  originalContent: msgData.content
+                }
+              };
+              const msgIndex = chat.history.findIndex(m => m.timestamp === tempMessageData.timestamp);
+              if (msgIndex > -1) {
+                chat.history[msgIndex] = recalledMessage;
+              } else {
+                chat.history.push(recalledMessage);
+              }
+              const placeholder = await createMessageElement(recalledMessage, chat);
+              if (document.body.contains(bubbleWrapper)) {
+                bubbleWrapper.parentNode.replaceChild(placeholder, bubbleWrapper);
+              }
+            }
+            continue;
+          }
+
+          case 'thought_chain_block':
+            aiMessage = {
+              ...baseMessage,
+              type: 'thought_chain_block',
+              content: msgData.content
+            };
+            break;
+          case 'text':
+            aiMessage = {
+              ...baseMessage,
+              content: String(msgData.content || msgData.message)
+            };
+            break;
+          case 'sticker':
+            if (msgData.meaning) {
+              const sticker = findBestStickerMatch(msgData.meaning, state.userStickers);
+              if (sticker) {
+                aiMessage = {
+                  ...baseMessage,
+                  type: 'sticker',
+                  content: sticker.url,
+                  meaning: sticker.name
+                };
+              } else {
+
+                console.warn(`AI 尝试使用一个不存在的表情: "${msgData.meaning}"`);
+                aiMessage = null;
+              }
+            } else {
+
+              console.warn("AI 发送了一个没有 'meaning' 的 sticker 指令。", msgData);
+              aiMessage = {
+                ...baseMessage,
+                type: 'sticker',
+                content: msgData.url,
+                meaning: '未知表情'
+              };
+            }
+            break;
+          case 'ai_image':
+            aiMessage = {
+              ...baseMessage,
+              type: 'ai_image',
+              content: msgData.description,
+              image_prompt: msgData.image_prompt
+            };
+            break;
+          case 'voice_message':
+            aiMessage = {
+              ...baseMessage,
+              type: 'voice_message',
+              content: msgData.content
+            };
+            break;
+          case 'transfer':
+            aiMessage = {
+              ...baseMessage,
+              type: 'transfer',
+              amount: msgData.amount,
+              currency: msgData.currency || 'CNY',
+              note: msgData.note,
+              receiverName: msgData.receiver || '我'
+            };
+            break;
+
+          case 'waimai_request':
+            aiMessage = {
+              ...baseMessage,
+              type: 'waimai_request',
+              productInfo: msgData.productInfo,
+              amount: msgData.amount,
+              status: 'pending',
+              countdownEndTime: Date.now() + 15 * 60 * 1000,
+            };
+            break;
+          case 'waimai_order':
+            aiMessage = {
+              ...baseMessage,
+              type: 'waimai_order',
+              productInfo: msgData.productInfo,
+              amount: msgData.amount,
+              greeting: msgData.greeting,
+              recipientName: msgData.recipientName || null
+            };
+            break;
+          case 'offline_text':
+            aiMessage = {
+              ...baseMessage,
+              ...msgData
+            };
+            break;
+
+          case 'naiimag':
+
+            if (typeof generateNaiImageFromPrompt === 'function') {
+              try {
+                const aiPrompt = msgData.prompt || 'a beautiful scene';
+                const generatedData = await generateNaiImageFromPrompt(aiPrompt, chat.id);
+                aiMessage = {
+                  ...baseMessage,
+                  type: 'naiimag',
+                  imageUrl: generatedData.imageUrl,
+                  prompt: aiPrompt,
+                  fullPrompt: generatedData.fullPrompt
+                };
+              } catch (error) {
+                console.error('❌ NAI图片生成失败:', error);
+                aiMessage = {
+                  ...baseMessage,
+                  content: `[图片生成失败: ${error.message}]`
+                };
+              }
+              break;
+            }
+
+            try {
+              console.log('📸 NovelAI图片生成开始，AI提供的prompt:', msgData.prompt);
+
+
+              const naiPrompts = getCharacterNAIPrompts(chat.id);
+
+
+              const aiPrompt = msgData.prompt || 'a beautiful scene';
+              const finalPositivePrompt = aiPrompt + ', ' + naiPrompts.positive;
+              const finalNegativePrompt = naiPrompts.negative;
+
+              console.log(`📝 使用${naiPrompts.source === 'character' ? '角色专属' : '系统'}提示词配置`);
+              console.log('最终正面提示词:', finalPositivePrompt);
+              console.log('最终负面提示词:', finalNegativePrompt);
+
+
+              const apiKey = localStorage.getItem('novelai-api-key');
+              const model = localStorage.getItem('novelai-model') || 'nai-diffusion-4-5-full';
+              const settings = getNovelAISettings();
+
+              if (!apiKey) {
+                throw new Error('NovelAI API Key未配置。请在NovelAI设置中填写API Key。');
+              }
+
+              const [width, height] = settings.resolution.split('x').map(Number);
+
+
+              let requestBody;
+
+              if (model.includes('nai-diffusion-4')) {
+
+                requestBody = {
+                  input: finalPositivePrompt,
+                  model: model,
+                  action: 'generate',
+                  parameters: {
+                    params_version: 3,
+                    width: width,
+                    height: height,
+                    scale: settings.cfg_scale,
+                    sampler: settings.sampler,
+                    steps: settings.steps,
+                    seed: settings.seed === -1 ? Math.floor(Math.random() * 9999999999) : settings.seed,
+                    n_samples: 1,
+                    ucPreset: settings.uc_preset,
+                    qualityToggle: settings.quality_toggle,
+                    autoSmea: false,
+                    dynamic_thresholding: false,
+                    controlnet_strength: 1,
+                    legacy: false,
+                    add_original_image: true,
+                    cfg_rescale: 0,
+                    noise_schedule: 'karras',
+                    legacy_v3_extend: false,
+                    skip_cfg_above_sigma: null,
+                    use_coords: false,
+                    legacy_uc: false,
+                    normalize_reference_strength_multiple: true,
+                    inpaintImg2ImgStrength: 1,
+                    characterPrompts: [],
+
+                    v4_prompt: {
+                      caption: {
+                        base_caption: finalPositivePrompt,
+                        char_captions: []
+                      },
+                      use_coords: false,
+                      use_order: true
+                    },
+
+                    v4_negative_prompt: {
+                      caption: {
+                        base_caption: finalNegativePrompt,
+                        char_captions: []
+                      },
+                      legacy_uc: false
+                    },
+                    negative_prompt: finalNegativePrompt,
+                    deliberate_euler_ancestral_bug: false,
+                    prefer_brownian: true
+
+                  }
+                };
+              } else {
+
+                requestBody = {
+                  input: finalPositivePrompt,
+                  model: model,
+                  action: 'generate',
+                  parameters: {
+                    width: width,
+                    height: height,
+                    scale: settings.cfg_scale,
+                    sampler: settings.sampler,
+                    steps: settings.steps,
+                    seed: settings.seed === -1 ? Math.floor(Math.random() * 9999999999) : settings.seed,
+                    n_samples: 1,
+                    ucPreset: settings.uc_preset,
+                    qualityToggle: settings.quality_toggle,
+                    sm: settings.smea,
+                    sm_dyn: settings.smea_dyn,
+                    dynamic_thresholding: false,
+                    controlnet_strength: 1,
+                    legacy: false,
+                    add_original_image: false,
+                    cfg_rescale: 0,
+                    noise_schedule: 'native',
+                    negative_prompt: finalNegativePrompt
+                  }
+                };
+              }
+
+              console.log('🚀 发送NAI请求:', requestBody);
+
+
+              let apiUrl;
+
+
+              if (model.includes('nai-diffusion-4')) {
+
+                apiUrl = 'https://image.novelai.net/ai/generate-image-stream';
+              } else {
+
+                apiUrl = 'https://image.novelai.net/ai/generate-image';
+              }
+
+              let corsProxy = settings.cors_proxy;
+
+
+              if (corsProxy === 'custom') {
+                corsProxy = settings.custom_proxy_url || '';
+              }
+
+
+              if (corsProxy && corsProxy !== '') {
+                apiUrl = corsProxy + encodeURIComponent(apiUrl);
+              }
+
+              const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': 'Bearer ' + apiKey
+                },
+                body: JSON.stringify(requestBody)
+              });
+
+              console.log('Response status:', response.status);
+              console.log('Response headers:', [...response.headers.entries()]);
+
+              if (!response.ok) {
+                const errorText = await response.text();
+                console.error('API错误响应:', errorText);
+                throw new Error(`API请求失败 (${response.status}): ${errorText}`);
+              }
+
+
+              const contentType = response.headers.get('content-type');
+              console.log('Content-Type:', contentType);
+
+
+              let zipBlob;
+              let imageDataUrl;
+              if (contentType && contentType.includes('text/event-stream')) {
+                console.log('检测到 SSE 流式响应，开始解析...');
+
+
+                const text = await response.text();
+                console.log('收到 SSE 数据，大小:', text.length);
+
+
+                const lines = text.trim().split('\n');
+                let base64Data = null;
+
+                for (let i = lines.length - 1; i >= 0; i--) {
+                  const line = lines[i].trim();
+                  if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+                    const dataContent = line.substring(6);
+
+
+                    try {
+                      const jsonData = JSON.parse(dataContent);
+
+
+                      if (jsonData.event_type === 'final' && jsonData.image) {
+                        base64Data = jsonData.image;
+                        console.log('✅ 找到 final 事件的图片数据');
+                        break;
+                      }
+
+
+                      if (jsonData.data) {
+                        base64Data = jsonData.data;
+                        console.log('从 JSON.data 中提取图片数据');
+                        break;
+                      }
+                      if (jsonData.image) {
+                        base64Data = jsonData.image;
+                        console.log('从 JSON.image 中提取图片数据');
+                        break;
+                      }
+                    } catch (e) {
+
+                      base64Data = dataContent;
+                      console.log('直接使用 base64 数据');
+                      break;
+                    }
+                  }
+                }
+
+                if (!base64Data) {
+                  throw new Error('无法从 SSE 响应中提取图片数据');
+                }
+
+
+                const isPNG = base64Data.startsWith('iVBORw0KGgo');
+                const isJPEG = base64Data.startsWith('/9j/');
+
+                if (isPNG || isJPEG) {
+                  console.log('✅ 检测到直接的图片 base64 数据 (PNG/JPEG)');
+
+                  const binaryString = atob(base64Data);
+                  const bytes = new Uint8Array(binaryString.length);
+                  for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                  }
+                  const imageBlob = new Blob([bytes], {
+                    type: isPNG ? 'image/png' : 'image/jpeg'
+                  });
+                  console.log('图片 Blob 创建成功，大小:', imageBlob.size);
+
+
+                  const reader = new FileReader();
+                  imageDataUrl = await new Promise((resolve, reject) => {
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(imageBlob);
+                  });
+                  console.log('✅ 图片转换成功！🎨');
+                } else {
+
+                  console.log('当作 ZIP 文件处理...');
+                  const binaryString = atob(base64Data);
+                  const bytes = new Uint8Array(binaryString.length);
+                  for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                  }
+                  zipBlob = new Blob([bytes]);
+                  console.log('ZIP Blob 大小:', zipBlob.size);
+                }
+              } else {
+
+                zipBlob = await response.blob();
+                console.log('收到数据，类型:', zipBlob.type, '大小:', zipBlob.size);
+              }
+
+
+              if (!imageDataUrl && zipBlob) {
+
+                try {
+
+                  if (typeof JSZip === 'undefined') {
+                    throw new Error('JSZip库未加载，请刷新页面重试');
+                  }
+
+
+                  const zip = await JSZip.loadAsync(zipBlob);
+                  console.log('ZIP文件内容:', Object.keys(zip.files));
+
+
+                  let imageFile = null;
+                  for (let filename in zip.files) {
+                    if (filename.match(/\.(png|jpg|jpeg|webp)$/i)) {
+                      imageFile = zip.files[filename];
+                      console.log('找到图片文件:', filename);
+                      break;
+                    }
+                  }
+
+                  if (!imageFile) {
+                    throw new Error('ZIP文件中未找到图片');
+                  }
+
+
+                  const imageBlob = await imageFile.async('blob');
+                  console.log('提取的图片大小:', imageBlob.size);
+
+
+                  const reader = new FileReader();
+                  imageDataUrl = await new Promise((resolve, reject) => {
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(imageBlob);
+                  });
+                  console.log('✅ 图片解压成功！');
+                } catch (zipError) {
+                  console.error('ZIP解压失败:', zipError);
+                  throw new Error('图片解压失败: ' + zipError.message);
+                }
+              }
+
+              console.log('✅ NAI图片生成成功！');
+
+
+              aiMessage = {
+                ...baseMessage,
+                type: 'naiimag',
+                imageUrl: imageDataUrl,
+                prompt: aiPrompt,
+                fullPrompt: finalPositivePrompt // 保存完整提示词供查看
+              };
+            } catch (error) {
+              console.error('❌ NAI图片生成失败:', error);
+
+              aiMessage = {
+                ...baseMessage,
+                content: `[图片生成失败: ${error.message}]`
+              };
+            }
+            break;
+
+          case 'googleimag':
+            try {
+              console.log('📸 Google Imagen图片生成开始，AI提供的prompt:', msgData.prompt);
+              const googlePrompt = msgData.prompt || 'a beautiful scene';
+
+              const googleResult = await generateGoogleImagenFromPrompt(googlePrompt);
+
+              aiMessage = {
+                ...baseMessage,
+                type: 'googleimag',
+                imageUrl: googleResult.imageUrl,
+                prompt: googlePrompt,
+                fullPrompt: googleResult.fullPrompt
+              };
+            } catch (error) {
+              console.error('❌ Google Imagen图片生成失败:', error);
+              aiMessage = {
+                ...baseMessage,
+                content: `[Google Imagen图片生成失败: ${error.message}]`
+              };
+            }
+            break;
+
+          case 'openaiimag':
+            try {
+              const openAIPrompt = msgData.prompt || msgData.image_prompt || msgData.description || 'A beautiful scene';
+              const openAIResult = await generateOpenAIImageFromPrompt(openAIPrompt);
+              aiMessage = {
+                ...baseMessage,
+                type: 'openaiimag',
+                imageUrl: openAIResult.imageUrl,
+                prompt: openAIPrompt,
+                fullPrompt: openAIResult.fullPrompt,
+                model: openAIResult.model,
+                mimeType: openAIResult.mimeType,
+                requestId: openAIResult.requestId
+              };
+            } catch (error) {
+              console.error('❌ GPT 图片生成失败:', error);
+              aiMessage = {
+                ...baseMessage,
+                content: `[GPT 图片生成失败: ${error.message}]`
+              };
+            }
+            break;
+
+          default:
+            console.warn("收到了未知的AI指令类型:", msgData.type);
+            break;
+        }
+
+        if (aiMessage) {
+          if (chat.settings.enableBilingualMode && window.languagePolicy && (aiMessage.type === 'text' || aiMessage.type === 'voice_message' || !aiMessage.type)) {
+            const languageParts = window.languagePolicy.splitContent(aiMessage.content);
+            const languageSettings = window.languagePolicy.resolvePolicyForSender(chat, aiMessage.senderName || msgData.name);
+            aiMessage.languageData = {
+              sourceText: languageParts.sourceText,
+              translationText: languageParts.translationText,
+              outputLanguage: languageSettings.outputLanguage || '',
+              translationLanguage: languageSettings.translationLanguage || '',
+              policySnapshot: {
+                outputMode: languageSettings.outputMode,
+                translationMode: languageSettings.translationMode,
+                ttsReadMode: languageSettings.ttsReadMode
+              }
+            };
+          }
+          chat.history.push(aiMessage);
+          if (window.CharacterBond) window.CharacterBond.onMessageSaved(chat, aiMessage);
+          if (!isViewingThisChat) {
+            chat.unreadCount = (chat.unreadCount || 0) + 1;
+          }
+          if (!isViewingThisChat && !notificationShown) {
+            let notificationText;
+            switch (aiMessage.type) {
+              case 'transfer':
+                notificationText = `[收到一笔转账]`;
+                break;
+              case 'waimai_request':
+                notificationText = `[收到一个外卖代付请求]`;
+                break;
+              case 'ai_image':
+              case 'naiimag':
+              case 'googleimag':
+              case 'openaiimag':
+                notificationText = `[图片]`;
+                break;
+              case 'voice_message':
+                notificationText = `[语音]`;
+                break;
+              case 'sticker':
+                notificationText = aiMessage.meaning ? `[表情: ${aiMessage.meaning}]` : '[表情]';
+                break;
+              case 'offline_text':
+                notificationText = aiMessage.dialogue ? `「${aiMessage.dialogue}」` : `[${(aiMessage.description || aiMessage.content || '线下消息').substring(0, 20)}...]`;
+                break;
+              case 'thought_chain_block':
+                notificationText = `[思考过程]`;
+                break;
+              default:
+                notificationText = String(aiMessage.content || '');
+            }
+            const finalNotifText = (chat.isGroup || aiMessage.actorType === 'pet') ? `${aiMessage.senderName}: ${notificationText}` : notificationText;
+            showNotification(chatId, finalNotifText.substring(0, 40) + (finalNotifText.length > 40 ? '...' : ''));
+            notificationShown = true;
+          } else if (isViewingThisChat && !notificationShown) {
+            // 新增：如果在聊天页面且启用了"在聊天页面也发送通知"，则发送系统级通知
+            let notificationText;
+            switch (aiMessage.type) {
+              case 'transfer':
+                notificationText = `[收到一笔转账]`;
+                break;
+              case 'waimai_request':
+                notificationText = `[收到一个外卖代付请求]`;
+                break;
+              case 'ai_image':
+              case 'naiimag':
+              case 'googleimag':
+              case 'openaiimag':
+                notificationText = `[图片]`;
+                break;
+              case 'voice_message':
+                notificationText = `[语音]`;
+                break;
+              case 'sticker':
+                notificationText = aiMessage.meaning ? `[表情: ${aiMessage.meaning}]` : '[表情]';
+                break;
+              case 'offline_text':
+                notificationText = aiMessage.dialogue ? `「${aiMessage.dialogue}」` : `[${(aiMessage.description || aiMessage.content || '线下消息').substring(0, 20)}...]`;
+                break;
+              case 'thought_chain_block':
+                notificationText = `[思考过程]`;
+                break;
+              default:
+                notificationText = String(aiMessage.content || '');
+            }
+            const finalNotifText = (chat.isGroup || aiMessage.actorType === 'pet') ? `${aiMessage.senderName}: ${notificationText}` : notificationText;
+            triggerSystemNotificationInChatPage(chatId, finalNotifText.substring(0, 40) + (finalNotifText.length > 40 ? '...' : ''));
+            notificationShown = true;
+          }
+
+
+
+          if (isViewingThisChat) {
+            appendMessage(aiMessage, chat);
+            await new Promise(resolve => setTimeout(resolve, Math.random() * 1800 + 1000));
+          }
+        }
+      }
+
+      if (callHasBeenHandled && videoCallState.isGroupCall) {
+        videoCallState.isAwaitingResponse = false;
+        if (videoCallState.participants.length > 0) {
+          startVideoCall();
+        } else {
+          videoCallState = {
+            ...videoCallState,
+            isAwaitingResponse: false,
+            participants: []
+          };
+          showScreen('chat-interface-screen');
+          alert('无人接听群聊邀请。');
+        }
+      }
+      if (needsImmediateReaction) {
+        if (replyGuardianTaskId && window.ReplyTaskStore) {
+          const completedTask = await safelyUpdateReplyGuardian(() =>
+            window.ReplyTaskStore.complete(replyGuardianTaskId, { messageCount: messagesArray.length })
+          );
+          replyGuardianTaskSettled = !!completedTask;
+        }
+        await triggerAiResponse();
+        return;
+      }
+      await db.chats.put(chat);
+      if (replyGuardianTaskId && window.ReplyTaskStore) {
+        const completedTask = await safelyUpdateReplyGuardian(() =>
+          window.ReplyTaskStore.complete(replyGuardianTaskId, { messageCount: messagesArray.length })
+        );
+        replyGuardianTaskSettled = !!completedTask;
+      }
+
+      const qzoneActionTaken = messagesArray.some(action =>
+        action.type === 'qzone_post' ||
+        action.type === 'qzone_like' ||
+        action.type === 'qzone_comment' ||
+        action.type === 'repost'
+      );
+
+
+      if (qzoneActionTaken) {
+        console.log("检测到AI执行了动态操作，立即刷新好友动态页面。");
+
+        await renderQzonePosts();
+      }
+
+
+    } catch (error) {
+
+      if (replyGuardianTaskId && window.ReplyTaskStore) {
+        // 即使持久化失败状态本身失败，也不能在 finally 中把真实失败误记为完成。
+        replyGuardianTaskSettled = true;
+        try {
+          await window.ReplyTaskStore.fail(replyGuardianTaskId, error, error.name === 'AbortError');
+        } catch (guardianError) {
+          console.warn('[回复守护] 保存失败状态时出错:', guardianError);
+        }
+      }
+
+      chat.history = chat.history.filter(msg => !msg.isTemporary);
+
+      if (error.name === 'AbortError') {
+        console.log('API调用已被用户取消');
+        videoCallState.isAwaitingResponse = false;
+        return;
+      }
+
+      if (!chat.isGroup && chat.relationship?.status === 'pending_ai_approval') {
+        chat.relationship.status = 'blocked_by_ai';
+        await showCustomAlert('申请失败', `AI在处理你的好友申请时出错了，请稍后重试。\n错误信息: ${error.message}`);
+      } else {
+        await showCustomAlert(
+          'API 调用失败',
+          `发生了一个错误，AI未能成功响应。\n\n错误详情:\n${error.message}`
+        );
+      }
+
+      if (!chat.isGroup && chat.relationship?.status === 'blocked_by_ai') {
+        await db.chats.put(chat);
+      }
+
+      videoCallState.isAwaitingResponse = false;
+    } finally {
+      // 某些合法的指令处理分支会提前 return；只要未进入错误分支，就将已有响应记为完成。
+      if (replyGuardianTaskId && !replyGuardianTaskSettled && window.ReplyTaskStore) {
+        try {
+          await window.ReplyTaskStore.complete(replyGuardianTaskId, {});
+          replyGuardianTaskSettled = true;
+        } catch (guardianError) {
+          console.warn('[回复守护] 完成任务记录失败:', guardianError);
+        }
+      }
+      currentApiController = null;
+      if (stopBtn) {
+        stopBtn.style.display = 'none';
+        stopBtn.classList.remove('active');
+      }
+      setAvatarActingState(chatId, false);
+
+
+      if (chat.isGroup) {
+        if (typingIndicator) {
+          typingIndicator.style.display = 'none';
+        }
+      } else {
+        if (chatHeaderTitle && state.chats[chatId]) {
+          chatHeaderTitle.style.opacity = 0;
+          setTimeout(() => {
+            chatHeaderTitle.textContent = state.chats[chatId].name;
+            chatHeaderTitle.classList.remove('typing-status');
+            chatHeaderTitle.style.opacity = 1;
+          }, 200);
+        }
+      }
+      renderChatList();
+      if (isViewingThisChat) {
+        checkAndTriggerAutoSummary(chatId);
+
+      }
+      // 情侣空间 AI 自主决定模式 - 聊天触发
+      if (!chat.isGroup && typeof triggerCoupleSpaceAiDecide === 'function') {
+        try { triggerCoupleSpaceAiDecide(chatId, 'chat'); } catch(e) {}
+      }
+      stopSilentAudio();
+    }
+  }
+
+
+  // ========== 重新生成与推进功能 ==========
+  // 从 script.js 迁移：handleRegenerateResponse, handleRegenerateCallResponse, handlePropelAction
+

@@ -1,0 +1,906 @@
+
+        activeStickerCategoryId = 'all';
+      }
+      renderStickerPanel();
+      stickerPanel.classList.add('visible');
+    });
+    document.getElementById('close-sticker-panel-btn').addEventListener('click', () => stickerPanel.classList.remove('visible'));
+
+
+
+    document.getElementById('add-sticker-batch-btn').addEventListener('click', openBatchStickerImportModal);
+
+
+
+
+
+
+    document.getElementById('upload-sticker-btn').addEventListener('click', () => document.getElementById('sticker-upload-input').click());
+    document.getElementById('sticker-upload-input').addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        let base64Url = reader.result;
+        const name = await showCustomPrompt("命名表情", "请为这个表情命名 (例如：好耶、疑惑)");
+
+        if (name && name.trim()) {
+          const trimmedName = name.trim();
+
+          const newSticker = {
+            id: 'sticker_' + Date.now() + Math.random(), // <-- Add this line
+            url: base64Url,
+            name: trimmedName,
+            categoryId: (activeStickerCategoryId !== 'all' && activeStickerCategoryId !== 'uncategorized') ? activeStickerCategoryId : null
+          };
+          const newId = await db.userStickers.add(newSticker); // 1. Save to DB
+
+          newSticker.id = newId;
+          state.userStickers.push(newSticker); // 2. Update state
+
+          renderStickerPanel(); // 3. Render UI
+          await showCustomAlert("添加成功！", `表情“${trimmedName}”已添加。\n\n图片将在后台静默上传到图床...`);
+
+          // 4. 【【【已修复的调用】】】
+          (async () => {
+            await silentlyUpdateDbUrl(
+              db.userStickers, // table
+              newId, // recordId
+              'url', // pathString (指向简单属性)
+              base64Url // base64ToFind
+              // nameToMatch (不需要)
+            );
+          })();
+
+        } else if (name !== null) {
+          alert("表情名不能为空！");
+        }
+      };
+      event.target.value = null;
+    });
+
+    document.getElementById('upload-image-btn').addEventListener('click', () => document.getElementById('image-upload-input').click());
+    document.getElementById('image-upload-input').addEventListener('change', async (event) => {
+      const files = event.target.files;
+      if (!files || files.length === 0 || !state.activeChatId) return;
+
+      const chat = state.chats[state.activeChatId];
+      
+      // 并发读取所有图片
+      const readPromises = Array.from(files).map(file => {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result);
+          reader.readAsDataURL(file);
+        });
+      });
+
+      const base64Urls = await Promise.all(readPromises);
+
+      // 为每张图片创建一条消息
+      for (let i = 0; i < base64Urls.length; i++) {
+        const msg = {
+          role: 'user',
+          content: [{
+            type: 'image_url',
+            image_url: {
+              url: base64Urls[i]
+            }
+          }],
+          timestamp: Date.now() + i // 确保时间戳不重复
+        };
+        chat.history.push(msg);
+        appendMessage(msg, chat);
+      }
+      
+      await db.chats.put(chat);
+      renderChatList();
+      
+      event.target.value = '';
+    });
+
+    // 拍照按钮事件处理
+    document.getElementById('camera-capture-btn').addEventListener('click', () => {
+      document.getElementById('camera-capture-input').click();
+    });
+
+    document.getElementById('camera-capture-input').addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      if (!file || !state.activeChatId) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64Url = e.target.result;
+        const chat = state.chats[state.activeChatId];
+        const msg = {
+          role: 'user',
+          content: [{
+            type: 'image_url',
+            image_url: {
+              url: base64Url
+            }
+          }],
+          timestamp: Date.now()
+        };
+        chat.history.push(msg);
+        await db.chats.put(chat);
+        appendMessage(msg, chat);
+        renderChatList();
+      };
+      reader.readAsDataURL(file);
+      event.target.value = null;
+    });
+    document.getElementById('voice-message-btn').addEventListener('click', async () => {
+      if (!state.activeChatId) return;
+
+      const text = await showCustomPrompt("发送语音", "请输入你想说的内容：");
+      if (text && text.trim()) {
+        const chat = state.chats[state.activeChatId];
+
+
+        const msg = {
+          role: 'user',
+          type: 'voice_message',
+          content: text.trim(),
+          timestamp: Date.now()
+        };
+
+        chat.history.push(msg);
+        await db.chats.put(chat);
+        appendMessage(msg, chat);
+        renderChatList();
+      }
+    });
+    document.getElementById('send-photo-btn').addEventListener('click', async () => {
+      if (!state.activeChatId) return;
+      const description = await showCustomPrompt("发送照片", "请用文字描述您要发送的照片：");
+      if (description && description.trim()) {
+        const chat = state.chats[state.activeChatId];
+        const msg = {
+          role: 'user',
+          type: 'user_photo',
+          content: description.trim(),
+          timestamp: Date.now()
+        };
+        chat.history.push(msg);
+        await db.chats.put(chat);
+        appendMessage(msg, chat);
+        renderChatList();
+      }
+    });
+
+    const waimaiModal = document.getElementById('waimai-request-modal');
+
+
+    document.getElementById('send-waimai-request-btn').addEventListener('click', () => {
+      waimaiModal.classList.add('visible');
+    });
+
+    const waimaiCloseBtn = document.getElementById('waimai-close-btn');
+    if (waimaiCloseBtn) {
+      waimaiCloseBtn.addEventListener('click', () => {
+        waimaiModal.classList.remove('visible');
+      });
+    }
+
+    waimaiModal.addEventListener('click', (e) => {
+
+      if (e.target === waimaiModal) {
+        waimaiModal.classList.remove('visible');
+      }
+    });
+
+
+    document.getElementById('waimai-order-for-ai-btn').addEventListener('click', sendWaimaiOrderForAI);
+
+
+    document.getElementById('waimai-confirm-btn').addEventListener('click', async () => {
+      if (!state.activeChatId) return;
+
+      const productInfoInput = document.getElementById('waimai-product-info');
+      const amountInput = document.getElementById('waimai-amount');
+
+      const productInfo = productInfoInput.value.trim();
+      const amount = parseFloat(amountInput.value);
+
+      if (!productInfo || isNaN(amount) || amount <= 0) {
+        alert('请填写有效的商品信息和金额！');
+        return;
+      }
+
+      const chat = state.chats[state.activeChatId];
+      const now = Date.now();
+      const myNickname = chat.isGroup ? (chat.settings.myNickname || '我') : '我';
+
+      const msg = {
+        role: 'user',
+        senderName: myNickname,
+        type: 'waimai_request',
+        productInfo: productInfo,
+        amount: amount,
+        status: 'pending',
+        countdownEndTime: now + 15 * 60 * 1000,
+        timestamp: now
+      };
+
+      chat.history.push(msg);
+      await db.chats.put(chat);
+      appendMessage(msg, chat);
+      renderChatList();
+
+      productInfoInput.value = '';
+      amountInput.value = '';
+      waimaiModal.classList.remove('visible');
+    });
+    document.getElementById('open-persona-library-btn').addEventListener('click', openPersonaLibrary);
+    document.getElementById('close-persona-library-btn').addEventListener('click', closePersonaLibrary);
+    document.getElementById('add-persona-preset-btn').addEventListener('click', openPersonaEditorForCreate);
+    document.getElementById('manage-persona-preset-btn').addEventListener('click', enterManageMode);
+    document.getElementById('select-all-persona-btn').addEventListener('click', selectAllPresets);
+    document.getElementById('delete-selected-persona-btn').addEventListener('click', deleteSelectedPresets);
+    document.getElementById('cancel-manage-persona-btn').addEventListener('click', exitManageMode);
+    document.getElementById('import-tavern-persona-btn').addEventListener('click', importTavernPersonas);
+    document.getElementById('import-tavern-persona-input').addEventListener('change', handleTavernPersonaImport);
+    document.getElementById('cancel-tavern-import-btn').addEventListener('click', closeTavernPersonaSelector);
+    document.getElementById('confirm-tavern-import-btn').addEventListener('click', confirmTavernImport);
+    document.getElementById('cancel-persona-editor-btn').addEventListener('click', closePersonaEditor);
+    document.getElementById('save-persona-preset-btn').addEventListener('click', savePersonaPreset);
+    document.getElementById('preset-action-edit').addEventListener('click', openPersonaEditorForEdit);
+    document.getElementById('preset-action-delete').addEventListener('click', deletePersonaPreset);
+    document.getElementById('preset-action-cancel').addEventListener('click', hidePresetActions);
+
+    // 新增：人设操作弹窗事件绑定
+    document.getElementById('apply-persona-direct-btn').addEventListener('click', applyPersonaPresetDirect);
+    document.getElementById('edit-persona-first-btn').addEventListener('click', editPersonaThenApply);
+    document.getElementById('cancel-persona-action-btn').addEventListener('click', hidePersonaActionModal);
+
+    document.getElementById('selection-cancel-btn').addEventListener('click', exitSelectionMode);
+
+
+
+
+    document.getElementById('selection-soft-delete-btn').addEventListener('click', async () => {
+      if (selectedMessages.size === 0) return;
+      const confirmed = await showCustomConfirm('删除消息', `确定要删除选中的 ${selectedMessages.size} 条消息吗？这会通知AI这些消息已被删除。`, {
+        confirmButtonClass: 'btn-danger'
+      });
+      if (confirmed) {
+        const chat = state.chats[state.activeChatId];
+        let deletedPollsInfo = [];
+        for (const timestamp of selectedMessages) {
+          const msg = chat.history.find(m => m.timestamp === timestamp);
+          if (msg && msg.type === 'poll') {
+            deletedPollsInfo.push(`关于“${msg.question}”的投票(时间戳: ${msg.timestamp})`);
+          }
+        }
+        chat.history = chat.history.filter(msg => !selectedMessages.has(msg.timestamp));
+        let forgetReason = "一些之前的消息已被用户删除。";
+        if (deletedPollsInfo.length > 0) {
+          forgetReason += ` 其中包括以下投票：${deletedPollsInfo.join('；')}。`;
+        }
+        forgetReason += " 你应该像它们从未存在过一样继续对话，并相应地调整你的记忆和行为，不要再提及这些被删除的内容。";
+        const forgetInstruction = {
+          role: 'system',
+          content: `[系统提示：${forgetReason}]`,
+          timestamp: Date.now(),
+          isHidden: true
+        };
+        chat.history.push(forgetInstruction);
+        await db.chats.put(chat);
+        renderChatInterface(state.activeChatId);
+        renderChatList();
+      }
+    });
+
+
+    document.getElementById('selection-erase-btn').addEventListener('click', async () => {
+      if (selectedMessages.size === 0) return;
+      const confirmed = await showCustomConfirm(
+        '彻底删除消息',
+        `这将从历史记录中【永久抹除】这 ${selectedMessages.size} 条消息，AI将完全遗忘它们的存在。确定吗？`, {
+        confirmButtonClass: 'btn-danger',
+        confirmText: '确认抹除'
+      }
+      );
+      if (confirmed) {
+        const chat = state.chats[state.activeChatId];
+
+
+        chat.history = chat.history.filter(msg => !selectedMessages.has(msg.timestamp));
+
+
+        await db.chats.put(chat);
+
+
+        renderChatInterface(state.activeChatId);
+        renderChatList();
+      }
+    });
+
+
+    const fontUrlInput = document.getElementById('font-url-input');
+    fontUrlInput.addEventListener('input', () => applyCustomFont(fontUrlInput.value.trim(), true));
+
+    // 本地字体上传
+    document.getElementById('font-local-upload-btn').addEventListener('click', () => {
+      document.getElementById('font-local-file-input').click();
+    });
+    document.getElementById('font-local-file-input').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const MAX_SIZE = 10 * 1024 * 1024; // 10MB 硬限制
+      const WARN_SIZE = 5 * 1024 * 1024;  // 5MB 警告
+      if (file.size > MAX_SIZE) {
+        alert('字体文件超过 10MB，为避免闪退已拒绝加载。请选择更小的字体文件。');
+        this.value = null;
+        return;
+      }
+      if (file.size > WARN_SIZE) {
+        document.getElementById('font-local-warning').style.display = 'block';
+      } else {
+        document.getElementById('font-local-warning').style.display = 'none';
+      }
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        const dataUrl = ev.target.result;
+        state.globalSettings.fontLocalData = dataUrl;
+        document.getElementById('font-local-filename').textContent = file.name + ' (' + (file.size / 1024 / 1024).toFixed(2) + 'MB)';
+        document.getElementById('font-local-clear-btn').style.display = 'inline-block';
+        document.getElementById('font-url-input').disabled = true;
+        document.getElementById('font-url-input').placeholder = '已使用本地字体，清除后可输入URL';
+        applyCustomFont(state.globalSettings.fontUrl || '', true);
+      };
+      reader.readAsDataURL(file);
+      this.value = null;
+    });
+    document.getElementById('font-local-clear-btn').addEventListener('click', function() {
+      state.globalSettings.fontLocalData = '';
+      document.getElementById('font-local-filename').textContent = '';
+      document.getElementById('font-local-warning').style.display = 'none';
+      this.style.display = 'none';
+      document.getElementById('font-url-input').disabled = false;
+      document.getElementById('font-url-input').placeholder = 'https://..../font.ttf';
+      applyCustomFont(fontUrlInput.value.trim(), true);
+    });
+
+    // 字体大小滑动条实时预览
+    document.getElementById('font-size-slider').addEventListener('input', function() {
+      document.getElementById('font-size-value').textContent = this.value;
+      state.globalSettings.globalFontSize = parseInt(this.value);
+      document.getElementById('font-preview').style.fontSize = this.value + 'px';
+    });
+
+    // 字体应用范围交互
+    document.getElementById('font-scope-all').addEventListener('change', function() {
+      const scopeList = document.getElementById('font-scope-list');
+      scopeList.style.display = this.checked ? 'none' : 'flex';
+      if (this.checked) {
+        document.querySelectorAll('#font-scope-list input[type="checkbox"]').forEach(cb => cb.checked = true);
+      }
+    });
+
+    document.getElementById('save-font-btn').addEventListener('click', async () => {
+      const newFontUrl = fontUrlInput.value.trim();
+      // 读取字体大小
+      const newFontSize = parseInt(document.getElementById('font-size-slider').value) || 16;
+      state.globalSettings.globalFontSize = newFontSize;
+      // 读取字体应用范围
+      const scopeAll = document.getElementById('font-scope-all').checked;
+      const newScope = { all: scopeAll };
+      document.querySelectorAll('#font-scope-list input[data-scope]').forEach(cb => {
+        newScope[cb.dataset.scope] = scopeAll ? true : cb.checked;
+      });
+      state.globalSettings.fontScope = newScope;
+      state.globalSettings.fontUrl = newFontUrl;
+      applyCustomFont(newFontUrl, false);
+      await db.globalSettings.put(state.globalSettings);
+      alert('字体设置已保存并应用！');
+    });
+    document.getElementById('reset-font-btn').addEventListener('click', resetToDefaultFont);
+    document.getElementById('reset-font-scope-btn').addEventListener('click', resetFontByScope);
+
+    document.querySelectorAll('#chat-list-bottom-nav .nav-item').forEach(item => {
+      item.addEventListener('click', () => switchToChatListView(item.dataset.view));
+    });
+    document.getElementById('qzone-back-btn').addEventListener('click', () => switchToChatListView('messages-view'));
+    document.getElementById('qzone-nickname').addEventListener('click', async () => {
+      const newNickname = await showCustomPrompt("修改昵称", "请输入新的昵称", state.qzoneSettings.nickname);
+      if (newNickname && newNickname.trim()) {
+        state.qzoneSettings.nickname = newNickname.trim();
+        await saveQzoneSettings();
+        renderQzoneScreen();
+      }
+    });
+    document.getElementById('qzone-avatar-container').addEventListener('click', () => document.getElementById('qzone-avatar-input').click());
+    document.getElementById('qzone-banner-container').addEventListener('click', () => document.getElementById('qzone-banner-input').click());
+    document.getElementById('qzone-avatar-input').addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const dataUrl = await new Promise(res => {
+          const reader = new FileReader();
+          reader.onload = () => res(reader.result);
+          reader.readAsDataURL(file);
+        });
+        state.qzoneSettings.avatar = dataUrl;
+        await saveQzoneSettings();
+        renderQzoneScreen();
+      }
+      event.target.value = null;
+    });
+    document.getElementById('qzone-banner-input').addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const dataUrl = await new Promise(res => {
+          const reader = new FileReader();
+          reader.onload = () => res(reader.result);
+          reader.readAsDataURL(file);
+        });
+        state.qzoneSettings.banner = dataUrl;
+        await saveQzoneSettings();
+        renderQzoneScreen();
+      }
+      event.target.value = null;
+    });
+
+
+    document.getElementById('create-shuoshuo-btn').addEventListener('click', async () => {
+
+      resetCreatePostModal();
+      const modal = document.getElementById('create-post-modal');
+
+
+      modal.dataset.mode = 'shuoshuo';
+
+
+      modal.querySelector('.post-mode-switcher').style.display = 'none';
+      modal.querySelector('#image-mode-content').style.display = 'none';
+      modal.querySelector('#text-image-mode-content').style.display = 'none';
+
+
+      modal.querySelector('#post-public-text').placeholder = '分享新鲜事...';
+
+
+      const visibilityGroupsContainer = document.getElementById('post-visibility-groups');
+      visibilityGroupsContainer.innerHTML = '';
+      const groups = await db.qzoneGroups.toArray();
+      if (groups.length > 0) {
+        groups.forEach(group => {
+          const label = document.createElement('label');
+          label.style.display = 'block';
+          label.innerHTML = `<input type="checkbox" name="visibility_group" value="${group.id}"> ${group.name}`;
+          visibilityGroupsContainer.appendChild(label);
+        });
+      } else {
+        visibilityGroupsContainer.innerHTML = '<p style="color: var(--text-secondary);">没有可用的分组</p>';
+      }
+      modal.classList.add('visible');
+    });
+
+
+    document.getElementById('create-post-btn').addEventListener('click', async () => {
+
+      resetCreatePostModal();
+      const modal = document.getElementById('create-post-modal');
+
+
+      modal.dataset.mode = 'complex';
+
+
+      modal.querySelector('.post-mode-switcher').style.display = 'flex';
+
+      modal.querySelector('#image-mode-content').classList.add('active');
+
+      modal.querySelector('#text-image-mode-content').classList.remove('active');
+
+
+      modal.querySelector('#post-public-text').placeholder = '分享新鲜事...（非必填的公开文字）';
+
+
+      const visibilityGroupsContainer = document.getElementById('post-visibility-groups');
+      visibilityGroupsContainer.innerHTML = '';
+      const groups = await db.qzoneGroups.toArray();
+      if (groups.length > 0) {
+        groups.forEach(group => {
+          const label = document.createElement('label');
+          label.style.display = 'block';
+          label.innerHTML = `<input type="checkbox" name="visibility_group" value="${group.id}"> ${group.name}`;
+          visibilityGroupsContainer.appendChild(label);
+        });
+      } else {
+        visibilityGroupsContainer.innerHTML = '<p style="color: var(--text-secondary);">没有可用的分组</p>';
+      }
+      modal.classList.add('visible');
+    });
+    document.getElementById('open-album-btn').addEventListener('click', async () => {
+      await renderAlbumList();
+      showScreen('album-screen');
+    });
+    document.getElementById('album-back-btn').addEventListener('click', () => {
+      showScreen('chat-list-screen');
+      switchToChatListView('qzone-screen');
+    });
+
+
+
+    document.getElementById('album-photos-back-btn').addEventListener('click', () => {
+      state.activeAlbumId = null;
+      showScreen('album-screen');
+    });
+
+    document.getElementById('album-upload-photo-btn').addEventListener('click', () => document.getElementById('album-photo-input').click());
+
+    document.getElementById('album-photo-input').addEventListener('change', async (event) => {
+      if (!state.activeAlbumId) return;
+      const files = event.target.files;
+      if (!files.length) return;
+
+      const album = await db.qzoneAlbums.get(state.activeAlbumId);
+
+      for (const file of files) {
+        const dataUrl = await new Promise(resolve => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.readAsDataURL(file);
+        });
+        await db.qzonePhotos.add({
+          albumId: state.activeAlbumId,
+          url: dataUrl,
+          createdAt: Date.now()
+        });
+      }
+
+      const photoCount = await db.qzonePhotos.where('albumId').equals(state.activeAlbumId).count();
+      const updateData = {
+        photoCount
+      };
+
+      if (!album.photoCount || album.coverUrl.includes('placeholder')) {
+        const firstPhoto = await db.qzonePhotos.where('albumId').equals(state.activeAlbumId).first();
+        if (firstPhoto) updateData.coverUrl = firstPhoto.url;
+      }
+
+      await db.qzoneAlbums.update(state.activeAlbumId, updateData);
+      await renderAlbumPhotosScreen();
+      await renderAlbumList();
+
+      event.target.value = null;
+      alert('照片上传成功！');
+    });
+
+
+
+
+
+    document.getElementById('photos-grid-page').addEventListener('click', async (e) => {
+      const deleteBtn = e.target.closest('.photo-delete-btn');
+      const photoThumb = e.target.closest('.photo-thumb');
+
+      if (deleteBtn) {
+        e.stopPropagation();
+        const photoId = parseInt(deleteBtn.dataset.photoId);
+        const confirmed = await showCustomConfirm(
+          '删除照片',
+          '确定要删除这张照片吗？此操作不可恢复。', {
+          confirmButtonClass: 'btn-danger'
+        }
+        );
+
+        if (confirmed) {
+          const deletedPhoto = await db.qzonePhotos.get(photoId);
+          if (!deletedPhoto) return;
+
+          await db.qzonePhotos.delete(photoId);
+
+          const album = await db.qzoneAlbums.get(state.activeAlbumId);
+          const photoCount = (album.photoCount || 1) - 1;
+          const updateData = {
+            photoCount
+          };
+
+          if (album.coverUrl === deletedPhoto.url) {
+            const nextPhoto = await db.qzonePhotos.where('albumId').equals(state.activeAlbumId).first();
+            updateData.coverUrl = nextPhoto ? nextPhoto.url : 'https://i.postimg.cc/pT2xKzPz/album-cover-placeholder.png';
+          }
+
+          await db.qzoneAlbums.update(state.activeAlbumId, updateData);
+          await renderAlbumPhotosScreen();
+          await renderAlbumList();
+          alert('照片已删除。');
+        }
+      } else if (photoThumb) {
+
+        openPhotoViewer(photoThumb.src);
+      }
+    });
+
+
+    document.getElementById('photo-viewer-close-btn').addEventListener('click', window.closePhotoViewer);
+    document.getElementById('photo-viewer-next-btn').addEventListener('click', window.showNextPhoto);
+    document.getElementById('photo-viewer-prev-btn').addEventListener('click', window.showPrevPhoto);
+
+
+    document.addEventListener('keydown', (e) => {
+      if (!photoViewerState.isOpen) return;
+
+      if (e.key === 'ArrowRight') {
+        window.showNextPhoto();
+      } else if (e.key === 'ArrowLeft') {
+        window.showPrevPhoto();
+      } else if (e.key === 'Escape') {
+        window.closePhotoViewer();
+      }
+    });
+
+
+
+    document.getElementById('create-album-btn-page').addEventListener('click', async () => {
+      const albumName = await showCustomPrompt("创建新相册", "请输入相册名称");
+      if (albumName && albumName.trim()) {
+        const newAlbum = {
+          name: albumName.trim(),
+          coverUrl: 'https://i.postimg.cc/pT2xKzPz/album-cover-placeholder.png',
+          photoCount: 0,
+          createdAt: Date.now()
+        };
+        await db.qzoneAlbums.add(newAlbum);
+        await renderAlbumList();
+        alert(`相册 "${albumName}" 创建成功！`);
+      } else if (albumName !== null) {
+        alert("相册名称不能为空！");
+      }
+    });
+
+    document.getElementById('cancel-create-post-btn').addEventListener('click', () => document.getElementById('create-post-modal').classList.remove('visible'));
+    document.getElementById('post-upload-local-btn').addEventListener('click', () => document.getElementById('post-local-image-input').click());
+    document.getElementById('post-local-image-input').addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          document.getElementById('post-image-preview').src = e.target.result;
+          document.getElementById('post-image-preview-container').classList.add('visible');
+          document.getElementById('post-image-desc-group').style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+    document.getElementById('post-use-url-btn').addEventListener('click', async () => {
+      const url = await showCustomPrompt("输入图片URL", "请输入网络图片的链接", "", "url");
+      if (url) {
+        document.getElementById('post-image-preview').src = url;
+        document.getElementById('post-image-preview-container').classList.add('visible');
+        document.getElementById('post-image-desc-group').style.display = 'block';
+      }
+    });
+    document.getElementById('post-remove-image-btn').addEventListener('click', () => resetCreatePostModal());
+    const imageModeBtn = document.getElementById('switch-to-image-mode');
+    const textImageModeBtn = document.getElementById('switch-to-text-image-mode');
+    const imageModeContent = document.getElementById('image-mode-content');
+    const textImageModeContent = document.getElementById('text-image-mode-content');
+    imageModeBtn.addEventListener('click', () => {
+      imageModeBtn.classList.add('active');
+      textImageModeBtn.classList.remove('active');
+      imageModeContent.classList.add('active');
+      textImageModeContent.classList.remove('active');
+    });
+    textImageModeBtn.addEventListener('click', () => {
+      textImageModeBtn.classList.add('active');
+      imageModeBtn.classList.remove('active');
+      textImageModeContent.classList.add('active');
+      imageModeContent.classList.remove('active');
+    });
+
+
+    document.getElementById('confirm-create-post-btn').addEventListener('click', async () => {
+      const modal = document.getElementById('create-post-modal');
+      const mode = modal.dataset.mode;
+
+
+      const visibilityMode = document.querySelector('input[name="visibility"]:checked').value;
+      let visibleGroupIds = null;
+
+      if (visibilityMode === 'include') {
+        visibleGroupIds = Array.from(document.querySelectorAll('input[name="visibility_group"]:checked')).map(cb => parseInt(cb.value));
+      }
+
+      let newPost = {};
+      const basePostData = {
+        timestamp: Date.now(),
+        authorId: 'user',
+
+        visibleGroupIds: visibleGroupIds,
+      };
+
+
+      if (mode === 'shuoshuo') {
+        const content = document.getElementById('post-public-text').value.trim();
+        if (!content) {
+          alert('说说内容不能为空哦！');
+          return;
+        }
+        newPost = {
+          ...basePostData,
+          type: 'shuoshuo',
+          content: content,
+        };
+
+      } else {
+        const publicText = document.getElementById('post-public-text').value.trim();
+        const isImageModeActive = document.getElementById('image-mode-content').classList.contains('active');
+
+        if (isImageModeActive) {
+          const imageUrl = document.getElementById('post-image-preview').src;
+          const imageDescription = document.getElementById('post-image-description').value.trim();
+          if (!imageUrl || !(imageUrl.startsWith('http') || imageUrl.startsWith('data:'))) {
+            alert('请先添加一张图片再发布动态哦！');
+            return;
+          }
+          if (!imageDescription) {
+            alert('请为你的图片添加一个简单的描述（必填，给AI看的）！');
+            return;
+          }
+          newPost = {
+            ...basePostData,
+            type: 'image_post',
+            publicText: publicText,
+            imageUrl: imageUrl,
+            imageDescription: imageDescription,
+          };
+        } else {
+          const hiddenText = document.getElementById('post-hidden-text').value.trim();
+          if (!hiddenText) {
+            alert('请输入文字图描述！');
+            return;
+          }
+          newPost = {
+            ...basePostData,
+            type: 'text_image',
+            publicText: publicText,
+            hiddenContent: hiddenText,
+          };
+        }
+      }
+
+
+      const newPostId = await db.qzonePosts.add(newPost);
+      let postSummary = newPost.content || newPost.publicText || newPost.imageDescription || newPost.hiddenContent || "（无文字内容）";
+      postSummary = postSummary.substring(0, 50) + (postSummary.length > 50 ? '...' : '');
+
+
+      for (const chatId in state.chats) {
+        const chat = state.chats[chatId];
+        if (chat.isGroup) continue;
+
+        let shouldNotify = false;
+        const postVisibleGroups = newPost.visibleGroupIds;
+
+
+        if (!postVisibleGroups || postVisibleGroups.length === 0) {
+          shouldNotify = true;
+        } else if (chat.groupId && postVisibleGroups.includes(chat.groupId)) {
+          shouldNotify = true;
+        }
+
+
+        if (shouldNotify) {
+
+          const historyMessage = {
+            role: 'system',
+            content: `[系统提示：用户刚刚发布了一条动态(ID: ${newPostId})，内容摘要是：“${postSummary}”。请你【结合自己的角色设定、世界观和你们的最近聊天内容】，对这条动态发表一条自然的评论。]`,
+            timestamp: Date.now(),
+            isHidden: true
+          };
+
+          chat.history.push(historyMessage);
+          await db.chats.put(chat);
+        }
+      }
+
+
+      await renderQzonePosts();
+      modal.classList.remove('visible');
+      alert('动态发布成功！');
+    });
+
+
+
+    const postsList = document.getElementById('qzone-posts-list');
+    let swipeState = {
+      isDragging: false,
+      startX: 0,
+      startY: 0,
+      currentX: 0,
+      activeContainer: null,
+      swipeDirection: null,
+      isClick: true
+    };
+
+    function resetAllSwipes(exceptThisOne = null) {
+      document.querySelectorAll('.qzone-post-container').forEach(container => {
+        if (container !== exceptThisOne) {
+          container.querySelector('.qzone-post-item').classList.remove('swiped');
+        }
+      });
+    }
+
+
+    async function handlePostClick(e) {
+      e.stopPropagation();
+      const target = e.target;
+
+
+      const deleteBtn = target.closest('.comment-delete-btn');
+      if (deleteBtn) {
+        const postContainer = deleteBtn.closest('.qzone-post-container');
+        const postId = parseInt(postContainer.dataset.postId);
+        const commentIndex = parseInt(deleteBtn.dataset.commentIndex);
+        if (isNaN(postId) || isNaN(commentIndex)) return;
+
+        const post = qzonePostsCache.find(p => p.id === postId);
+        if (!post || !post.comments || !post.comments[commentIndex]) return;
+
+
+
+        const deletedComment = post.comments[commentIndex];
+
+        const confirmed = await showCustomConfirm('删除评论', '确定要删除这条评论吗？', {
+          confirmButtonClass: 'btn-danger'
+        });
+        if (confirmed) {
+
+          post.comments.splice(commentIndex, 1);
+          await db.qzonePosts.update(postId, {
+            comments: post.comments
+          });
+
+
+
+
+          if (deletedComment && deletedComment.commenterName === state.qzoneSettings.nickname) {
+            console.log("用户删除了自己的评论，开始清理AI记忆...");
+
+
+            const aiToNotifyIds = new Set();
+            if (post.authorId !== 'user') {
+              aiToNotifyIds.add(post.authorId);
+            }
+            if (deletedComment.replyTo) {
+              const repliedToChat = Object.values(state.chats).find(c => c.originalName === deletedComment.replyTo);
+              if (repliedToChat) {
+                aiToNotifyIds.add(repliedToChat.id);
+              }
+            }
+
+
+            const postSummary = (post.publicText || post.content || '').substring(0, 30);
+            const userNickname = state.qzoneSettings.nickname;
+            let notificationText;
+            const stickerMatch = state.userStickers.find(s => s.url === deletedComment.text);
+
+            if (stickerMatch) {
+              notificationText = `用户'${userNickname}'刚刚在你的动态“${postSummary}”下，发送了一个表情评论，意思是：“${stickerMatch.name}”。`;
+            } else if (deletedComment.replyTo) {
+              const repliedToDisplayName = getDisplayNameByOriginalName(deletedComment.replyTo);
+              notificationText = `用户'${userNickname}'刚刚在你的动态“${postSummary}”下，回复了'${repliedToDisplayName}'的评论，内容是：“${deletedComment.text}”。`;
+            } else {
+              notificationText = `用户'${userNickname}'刚刚评论了你的动态“${postSummary}”，内容是：“${deletedComment.text}”。`;
+            }
+            const fullSystemContent = `[系统提示：${notificationText}请你对此作出回应。]`;
+
+
+            for (const aiId of aiToNotifyIds) {
+              const chat = state.chats[aiId];
+              if (chat) {
+                const originalLength = chat.history.length;
+
+                chat.history = chat.history.filter(msg =>
+                  !(msg.isHidden && msg.role === 'system' && msg.content === fullSystemContent)
+                );
+
+                if (chat.history.length < originalLength) {
+                  console.log(`在角色 "${chat.name}" 的记忆中清除了1条关于已删除评论的通知。`);
+                  await db.chats.put(chat);
+                }
+              }
+            }

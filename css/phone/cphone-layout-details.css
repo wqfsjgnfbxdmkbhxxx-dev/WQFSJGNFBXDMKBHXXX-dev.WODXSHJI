@@ -1,0 +1,396 @@
+           /* =================================================== */
+           /* ▼▼▼ CPhone 高级固定布局 V3 (完美复刻版) ▼▼▼ */
+           /* =================================================== */
+
+           #cphone-layout-container {
+               display: flex;
+               flex-direction: column;
+               align-items: center;
+               /* 强制居中 */
+               gap: 20px;
+               width: 100%;
+           }
+
+           /* --- 1. 错落气泡组 --- */
+           .cphone-staggered-group {
+               display: flex;
+               flex-direction: column;
+               gap: 8px;
+               /* 两个气泡之间的间距 */
+               width: 330px;
+               /* 锁定总宽度 */
+           }
+
+           .cphone-bubble-pill {
+               width: 290px;
+               /* 固定气泡长度 */
+               height: 60px;
+               /* 固定气泡高度 */
+               border-radius: 30px;
+               /* 胶囊形状 */
+               display: flex;
+               align-items: center;
+               padding: 5px 8px;
+               box-sizing: border-box;
+
+               /* 玻璃质感复刻 */
+               background: rgba(255, 255, 255, 0.25);
+               backdrop-filter: blur(15px);
+               -webkit-backdrop-filter: blur(15px);
+               border: 1px solid rgba(255, 255, 255, 0.35);
+               box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+               color: #fff;
+               text-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+           }
+
+           /* 上方气泡：靠左 */
+           .cphone-bubble-pill.top {
+               align-self: flex-start;
+           }
+
+           /* 下方气泡：靠右 */
+           .cphone-bubble-pill.bottom {
+               align-self: flex-end;
+               justify-content: flex-end;
+               /* 内容靠右 */
+           }
+
+           /* 头像容器 (带白边) */
+           .bubble-avatar-container {
+               width: 46px;
+               height: 46px;
+               border-radius: 50%;
+               background: rgba(255, 255, 255, 0.6);
+               display: flex;
+               justify-content: center;
+               align-items: center;
+               flex-shrink: 0;
+               box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+           }
+
+           .bubble-avatar-container img {
+               width: 42px;
+               height: 42px;
+               border-radius: 50%;
+               object-fit: cover;
+           }
+
+           /* 气泡文字内容区域 */
+           .bubble-content {
+               flex-grow: 1;
+               display: flex;
+               align-items: center;
+               padding: 0 10px;
+               gap: 5px;
+               overflow: hidden;
+           }
+
+           .bubble-content.left-align {
+               justify-content: flex-start;
+           }
+
+           .bubble-content.right-align {
+               justify-content: flex-end;
+               text-align: right;
+           }
+
+           .bubble-content p {
+               margin: 0;
+               font-size: 14px;
+               font-weight: 500;
+               white-space: nowrap;
+               overflow: hidden;
+               text-overflow: ellipsis;
+           }
+
+           .bubble-deco-icon {
+               font-size: 16px;
+               opacity: 0.9;
+           }
+
+           /* --- 通用固定行 (锁死宽度) --- */
+           .cphone-fixed-row {
+               display: flex;
+               justify-content: space-between;
+               width: 330px;
+               /* 锁死行宽 */
+           }
+
+           /* --- 2. App 网格 (2x2 固定) --- */
+           .cphone-fixed-app-grid {
+               width: 150px;
+               height: 150px;
+               display: grid;
+               grid-template-columns: 1fr 1fr;
+               grid-template-rows: 1fr 1fr;
+               gap: 8px 15px;
+               justify-items: center;
+               align-items: start;
+           }
+
+           .app-icon.small .icon-bg {
+               width: 54px;
+               height: 54px;
+               border-radius: 13px;
+               margin-bottom: 3px;
+               min-width: 54px;
+               /* 防止压缩 */
+           }
+
+           .app-icon.small .label {
+               font-size: 11px;
+           }
+
+           /* --- 3. 堆叠拍立得 (复刻) --- */
+           .cphone-stack-polaroid {
+               width: 150px;
+               height: 150px;
+               position: relative;
+           }
+
+           /* 底层照片 (倾斜) */
+           .polaroid-bg-layer {
+               width: 125px;
+               height: 140px;
+               background-color: #fff;
+               position: absolute;
+               top: 5px;
+               left: 10px;
+               transform: rotate(-6deg);
+               box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+               border-radius: 3px;
+               z-index: 1;
+           }
+
+           /* 顶层照片 (主图) */
+           .polaroid-main-layer {
+               width: 125px;
+               height: 145px;
+               background-color: #fff;
+               position: absolute;
+               top: 0;
+               left: 15px;
+               /* 稍微错位 */
+               transform: rotate(3deg);
+               box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+               border-radius: 3px;
+               z-index: 2;
+               padding: 8px 8px 25px 8px;
+               /* 经典的拍立得留白 */
+               box-sizing: border-box;
+               transition: transform 0.2s;
+           }
+
+           .polaroid-main-layer:hover {
+               transform: rotate(0deg) scale(1.05) translateY(-5px);
+               z-index: 10;
+           }
+
+           .polaroid-photo-frame {
+               width: 100%;
+               height: 100%;
+               background-color: #eee;
+               overflow: hidden;
+           }
+
+           .polaroid-photo-frame img {
+               width: 100%;
+               height: 100%;
+               object-fit: cover;
+           }
+
+           /* --- 4. 圆形组件 (复刻) --- */
+           .cphone-circle-widget-wrapper {
+               width: 150px;
+               height: 150px;
+               background: rgba(255, 255, 255, 0.2);
+               backdrop-filter: blur(10px);
+               border-radius: 24px;
+               border: 1px solid rgba(255, 255, 255, 0.3);
+               display: flex;
+               flex-direction: column;
+               align-items: center;
+               justify-content: center;
+               position: relative;
+           }
+
+           .cphone-circle-bg {
+               width: 75px;
+               height: 75px;
+               border-radius: 50%;
+               overflow: hidden;
+               border: 3px solid rgba(255, 255, 255, 0.9);
+               box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+               margin-bottom: 8px;
+           }
+
+           .cphone-circle-bg img {
+               width: 100%;
+               height: 100%;
+               object-fit: cover;
+           }
+
+           .circle-text-area p {
+               margin: 0;
+               font-size: 12px;
+               color: #fff;
+               font-family: "Georgia", serif;
+               font-style: italic;
+               text-align: center;
+               text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+           }
+
+           .line-deco {
+               width: 40px;
+               height: 2px;
+               background: rgba(255, 255, 255, 0.5);
+               margin: 4px auto 0 auto;
+               border-radius: 2px;
+               position: relative;
+           }
+
+           /* 加两个小点在装饰线两端 */
+           .line-deco::before,
+           .line-deco::after {
+               content: '';
+               position: absolute;
+               width: 4px;
+               height: 4px;
+               background: white;
+               border-radius: 50%;
+               top: -1px;
+           }
+
+           .line-deco::before {
+               left: -2px;
+           }
+
+           .line-deco::after {
+               right: -2px;
+           }
+
+           /* --- Dock 栏 (保持不变但确保宽度) --- */
+           .cphone-dock-container {
+               padding: 0;
+               margin-top: auto;
+               margin-bottom: calc(25px + env(safe-area-inset-bottom));
+               width: 100%;
+               display: flex;
+               justify-content: center;
+           }
+
+           .cphone-dock {
+               width: 330px;
+               /* 锁死宽度 */
+           }
+
+           /* 暗黑模式适配 */
+           #phone-screen.dark-mode .cphone-bubble-pill,
+           #phone-screen.dark-mode .cphone-circle-widget-wrapper {
+               background: rgba(0, 0, 0, 0.4);
+               border-color: rgba(255, 255, 255, 0.1);
+           }
+
+           #phone-screen.dark-mode .polaroid-bg-layer,
+           #phone-screen.dark-mode .polaroid-main-layer {
+               background-color: #2c2c2e;
+           }
+
+           /* --- 1. 错落气泡组 (带倾斜) --- */
+           .cphone-staggered-group {
+               display: flex;
+               flex-direction: column;
+               /* gap: 8px;  <-- 移除这个 gap，改用 margin 控制 */
+               width: 330px;
+               padding: 10px 0;
+               /* 增加上下内边距，给倾斜留空间 */
+           }
+
+           .cphone-bubble-pill {
+               width: 290px;
+               height: 60px;
+               border-radius: 30px;
+               display: flex;
+               align-items: center;
+               padding: 5px 8px;
+               box-sizing: border-box;
+
+               /* 玻璃质感 */
+               background: rgba(255, 255, 255, 0.25);
+               backdrop-filter: blur(15px);
+               -webkit-backdrop-filter: blur(15px);
+               border: 1px solid rgba(255, 255, 255, 0.35);
+               box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+               color: #fff;
+               text-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+
+               /* 让旋转更平滑 */
+               transform-origin: center center;
+               backface-visibility: hidden;
+           }
+
+           /* 上方气泡：靠左 + 向上倾斜 */
+           .cphone-bubble-pill.top {
+               align-self: flex-start;
+               transform: rotate(-3deg);
+               /* 关键：旋转角度 */
+               margin-bottom: -8px;
+               /* 向上拉近距离 */
+               z-index: 2;
+               /* 稍微叠在上面一点 */
+           }
+
+           /* 下方气泡：靠右 + 向下倾斜 */
+           .cphone-bubble-pill.bottom {
+               align-self: flex-end;
+               justify-content: flex-end;
+               transform: rotate(2deg);
+               /* 关键：旋转角度 */
+               margin-top: -5px;
+               z-index: 1;
+           }
+
+           /* ... (头像容器部分保持不变) ... */
+           .bubble-avatar-container {
+               width: 46px;
+               height: 46px;
+               border-radius: 50%;
+               background: rgba(255, 255, 255, 0.6);
+               display: flex;
+               justify-content: center;
+               align-items: center;
+               flex-shrink: 0;
+               box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+           }
+
+           .bubble-avatar-container img {
+               width: 42px;
+               height: 42px;
+               border-radius: 50%;
+               object-fit: cover;
+           }
+
+           /* 气泡文字内容区域 */
+           .bubble-content {
+               flex-grow: 1;
+               display: flex;
+               align-items: center;
+               padding: 0 10px;
+               gap: 5px;
+               overflow: hidden;
+               cursor: text;
+               /* 鼠标放上去显示可输入状态 */
+           }
+
+           /* 编辑时的输入框样式 */
+           .bubble-edit-input {
+               background: rgba(255, 255, 255, 0.2);
+               border: none;
+               border-radius: 4px;
+               color: #fff;
+               padding: 4px;
+               width: 100%;
+               outline: none;
+               text-shadow: none;
+           }
+

@@ -1,0 +1,440 @@
+/* ==========================================================================
+   奶油樱花·浅粉梦境（轻量绘制）
+   ========================================================================== */
+
+#api-settings-screen.api-scheme-2 {
+  --api-sakura-bg: #fff7f9;
+  --api-sakura-surface: #fff;
+  --api-sakura-surface-soft: #fffafb;
+  --api-sakura-border: #f4dfe5;
+  --api-sakura-accent: #d79aaa;
+  --api-sakura-accent-soft: #f7dce4;
+  --api-sakura-text: #6b5b5f;
+  --api-sakura-muted: #9b858b;
+  position: relative;
+  background: linear-gradient(180deg, #fff 0%, var(--api-sakura-bg) 100%) !important;
+  color: var(--api-sakura-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+#api-settings-screen.api-scheme-2::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  pointer-events: none;
+  background: linear-gradient(90deg, #ffe8ed, #f7cdd8, #ffe8ed);
+}
+
+#api-settings-screen.api-scheme-2 .header {
+  background: #fffafb !important;
+  border-bottom: 1px solid var(--api-sakura-border) !important;
+  box-shadow: none !important;
+  color: var(--api-sakura-accent) !important;
+}
+
+#api-settings-screen.api-scheme-2 .back-btn {
+  color: var(--api-sakura-accent) !important;
+  font-weight: 500;
+}
+
+#api-settings-screen.api-scheme-2 .save-btn {
+  padding: 7px 16px;
+  border: 1px solid #f1d3dc;
+  border-radius: 999px;
+  background: var(--api-sakura-accent-soft);
+  color: #b87588 !important;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+
+#api-settings-screen.api-scheme-2 .save-btn:active {
+  transform: scale(.97);
+  background: #f2ced9;
+}
+
+#api-settings-screen.api-scheme-2 .cas-tabs {
+  border-bottom-color: var(--api-sakura-border);
+  background: #fffafb;
+}
+
+#api-settings-screen.api-scheme-2 .cas-tab {
+  color: var(--api-sakura-muted);
+}
+
+#api-settings-screen.api-scheme-2 .cas-tab.active {
+  border-bottom-color: var(--api-sakura-accent);
+  color: #b87588;
+}
+
+#api-settings-screen.api-scheme-2 .settings-section {
+  overflow: visible !important;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+#api-settings-screen.api-scheme-2 .settings-header {
+  position: relative;
+  margin: 32px 24px 8px;
+  padding-left: 12px;
+  color: #b78493;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  opacity: .7;
+}
+
+#api-settings-screen.api-scheme-2 .settings-header::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #e8afbe;
+  transform: translateY(-50%);
+}
+
+#api-settings-screen.api-scheme-2 .settings-item {
+  margin: 0 16px;
+  padding: 16px 24px;
+  border-bottom-color: #f5e7eb;
+  border-radius: 0;
+  background: #fffafb;
+  transition: background-color 140ms ease;
+}
+
+#api-settings-screen.api-scheme-2 .settings-item:first-child {
+  border-radius: 16px 16px 0 0;
+}
+
+#api-settings-screen.api-scheme-2 .settings-item:last-child {
+  border-bottom: 0;
+  border-radius: 0 0 16px 16px;
+}
+
+#api-settings-screen.api-scheme-2 .settings-item:only-child {
+  border-radius: 16px;
+}
+
+#api-settings-screen.api-scheme-2 .settings-item label,
+#api-settings-screen.api-scheme-2 .settings-item-block label {
+  color: #806a70;
+}
+
+#api-settings-screen.api-scheme-2 input[type="text"],
+#api-settings-screen.api-scheme-2 input[type="password"],
+#api-settings-screen.api-scheme-2 input[type="number"],
+#api-settings-screen.api-scheme-2 select.settings-select {
+  min-width: 0;
+  border: 1px solid #efdce2;
+  border-radius: 999px;
+  background: var(--api-sakura-surface-soft);
+  color: var(--api-sakura-text);
+  padding: 9px 16px;
+  font-size: 13px;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+#api-settings-screen.api-scheme-2 input:focus,
+#api-settings-screen.api-scheme-2 select:focus,
+#api-settings-screen.api-scheme-2 textarea:focus {
+  outline: 2px solid rgba(215, 154, 170, .2);
+  outline-offset: 1px;
+  border-color: #dda7b6;
+  background: #fff;
+}
+
+#api-settings-screen.api-scheme-2 .settings-mini-btn,
+#api-settings-screen.api-scheme-2 .settings-full-btn {
+  border: 1px solid #edcfd8;
+  background: #fbe8ed;
+  color: #ae7183;
+  box-shadow: none;
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+
+#api-settings-screen.api-scheme-2 .settings-mini-btn {
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+#api-settings-screen.api-scheme-2 .settings-full-btn {
+  padding: 12px 20px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+#api-settings-screen.api-scheme-2 .settings-mini-btn:active,
+#api-settings-screen.api-scheme-2 .settings-full-btn:active {
+  transform: scale(.98);
+  background: #f5d7df;
+}
+
+#api-settings-screen.api-scheme-2 .slider {
+  border: 1px solid #ead8dd;
+  background: #e9e1e4;
+  box-shadow: none;
+}
+
+#api-settings-screen.api-scheme-2 .toggle-switch {
+  width: 48px;
+  height: 28px;
+}
+
+#api-settings-screen.api-scheme-2 .toggle-switch input:checked + .slider {
+  border-color: #e6bdc8;
+  background: var(--api-sakura-accent-soft);
+  box-shadow: none;
+}
+
+#api-settings-screen.api-scheme-2 .slider::before {
+  width: 22px;
+  height: 22px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(82, 54, 62, .18);
+}
+
+#api-settings-screen.api-scheme-2 .settings-tip-wrapper,
+#api-settings-screen.api-scheme-2 .settings-desc {
+  margin: 12px 16px;
+  padding: 12px 16px;
+  border-color: #f0dce2;
+  border-radius: 14px;
+  background: #fff6f8;
+  color: var(--api-sakura-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  box-shadow: none;
+}
+
+#api-settings-screen.api-scheme-2 label {
+  color: #806a70;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: .2px;
+}
+
+/* 保留该主题原有的去 Emoji 文案表现，但只匹配明确控件。 */
+#api-settings-screen.api-scheme-2 #fetch-models-btn,
+#api-settings-screen.api-scheme-2 #fetch-secondary-models-btn,
+#api-settings-screen.api-scheme-2 #google-imagen-fetch-models-btn,
+#api-settings-screen.api-scheme-2 #google-imagen-test-btn,
+#api-settings-screen.api-scheme-2 #novelai-test-btn,
+#api-settings-screen.api-scheme-2 #novelai-settings-btn,
+#api-settings-screen.api-scheme-2 #github-upload-btn,
+#api-settings-screen.api-scheme-2 #github-upload-large-btn,
+#api-settings-screen.api-scheme-2 #github-download-btn {
+  font-size: 0;
+}
+
+#api-settings-screen.api-scheme-2 #fetch-models-btn,
+#api-settings-screen.api-scheme-2 #fetch-secondary-models-btn,
+#api-settings-screen.api-scheme-2 #google-imagen-fetch-models-btn {
+  min-width: 58px;
+}
+
+#api-settings-screen.api-scheme-2 #google-imagen-test-btn,
+#api-settings-screen.api-scheme-2 #novelai-test-btn,
+#api-settings-screen.api-scheme-2 #novelai-settings-btn,
+#api-settings-screen.api-scheme-2 #github-upload-btn,
+#api-settings-screen.api-scheme-2 #github-download-btn {
+  min-width: 76px;
+}
+
+#api-settings-screen.api-scheme-2 #github-upload-large-btn {
+  min-width: 88px;
+}
+
+#api-settings-screen.api-scheme-2 #fetch-models-btn::before,
+#api-settings-screen.api-scheme-2 #fetch-secondary-models-btn::before,
+#api-settings-screen.api-scheme-2 #google-imagen-fetch-models-btn::before {
+  content: "拉取";
+  font-size: 12px;
+}
+
+#api-settings-screen.api-scheme-2 #google-imagen-test-btn::before,
+#api-settings-screen.api-scheme-2 #novelai-test-btn::before {
+  content: "测试生成";
+  font-size: 12px;
+}
+
+#api-settings-screen.api-scheme-2 #novelai-settings-btn::before {
+  content: "生成参数";
+  font-size: 12px;
+}
+
+#api-settings-screen.api-scheme-2 #github-upload-btn::before {
+  content: "上传备份";
+  font-size: 12px;
+}
+
+#api-settings-screen.api-scheme-2 #github-upload-large-btn::before {
+  content: "大数据备份";
+  font-size: 12px;
+}
+
+#api-settings-screen.api-scheme-2 #github-download-btn::before {
+  content: "恢复备份";
+  font-size: 12px;
+}
+
+#api-settings-screen.api-scheme-2 #github-token-toggle,
+#api-settings-screen.api-scheme-2 #google-imagen-key-toggle,
+#api-settings-screen.api-scheme-2 #novelai-key-toggle,
+#api-settings-screen.api-scheme-2 #imgbb-key-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #edcfd8;
+  border-radius: 999px;
+  background: #fbe8ed;
+  font-size: 0;
+}
+
+#api-settings-screen.api-scheme-2 #github-token-toggle::before,
+#api-settings-screen.api-scheme-2 #google-imagen-key-toggle::before,
+#api-settings-screen.api-scheme-2 #novelai-key-toggle::before,
+#api-settings-screen.api-scheme-2 #imgbb-key-toggle::before {
+  content: "显示";
+  color: #ae7183;
+  font-size: 11px;
+}
+
+#api-settings-screen.api-scheme-2 .settings-tip-content a {
+  font-size: 0;
+}
+
+#api-settings-screen.api-scheme-2 .settings-tip-content a::before {
+  content: "点击此处注册并获取 API Key";
+  font-size: 12px;
+}
+
+#api-settings-screen.api-scheme-2 a[target="_blank"] {
+  color: #b87588;
+  text-decoration-color: #e4b8c4;
+}
+
+#api-settings-screen.api-scheme-2 #novelai-details,
+#api-settings-screen.api-scheme-2 #google-imagen-details,
+#api-settings-screen.api-scheme-2 #imgbb-settings-details,
+#api-settings-screen.api-scheme-2 #catbox-settings-details,
+#api-settings-screen.api-scheme-2 #github-settings-details {
+  background: #fff9fa;
+  border-top-color: #f1e0e5;
+}
+
+#api-settings-screen.api-scheme-2 .ios-scroll-container::-webkit-scrollbar {
+  width: 3px;
+}
+
+#api-settings-screen.api-scheme-2 .ios-scroll-container::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(215, 154, 170, .45);
+}
+
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 {
+  --api-sakura-bg: #2a2428;
+  --api-sakura-surface: #332c30;
+  --api-sakura-surface-soft: #3a3236;
+  --api-sakura-border: #4b3c42;
+  --api-sakura-accent: #d6a7b4;
+  --api-sakura-accent-soft: #604751;
+  --api-sakura-text: #efe5e9;
+  --api-sakura-muted: #baa5ac;
+  background: linear-gradient(180deg, #2a2428, #312a2e) !important;
+}
+
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 .header,
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 .cas-tabs {
+  border-bottom-color: var(--api-sakura-border) !important;
+  background: #2f282c !important;
+}
+
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 .settings-section,
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 .settings-item {
+  border-color: var(--api-sakura-border);
+  color: var(--api-sakura-text);
+}
+
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 .settings-section {
+  background: transparent;
+}
+
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 .settings-item {
+  background: var(--api-sakura-surface);
+}
+
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 .settings-item label,
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 .settings-item-block label {
+  color: #ddcdd2;
+}
+
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 input,
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 select,
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 textarea {
+  border-color: var(--api-sakura-border);
+  background: var(--api-sakura-surface-soft);
+  color: var(--api-sakura-text);
+}
+
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 .settings-tip-wrapper,
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 .settings-desc,
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 #novelai-details,
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 #google-imagen-details,
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 #imgbb-settings-details,
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 #catbox-settings-details,
+#phone-screen.dark-mode #api-settings-screen.api-scheme-2 #github-settings-details {
+  border-color: var(--api-sakura-border);
+  background: #382f34;
+  color: var(--api-sakura-muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #api-settings-screen.api-scheme-2 .settings-item:hover {
+    background: #fff8fa;
+  }
+
+  #api-settings-screen.api-scheme-2 .settings-mini-btn:hover,
+  #api-settings-screen.api-scheme-2 .settings-full-btn:hover {
+    background: #f7dce4;
+  }
+
+  #phone-screen.dark-mode #api-settings-screen.api-scheme-2 .settings-item:hover {
+    background: #3a3136;
+  }
+}
+
+@media (max-width: 390px) {
+  #api-settings-screen.api-scheme-2 .settings-item {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #api-settings-screen.api-scheme-2 *,
+  #api-settings-screen.api-scheme-2 *::before,
+  #api-settings-screen.api-scheme-2 *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

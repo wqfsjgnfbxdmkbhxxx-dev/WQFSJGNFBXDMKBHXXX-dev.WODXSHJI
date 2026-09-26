@@ -1,0 +1,170 @@
+  // ========== 从 script.js 迁移：Todo 相关函数 ==========
+  let currentTodoDate = new Date();
+  // todoCache, todoRenderCount, isLoadingMoreTodos 已在 utils.js 中声明
+  let editingTodoId = null;
+
+  async function openTodoList() {
+    if (!state.activeChatId) return;
+    currentTodoDate = new Date();
+    updateTodoDateDisplay();
+    await renderTodoList();
+    showScreen('todo-list-screen');
+  }
+
+  function getTodoDateString(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  }
+
+  function updateTodoDateDisplay() {
+    const displayEl = document.getElementById('todo-current-date-display');
+    const now = new Date();
+    const dateStr = getTodoDateString(currentTodoDate);
+    const todayStr = getTodoDateString(now);
+    if (dateStr === todayStr) {
+      displayEl.textContent = "今天";
+    } else {
+      displayEl.textContent = dateStr;
+    }
+  }
+
+  function changeTodoDate(days) {
+    currentTodoDate.setDate(currentTodoDate.getDate() + days);
+    updateTodoDateDisplay();
+    renderTodoList();
+  }
+
+  async function renderTodoList() {
+    const container = document.getElementById('todo-list-container');
+    container.innerHTML = '';
+    const chat = state.chats[state.activeChatId];
+    if (!chat) return;
+    const targetDateStr = getTodoDateString(currentTodoDate);
+    const todos = chat.todoList || [];
+    const dayTodos = todos.filter(t => t.date === targetDateStr);
+    dayTodos.sort((a, b) => {
+      if (a.status === b.status) return (a.time || '00:00').localeCompare(b.time || '00:00');
+      return a.status === 'completed' ? 1 : -1;
+    });
+    if (dayTodos.length === 0) {
+      container.innerHTML = `<div class="todo-empty-state">📅 ${targetDateStr}<br>暂无待办事项</div>`;
+      return;
+    }
+    todoCache = dayTodos;
+    todoRenderCount = 0;
+    loadMoreTodos();
+  }
+
+  function loadMoreTodos() {
+    if (isLoadingMoreTodos) return;
+    const container = document.getElementById('todo-list-container');
+    if (!container) return;
+    if (todoRenderCount >= todoCache.length) return;
+    isLoadingMoreTodos = true;
+    const BATCH_SIZE = 30;
+    const nextSliceEnd = todoRenderCount + BATCH_SIZE;
+    const itemsToRender = todoCache.slice(todoRenderCount, nextSliceEnd);
+    const fragment = document.createDocumentFragment();
+    itemsToRender.forEach(todo => {
+      const item = document.createElement('div');
+      const isUser = (todo.creator === 'user' || !todo.creator);
+      const creatorClass = isUser ? 'is-user' : 'is-char';
+      item.className = `todo-item ${todo.status} ${creatorClass}`;
+      item.dataset.id = todo.id;
+      const colorMap = {
+        '日常': '#8e8e93', '工作': '#007aff', '重要': '#ff3b30',
+        '生活': '#34c759', '约会': '#af52de', '学习': '#ff9500', '记账': '#ffc107'
+      };
+      const tagColor = colorMap[todo.type] || '#8e8e93';
+      item.innerHTML = `
+            <div class="todo-checkbox"></div>
+            <div class="todo-info">
+                <div class="todo-content">${escapeHTML(todo.content)}</div>
+                <div class="todo-meta">
+                    <span class="todo-tag" style="--tag-color: ${tagColor};">${todo.type || '日常'}</span>
+                    ${todo.time ? `<span class="todo-time">⏰ ${todo.time}</span>` : ''}
+                </div>
+            </div>
+            <button class="todo-delete-btn">×</button>
+        `;
+      item.querySelector('.todo-checkbox').addEventListener('click', (e) => { e.stopPropagation(); toggleTodoStatus(todo.id); });
+      item.querySelector('.todo-delete-btn').addEventListener('click', (e) => { e.stopPropagation(); deleteTodo(todo.id); });
+      item.addEventListener('click', () => openTodoEditor(todo));
+      fragment.appendChild(item);
+    });
+    container.appendChild(fragment);
+    todoRenderCount += itemsToRender.length;
+    isLoadingMoreTodos = false;
+  }
+
+  async function toggleTodoStatus(id) {
+    const chat = state.chats[state.activeChatId];
+    const todo = chat.todoList.find(t => t.id === id);
+    if (todo) {
+      const isCompleting = todo.status !== 'completed';
+      todo.status = isCompleting ? 'completed' : 'pending';
+      if (isCompleting) {
+        const myNickname = chat.settings.myNickname || '我';
+        const systemHint = `[系统提示：用户(${myNickname}) 刚刚在待办清单中勾选完成了："${todo.content}"。]`;
+        chat.history.push({ role: 'system', content: systemHint, timestamp: Date.now(), isHidden: true });
+      }
+      await db.chats.put(chat);
+      renderTodoList();
+    }
+  }
+
+  async function deleteTodo(id) {
+    const confirmed = await showCustomConfirm("删除事项", "确定要删除这条待办事项吗？");
+    if (confirmed) {
+      const chat = state.chats[state.activeChatId];
+      chat.todoList = chat.todoList.filter(t => t.id !== id);
+      await db.chats.put(chat);
+      renderTodoList();
+    }
+  }
+
+  function openTodoEditor(todo = null) {
+    const modal = document.getElementById('todo-editor-modal');
+    const titleEl = document.getElementById('todo-editor-title');
+    editingTodoId = todo ? todo.id : null;
+    titleEl.textContent = todo ? '编辑事项' : '添加事项';
+    document.getElementById('todo-content-input').value = todo ? todo.content : '';
+    document.getElementById('todo-date-input').value = todo ? todo.date : getTodoDateString(currentTodoDate);
+    document.getElementById('todo-time-input').value = todo ? todo.time : '';
+    const typeOptions = document.querySelectorAll('.todo-type-option');
+    typeOptions.forEach(opt => opt.classList.remove('active'));
+    const targetType = todo ? todo.type : '日常';
+    const activeOption = Array.from(typeOptions).find(opt => opt.dataset.value === targetType);
+    if (activeOption) activeOption.classList.add('active');
+    modal.classList.add('visible');
+  }
+
+  async function saveTodo() {
+    const content = document.getElementById('todo-content-input').value.trim();
+    const date = document.getElementById('todo-date-input').value;
+    const time = document.getElementById('todo-time-input').value;
+    const typeEl = document.querySelector('.todo-type-option.active');
+    const type = typeEl ? typeEl.dataset.value : '日常';
+    if (!content || !date) { alert("内容和日期不能为空！"); return; }
+    const chat = state.chats[state.activeChatId];
+    if (!chat.todoList) chat.todoList = [];
+    if (editingTodoId) {
+      const todo = chat.todoList.find(t => t.id === editingTodoId);
+      if (todo) { todo.content = content; todo.date = date; todo.time = time; todo.type = type; }
+    } else {
+      chat.todoList.push({ id: Date.now(), content, date, time, type, status: 'pending', creator: 'user', timestamp: Date.now() });
+    }
+    await db.chats.put(chat);
+    const newDate = new Date(date);
+    if (!isNaN(newDate.getTime())) { currentTodoDate = newDate; updateTodoDateDisplay(); }
+    document.getElementById('todo-editor-modal').classList.remove('visible');
+    renderTodoList();
+  }
+
+  window.renderTodoList = renderTodoList;
+  window.loadMoreTodos = loadMoreTodos;
+  window.saveTodo = saveTodo;
+  window.updateTodoDateDisplay = updateTodoDateDisplay;
+  window.changeTodoDate = changeTodoDate;
+  window.openTodoEditor = openTodoEditor;
+  window.openTodoList = openTodoList;
+

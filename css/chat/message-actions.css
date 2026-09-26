@@ -1,0 +1,387 @@
+           /* ============================================================ */
+           /* ▼▼▼ 终极修复：消息长按菜单 (还原九宫格 + 自动填满) ▼▼▼ */
+           /* ============================================================ */
+
+           /* 1. 容器布局：横向排列，允许换行，按钮之间有间隙 */
+           #message-actions-modal .custom-modal-footer {
+               display: flex !important;
+               flex-direction: row !important;
+               /* 强制横向 */
+               flex-wrap: wrap !important;
+               /* 允许换行 */
+               justify-content: space-between !important;
+               padding: 10px !important;
+               gap: 10px !important;
+               /* 按钮间距 */
+               background-color: transparent !important;
+               max-height: none !important;
+               overflow: visible !important;
+           }
+
+           /* 2. 功能按钮：灰色方块，自动填满 */
+           #message-actions-modal .custom-modal-footer button:not(#cancel-message-action-btn) {
+               /* 基础宽度：约一半减去间隙 */
+               width: 48% !important;
+               /* 【关键修复】：允许按钮自动拉伸！这样如果是奇数个，最后一个会自动占满一行 */
+               flex-grow: 1 !important;
+
+               /* 【关键修复】：移除 display: ... !important，让 JS 的隐藏逻辑生效 */
+               display: flex;
+               align-items: center;
+               justify-content: center;
+
+               margin: 0 !important;
+               padding: 15px 0 !important;
+               /* 保持高度 */
+
+               /* 外观：浅灰色圆角 */
+               background-color: #f2f2f7 !important;
+               color: #007aff !important;
+               border-radius: 10px !important;
+               border: none !important;
+               font-size: 16px !important;
+               font-weight: 500 !important;
+
+               /* 清除干扰 */
+               border-bottom: none !important;
+           }
+
+           /* 3. 强制隐藏被 JS 设置为隐藏的按钮 (解决单聊显示群聊按钮的问题) */
+           #message-actions-modal .custom-modal-footer button[style*="display: none"] {
+               display: none !important;
+           }
+
+           /* 4. 取消按钮：样式完全统一（灰色背景、正常字体） */
+           #message-actions-modal #cancel-message-action-btn {
+               width: 100% !important;
+               flex-grow: 0 !important;
+               margin-top: 5px !important;
+               padding: 15px 0 !important;
+
+               /* 【修改】背景色改为和其他按钮一样的浅灰 */
+               background-color: #f2f2f7 !important;
+
+               color: #007aff !important;
+
+               /* 【修改】字体粗细改为正常，不再加粗 */
+               font-weight: 500 !important;
+
+               border-radius: 10px !important;
+               border: none !important;
+               box-shadow: none !important;
+               /* 去掉阴影 */
+           }
+
+           /* 5. 黑金/夜间模式适配 */
+           #phone-screen.dark-mode #message-actions-modal .custom-modal-footer button:not(#cancel-message-action-btn),
+           #phone-screen.dark-mode #message-actions-modal #cancel-message-action-btn {
+               background-color: #2c2c2e !important;
+               /* 统一深灰块 */
+               color: #0a84ff !important;
+           }
+
+           /* ============================================================ */
+           /* ▼▼▼ 分享链接弹窗 (精致卡片 + 上下滑动 + 去浏览器默认样式) ▼▼▼ */
+           /* ============================================================ */
+
+           #share-link-modal.share-link-custom-modal {
+               align-items: center;
+               justify-content: center;
+               background-color: rgba(15, 23, 42, 0.45);
+               backdrop-filter: blur(8px);
+               -webkit-backdrop-filter: blur(8px);
+           }
+
+           #share-link-modal .share-link-card {
+               width: 320px;
+               max-width: calc(100% - 32px);
+               max-height: min(72vh, 520px);
+               height: auto;
+               border-radius: 20px;
+               background: #ffffff;
+               box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.08);
+               display: flex;
+               flex-direction: column;
+               overflow: hidden;
+               border: 1px solid rgba(0, 0, 0, 0.06);
+               transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+           }
+
+           /* 头部：标题与右上角圆形关闭按钮 */
+           #share-link-modal .share-link-header {
+               display: flex;
+               align-items: center;
+               justify-content: space-between;
+               padding: 16px 18px 12px 20px;
+               border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+               flex-shrink: 0;
+               background: #ffffff;
+           }
+
+           #share-link-modal .share-link-title {
+               font-size: 16px;
+               font-weight: 700;
+               color: #1a1c20;
+               letter-spacing: -0.2px;
+           }
+
+           #share-link-modal .share-link-close-btn {
+               border: none;
+               background: #f1f3f7;
+               color: #64748b;
+               width: 30px;
+               height: 30px;
+               border-radius: 50%;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               cursor: pointer;
+               transition: all 0.2s ease;
+               padding: 0;
+               outline: none;
+               -webkit-appearance: none;
+               appearance: none;
+               flex-shrink: 0;
+           }
+
+           #share-link-modal .share-link-close-btn:hover {
+               background: #e2e8f0;
+               color: #0f172a;
+               transform: scale(1.05);
+           }
+
+           #share-link-modal .share-link-close-btn:active {
+               transform: scale(0.92);
+               background: #cbd5e1;
+           }
+
+           /* 中部内容区：高度受限，支持平滑上下滚动 */
+           #share-link-modal .share-link-body {
+               padding: 14px 18px 16px 20px;
+               overflow-y: auto;
+               -webkit-overflow-scrolling: touch;
+               flex: 1 1 auto;
+               overscroll-behavior: contain;
+           }
+
+           /* 精致细化滚动条 */
+           #share-link-modal .share-link-body::-webkit-scrollbar {
+               width: 4px;
+           }
+
+           #share-link-modal .share-link-body::-webkit-scrollbar-track {
+               background: transparent;
+           }
+
+           #share-link-modal .share-link-body::-webkit-scrollbar-thumb {
+               background: rgba(148, 163, 184, 0.35);
+               border-radius: 4px;
+           }
+
+           #share-link-modal .share-link-body::-webkit-scrollbar-thumb:hover {
+               background: rgba(148, 163, 184, 0.6);
+           }
+
+           /* 表单项间距与排版 */
+           #share-link-modal .share-link-group {
+               margin-bottom: 14px;
+               display: flex;
+               flex-direction: column;
+           }
+
+           #share-link-modal .share-link-group:last-child {
+               margin-bottom: 4px;
+           }
+
+           #share-link-modal .share-link-label {
+               font-size: 13px;
+               font-weight: 600;
+               color: #475569;
+               margin-bottom: 6px;
+               display: flex;
+               align-items: center;
+               gap: 4px;
+           }
+
+           #share-link-modal .share-link-required {
+               color: #ef4444;
+               font-size: 13px;
+               font-weight: bold;
+           }
+
+           #share-link-modal .share-link-optional {
+               font-size: 12px;
+               color: #94a3b8;
+               font-weight: normal;
+           }
+
+           /* 清除浏览器原生朴素样式的输入框与多行文本域 */
+           #share-link-modal .share-link-input,
+           #share-link-modal .share-link-textarea {
+               width: 100%;
+               box-sizing: border-box;
+               -webkit-appearance: none;
+               appearance: none;
+               outline: none;
+               background: #f8fafc;
+               border: 1px solid #e2e8f0;
+               border-radius: 10px;
+               padding: 9px 12px;
+               font-size: 14px;
+               line-height: 1.45;
+               color: #1e293b;
+               transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+               font-family: inherit;
+           }
+
+           #share-link-modal .share-link-input::placeholder,
+           #share-link-modal .share-link-textarea::placeholder {
+               color: #94a3b8;
+               font-size: 13px;
+           }
+
+           #share-link-modal .share-link-input:hover,
+           #share-link-modal .share-link-textarea:hover {
+               border-color: #cbd5e1;
+               background: #ffffff;
+           }
+
+           #share-link-modal .share-link-input:focus,
+           #share-link-modal .share-link-textarea:focus {
+               border-color: var(--accent-color, #007aff);
+               background: #ffffff;
+               box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.12);
+           }
+
+           #share-link-modal .share-link-textarea {
+               resize: none;
+               min-height: 58px;
+           }
+
+           #share-link-modal .share-link-textarea-large {
+               min-height: 78px;
+           }
+
+           /* 底部操作栏 */
+           #share-link-modal .share-link-footer {
+               padding: 12px 18px 16px 20px;
+               border-top: 1px solid rgba(0, 0, 0, 0.06);
+               background: #fbfcfe;
+               display: flex;
+               gap: 10px;
+               justify-content: flex-end;
+               flex-shrink: 0;
+           }
+
+           #share-link-modal .share-link-btn {
+               border: none;
+               outline: none;
+               -webkit-appearance: none;
+               appearance: none;
+               padding: 9px 18px;
+               font-size: 14px;
+               font-weight: 600;
+               border-radius: 10px;
+               cursor: pointer;
+               transition: all 0.2s ease;
+               display: inline-flex;
+               align-items: center;
+               justify-content: center;
+               min-width: 78px;
+           }
+
+           #share-link-modal .share-link-btn-cancel {
+               background: #f1f5f9;
+               color: #475569;
+               border: 1px solid #e2e8f0;
+           }
+
+           #share-link-modal .share-link-btn-cancel:hover {
+               background: #e2e8f0;
+               color: #1e293b;
+           }
+
+           #share-link-modal .share-link-btn-cancel:active {
+               transform: scale(0.96);
+           }
+
+           #share-link-modal .share-link-btn-confirm {
+               background: var(--accent-color, #007aff);
+               color: #ffffff;
+               box-shadow: 0 2px 8px rgba(0, 122, 255, 0.25);
+           }
+
+           #share-link-modal .share-link-btn-confirm:hover {
+               filter: brightness(1.08);
+               box-shadow: 0 4px 12px rgba(0, 122, 255, 0.35);
+           }
+
+           #share-link-modal .share-link-btn-confirm:active {
+               transform: scale(0.96);
+           }
+
+           /* 夜间模式适配 */
+           #phone-screen.dark-mode #share-link-modal .share-link-card {
+               background: #1c1c1e;
+               border-color: rgba(255, 255, 255, 0.1);
+               box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.6);
+           }
+
+           #phone-screen.dark-mode #share-link-modal .share-link-header {
+               background: #1c1c1e;
+               border-bottom-color: rgba(255, 255, 255, 0.08);
+           }
+
+           #phone-screen.dark-mode #share-link-modal .share-link-title {
+               color: #f1f5f9;
+           }
+
+           #phone-screen.dark-mode #share-link-modal .share-link-close-btn {
+               background: rgba(255, 255, 255, 0.08);
+               color: #94a3b8;
+           }
+
+           #phone-screen.dark-mode #share-link-modal .share-link-close-btn:hover {
+               background: rgba(255, 255, 255, 0.16);
+               color: #ffffff;
+           }
+
+           #phone-screen.dark-mode #share-link-modal .share-link-label {
+               color: #cbd5e1;
+           }
+
+           #phone-screen.dark-mode #share-link-modal .share-link-input,
+           #phone-screen.dark-mode #share-link-modal .share-link-textarea {
+               background: #2c2c2e;
+               border-color: rgba(255, 255, 255, 0.1);
+               color: #f8fafc;
+           }
+
+           #phone-screen.dark-mode #share-link-modal .share-link-input:hover,
+           #phone-screen.dark-mode #share-link-modal .share-link-textarea:hover {
+               border-color: rgba(255, 255, 255, 0.2);
+               background: #323236;
+           }
+
+           #phone-screen.dark-mode #share-link-modal .share-link-input:focus,
+           #phone-screen.dark-mode #share-link-modal .share-link-textarea:focus {
+               border-color: var(--accent-color, #0a84ff);
+               background: #323236;
+               box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.2);
+           }
+
+           #phone-screen.dark-mode #share-link-modal .share-link-footer {
+               background: #18181a;
+               border-top-color: rgba(255, 255, 255, 0.08);
+           }
+
+           #phone-screen.dark-mode #share-link-modal .share-link-btn-cancel {
+               background: rgba(255, 255, 255, 0.08);
+               color: #cbd5e1;
+               border-color: rgba(255, 255, 255, 0.12);
+           }
+
+           #phone-screen.dark-mode #share-link-modal .share-link-btn-cancel:hover {
+               background: rgba(255, 255, 255, 0.14);
+               color: #ffffff;
+           }

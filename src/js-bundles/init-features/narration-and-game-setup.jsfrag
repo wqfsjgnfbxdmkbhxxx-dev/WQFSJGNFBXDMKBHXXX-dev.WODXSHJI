@@ -1,0 +1,999 @@
+
+    document.getElementById('google-imagen-fetch-models-btn')?.addEventListener('click', fetchGoogleImagenModels);
+
+    document.getElementById('novelai-key-toggle')?.addEventListener('click', function () {
+      const input = document.getElementById('novelai-api-key');
+      if (input.type === 'password') {
+        input.type = 'text';
+        this.textContent = '😌';
+      } else {
+        input.type = 'password';
+        this.textContent = '🧐';
+      }
+    });
+
+
+    document.getElementById('novelai-settings-btn')?.addEventListener('click', () => {
+      loadNovelAISettings();
+      document.getElementById('novelai-settings-modal').style.display = 'flex';
+    });
+
+
+    document.getElementById('nai-cors-proxy')?.addEventListener('change', (e) => {
+      const customProxyGroup = document.getElementById('nai-custom-proxy-group');
+      if (e.target.value === 'custom') {
+        customProxyGroup.style.display = 'block';
+      } else {
+        customProxyGroup.style.display = 'none';
+      }
+    });
+
+    document.getElementById('close-novelai-settings')?.addEventListener('click', () => {
+      document.getElementById('novelai-settings-modal').style.display = 'none';
+    });
+
+
+    document.getElementById('save-nai-settings-btn')?.addEventListener('click', () => {
+      saveNovelAISettings();
+      document.getElementById('novelai-settings-modal').style.display = 'none';
+      alert('NovelAI设置已保存！');
+    });
+
+    document.getElementById('reset-nai-settings-btn')?.addEventListener('click', () => {
+      if (confirm('确定要恢复默认设置吗？')) {
+        resetNovelAISettings();
+      }
+    });
+
+
+    document.getElementById('novelai-test-btn')?.addEventListener('click', () => {
+      const apiKey = document.getElementById('novelai-api-key').value.trim();
+      if (!apiKey) {
+        alert('请先填写NovelAI API Key！');
+        return;
+      }
+      document.getElementById('novelai-test-modal').style.display = 'flex';
+      document.getElementById('nai-test-result').style.display = 'none';
+      document.getElementById('nai-test-error').style.display = 'none';
+    });
+
+
+    document.getElementById('close-novelai-test')?.addEventListener('click', () => {
+      document.getElementById('novelai-test-modal').style.display = 'none';
+    });
+
+    document.getElementById('close-nai-test-btn')?.addEventListener('click', () => {
+      document.getElementById('novelai-test-modal').style.display = 'none';
+    });
+
+
+    document.getElementById('nai-generate-btn')?.addEventListener('click', async () => {
+      await generateNovelAIImage();
+    });
+
+
+
+    document.getElementById('nai-download-btn')?.addEventListener('click', () => {
+      const img = document.getElementById('nai-result-image');
+      const link = document.createElement('a');
+      link.href = img.src;
+      link.download = 'novelai-generated-' + Date.now() + '.png';
+      link.click();
+    });
+
+
+    document.getElementById('character-nai-prompts-btn')?.addEventListener('click', () => {
+      if (!state.activeChatId) return;
+      const chat = state.chats[state.activeChatId];
+
+      // 加载当前角色的NAI提示词配置
+      const naiSettings = chat.settings.naiSettings || {
+        promptSource: 'system',
+        characterPositivePrompt: '',
+        characterNegativePrompt: ''
+      };
+
+
+      document.getElementById('character-nai-positive').value = naiSettings.characterPositivePrompt || '';
+      document.getElementById('character-nai-negative').value = naiSettings.characterNegativePrompt || '';
+
+      document.getElementById('character-nai-prompts-modal').style.display = 'flex';
+    });
+
+
+    document.getElementById('close-character-nai-prompts')?.addEventListener('click', () => {
+      document.getElementById('character-nai-prompts-modal').style.display = 'none';
+    });
+
+    document.getElementById('save-character-nai-prompts-btn')?.addEventListener('click', async () => {
+      if (!state.activeChatId) return;
+      const chat = state.chats[state.activeChatId];
+
+      if (!chat.settings.naiSettings) {
+        chat.settings.naiSettings = {
+          promptSource: 'system'
+        };
+      }
+
+      chat.settings.naiSettings.characterPositivePrompt = document.getElementById('character-nai-positive').value.trim();
+      chat.settings.naiSettings.characterNegativePrompt = document.getElementById('character-nai-negative').value.trim();
+
+      // 根据是否填写了画师串自动设置 promptSource
+      if (chat.settings.naiSettings.characterPositivePrompt || chat.settings.naiSettings.characterNegativePrompt) {
+        chat.settings.naiSettings.promptSource = 'character';
+      } else {
+        chat.settings.naiSettings.promptSource = 'system';
+      }
+
+      console.log('💾 [专属弹窗] 保存角色NAI提示词');
+      console.log('   characterPositivePrompt:', chat.settings.naiSettings.characterPositivePrompt);
+      console.log('   characterNegativePrompt:', chat.settings.naiSettings.characterNegativePrompt);
+      console.log('   promptSource:', chat.settings.naiSettings.promptSource);
+
+
+      await db.chats.put(chat);
+
+      document.getElementById('character-nai-prompts-modal').style.display = 'none';
+      alert('角色专属NAI提示词已保存！');
+    });
+
+    document.getElementById('reset-character-nai-prompts-btn')?.addEventListener('click', () => {
+      if (confirm('确定要清空当前角色的NAI提示词配置吗？')) {
+        document.getElementById('character-nai-positive').value = '';
+        document.getElementById('character-nai-negative').value = '';
+      }
+    });
+
+
+    document.getElementById('group-character-nai-prompts-btn')?.addEventListener('click', () => {
+      if (!state.activeChatId) return;
+      const chat = state.chats[state.activeChatId];
+
+      // 加载当前角色的NAI提示词配置
+      const naiSettings = chat.settings.naiSettings || {
+        promptSource: 'system',
+        characterPositivePrompt: '',
+        characterNegativePrompt: ''
+      };
+
+
+      document.getElementById('character-nai-positive').value = naiSettings.characterPositivePrompt || '';
+      document.getElementById('character-nai-negative').value = naiSettings.characterNegativePrompt || '';
+
+      document.getElementById('character-nai-prompts-modal').style.display = 'flex';
+    });
+
+
+    document.getElementById('manage-frames-btn')?.addEventListener('click', toggleFrameManagementMode);
+    document.getElementById('select-all-frames-checkbox')?.addEventListener('change', handleSelectAllFrames);
+    document.getElementById('delete-selected-frames-btn')?.addEventListener('click', executeBatchDeleteFrames);
+    document.getElementById('delete-current-category-btn')?.addEventListener('click', handleDeleteCurrentCategory);
+    document.getElementById('char-wallet-back-btn')?.addEventListener('click', () => {
+
+      switchToCharScreen('char-taobao-screen');
+    });
+    document.getElementById('sticker-binding-chat-list')?.addEventListener('click', (e) => {
+      const item = e.target.closest('.contact-picker-item');
+      if (item) {
+        const checkbox = item.querySelector('.sticker-binding-checkbox');
+        if (checkbox && e.target !== checkbox) {
+          checkbox.checked = !checkbox.checked;
+        }
+      }
+    });
+    const stickerTabsContainer = document.getElementById('sticker-category-tabs');
+    addLongPressListener(stickerTabsContainer, (e) => {
+      const tab = e.target.closest('.sticker-category-tab');
+      if (tab) {
+        e.preventDefault();
+        const categoryIdStr = tab.dataset.categoryId;
+        if (categoryIdStr === 'all') {
+          showCustomAlert("提示", "“全部”分类无法被绑定。");
+          return;
+        }
+        const categoryId = categoryIdStr === 'uncategorized' ? 'uncategorized' : parseInt(categoryIdStr);
+        openStickerCategoryBindingModal(categoryId);
+      }
+    });
+
+    document.getElementById('open-nai-gallery-btn')?.addEventListener('click', openNaiGallery);
+    document.getElementById('nai-gallery-tabs')?.addEventListener('click', (e) => {
+      const tab = e.target.closest('.nai-gallery-tab');
+      if (tab && !tab.classList.contains('active')) {
+        switchNaiGalleryTab(tab.dataset.tabId);
+      }
+    });
+    document.getElementById('close-nai-gallery-btn')?.addEventListener('click', () => {
+      document.getElementById('nai-gallery-panel').classList.remove('visible');
+    });
+
+    document.getElementById('manage-nai-gallery-btn')?.addEventListener('click', toggleNaiGalleryManagementMode);
+
+    document.getElementById('nai-gallery-grid-local')?.addEventListener('click', (e) => {
+      handleNaiGalleryGridClick(e);
+    });
+    document.getElementById('nai-gallery-grid-cloud')?.addEventListener('click', (e) => {
+      handleNaiGalleryGridClick(e);
+    });
+
+    document.getElementById('select-all-nai-gallery-checkbox')?.addEventListener('change', (e) => {
+      const isChecked = e.target.checked;
+      const activeGridId = `nai-gallery-grid-${activeNaiGalleryTab}`;
+
+
+      document.querySelectorAll(`#${activeGridId} .nai-gallery-item`).forEach(item => {
+        item.classList.toggle('selected', isChecked);
+        const key = item.dataset.key;
+        if (isChecked) {
+          selectedNaiImages.add(key);
+        } else {
+          selectedNaiImages.delete(key);
+        }
+      });
+      updateNaiGalleryActionButtons();
+    });
+    document.getElementById('download-selected-nai-gallery-btn')?.addEventListener('click', () => executeBatchDownloadNaiImages());
+    document.getElementById('upload-selected-nai-gallery-btn')?.addEventListener('click', () => executeBatchUploadNaiImagesToImgBB());
+    document.getElementById('export-selected-nai-gallery-btn')?.addEventListener('click', () => executeBatchExportNaiImages());
+    document.getElementById('delete-selected-nai-gallery-btn')?.addEventListener('click', () => executeBatchDeleteNaiImages());
+    document.getElementById('delete-selected-nai-gallery-btn')?.addEventListener('click', () => executeBatchDeleteNaiImages());
+    document.getElementById('chat-expand-btn')?.addEventListener('click', () => {
+      document.body.classList.toggle('chat-actions-expanded');
+    });
+    document.getElementById('open-quick-reply-btn')?.addEventListener('click', openQuickReplyModal);
+    
+    // ========== 旁白功能 ==========
+    document.getElementById('narration-btn')?.addEventListener('click', async () => {
+      if (!state.activeChatId) {
+        alert('请先选择一个聊天对象！');
+        return;
+      }
+      
+      const narrationText = await showCustomPrompt(
+        '输入旁白',
+        '输入旁白内容，这将作为系统消息添加到对话中，角色会将其视为已发生的事实：',
+        '',
+        'textarea'
+      );
+      
+      if (narrationText && narrationText.trim()) {
+        const chat = state.chats[state.activeChatId];
+        const narrationMessage = {
+          role: 'system',
+          type: 'narration',
+          content: narrationText.trim(),
+          timestamp: Date.now()
+        };
+        
+        chat.history.push(narrationMessage);
+        await db.chats.put(chat);
+        
+        if (state.activeChatId === chat.id) {
+          await appendMessage(narrationMessage, chat);
+        }
+        
+        await renderChatList();
+      }
+    });
+
+    document.getElementById('cancel-quick-reply-btn')?.addEventListener('click', () => {
+      document.getElementById('quick-reply-modal').classList.remove('visible');
+    });
+
+    // ========== 真心话游戏 ==========
+    let truthGameState = {
+      isActive: false,
+      currentRound: 0,
+      userChoice: null,
+      aiChoice: null,
+      winner: null,
+      messages: [],
+      abortController: null, // 用于中断API请求
+      isGroupMode: false,      // 是否群聊版
+      currentAiMember: null,  // 群聊时当前轮对战的成员 { id, originalName, groupNickname, ... }
+      phase: null             // 'rps' | 'qna' | 'spectator_comment'（回答完毕后的围观评论阶段）
+    };
+
+    // 辅助函数：更新真心话悬浮球红点状态
+    function updateTruthGameFloatIndicator() {
+      const modal = document.getElementById('truth-game-modal');
+      const indicator = document.getElementById('truth-game-float-indicator');
+
+      // 如果对话框被最小化，显示红点
+      if (modal.classList.contains('minimized')) {
+        indicator.classList.add('active');
+      }
+    }
+
+    // 真心话：获取当前轮用于提问/回答的“有效聊天”（单聊=当前聊天，群聊=当前选中成员的单聊）
+    function getTruthGameEffectiveChat() {
+      if (!state.activeChatId) return null;
+      const chat = state.chats[state.activeChatId];
+      if (!truthGameState.isGroupMode || !truthGameState.currentAiMember) return chat;
+      const memberChat = state.chats[truthGameState.currentAiMember.id];
+      return memberChat || chat;
+    }
+
+    // 真心话群聊：获取当前轮对手的显示名
+    function getTruthGameCurrentDisplayName() {
+      const chat = state.chats[state.activeChatId];
+      if (!chat || !truthGameState.isGroupMode || !truthGameState.currentAiMember)
+        return chat ? chat.name : '';
+      return getDisplayNameInGroup(chat, truthGameState.currentAiMember.originalName) || truthGameState.currentAiMember.originalName;
+    }
+
+    // 真心话群聊：每轮随机选一名成员（排除上一轮可选）
+    function pickTruthGameRoundMember(chat) {
+      if (!chat.isGroup || !chat.members || chat.members.length === 0) return null;
+      const members = chat.members;
+      if (members.length === 1) {
+        truthGameState.currentAiMember = members[0];
+        return;
+      }
+      let idx = Math.floor(Math.random() * members.length);
+      if (truthGameState.currentAiMember && members.length > 1) {
+        const prevId = truthGameState.currentAiMember.id;
+        const sameIdx = members.findIndex(m => m.id === prevId);
+        if (sameIdx !== -1 && members.length > 1) {
+          idx = (sameIdx + 1) % members.length;
+        }
+      }
+      truthGameState.currentAiMember = members[idx];
+    }
+
+    document.getElementById('open-truth-game-btn')?.addEventListener('click', () => {
+      if (!state.activeChatId) {
+        alert('请先选择一个聊天对象！');
+        return;
+      }
+      const chat = state.chats[state.activeChatId];
+
+      if (!chat.settings.truthGameHistoryLimit) {
+        chat.settings.truthGameHistoryLimit = 5;
+      }
+
+      const isGroup = !!chat.isGroup;
+      truthGameState = {
+        isActive: true,
+        currentRound: 1,
+        userChoice: null,
+        aiChoice: null,
+        winner: null,
+        messages: [],
+        waitingForAI: false,
+        hasStartedRound: false,
+        isGroupMode: isGroup,
+        currentAiMember: null,
+        phase: null
+      };
+      document.getElementById('truth-game-modal').classList.add('visible');
+      document.getElementById('truth-input').value = '';
+      document.getElementById('truth-input').placeholder = '输入消息...';
+      document.getElementById('truth-rps-selector').style.display = 'none';
+      document.getElementById('truth-start-game-btn').textContent = '开始游戏';
+      renderTruthGameMessages();
+      if (isGroup) {
+        addTruthGameMessage('system', '欢迎来到真心话大冒险（群聊版）！每轮会随机选一位成员与你猜拳，回答完后其他人可以围观评论。点击「开始游戏」开始第一轮。');
+      } else {
+        addTruthGameMessage('system', '欢迎来到真心话大冒险！点击"开始游戏"按钮开始第一轮。');
+      }
+    });
+
+    document.getElementById('truth-game-settings-btn')?.addEventListener('click', () => {
+      if (!state.activeChatId) return;
+      const chat = state.chats[state.activeChatId];
+
+      if (!chat.settings.truthGameHistoryLimit) {
+        chat.settings.truthGameHistoryLimit = 5;
+      }
+
+      document.getElementById('truth-history-limit-input').value = chat.settings.truthGameHistoryLimit;
+      document.getElementById('truth-game-settings-modal').classList.add('visible');
+    });
+
+    document.getElementById('cancel-truth-settings-btn')?.addEventListener('click', () => {
+      document.getElementById('truth-game-settings-modal').classList.remove('visible');
+    });
+
+    document.getElementById('save-truth-settings-btn')?.addEventListener('click', async () => {
+      if (!state.activeChatId) return;
+      const chat = state.chats[state.activeChatId];
+
+      const limit = parseInt(document.getElementById('truth-history-limit-input').value);
+      if (isNaN(limit) || limit < 1) {
+        alert('请输入大于等于1的数字');
+        return;
+      }
+
+      if (limit > 50) {
+        if (!confirm(`您设置了${limit}轮历史记录，这可能会消耗大量token。确定要继续吗？`)) {
+          return;
+        }
+      }
+
+      chat.settings.truthGameHistoryLimit = limit;
+      await db.chats.put(chat);
+
+      document.getElementById('truth-game-settings-modal').classList.remove('visible');
+    });
+
+    // 最小化真心话对话框
+    document.getElementById('minimize-truth-game-btn')?.addEventListener('click', () => {
+      const modal = document.getElementById('truth-game-modal');
+      const floatBall = document.getElementById('truth-game-float-ball');
+      const chat = state.chats[state.activeChatId];
+
+      if (chat) {
+        const floatAvatar = document.getElementById('truth-game-float-avatar');
+        floatAvatar.src = chat.settings.aiAvatar || 'https://i.postimg.cc/y8xWzCqj/anime-boy.jpg';
+      }
+
+      modal.classList.add('minimized');
+      modal.classList.remove('visible');
+      floatBall.style.display = 'block';
+
+      // 如果AI正在回复，显示红点指示器
+      if (truthGameState.waitingForAI) {
+        document.getElementById('truth-game-float-indicator').classList.add('active');
+      }
+    });
+
+    // 为真心话悬浮球添加拖动功能
+    (() => {
+      const floatBall = document.getElementById('truth-game-float-ball');
+      const phoneScreen = document.getElementById('phone-screen');
+      let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+      let isDragging = false;
+      let hasMoved = false;
+
+      const startDrag = (e) => {
+        isDragging = true;
+        hasMoved = false;
+
+        const event = e.type === 'touchstart' ? e.touches[0] : e;
+        pos3 = event.clientX;
+        pos4 = event.clientY;
+
+        // 确保使用绝对定位
+        if (floatBall.style.bottom || floatBall.style.right) {
+          const rect = floatBall.getBoundingClientRect();
+          const phoneRect = phoneScreen.getBoundingClientRect();
+          floatBall.style.top = (rect.top - phoneRect.top) + 'px';
+          floatBall.style.left = (rect.left - phoneRect.left) + 'px';
+          floatBall.style.bottom = '';
+          floatBall.style.right = '';
+        }
+
+        document.addEventListener('mouseup', endDrag);
+        document.addEventListener('mousemove', elementDrag);
+        document.addEventListener('touchend', endDrag);
+        document.addEventListener('touchmove', elementDrag, { passive: false });
+      };
+
+      const elementDrag = (e) => {
+        if (!isDragging) return;
+
+        const event = e.type === 'touchmove' ? e.touches[0] : e;
+        const diffX = event.clientX - pos3;
+        const diffY = event.clientY - pos4;
+
+        // 判断是否移动了
+        if (!hasMoved && (Math.abs(diffX) > 5 || Math.abs(diffY) > 5)) {
+          hasMoved = true;
+        }
+
+        // 防止默认行为
+        if (hasMoved && e.cancelable) {
+          e.preventDefault();
+        }
+
+        pos1 = pos3 - event.clientX;
+        pos2 = pos4 - event.clientY;
+        pos3 = event.clientX;
+        pos4 = event.clientY;
+
+        let newTop = floatBall.offsetTop - pos2;
+        let newLeft = floatBall.offsetLeft - pos1;
+
+        // 限制在屏幕范围内
+        const maxTop = phoneScreen.clientHeight - floatBall.offsetHeight - 10;
+        const maxLeft = phoneScreen.clientWidth - floatBall.offsetWidth - 10;
+        newTop = Math.max(10, Math.min(newTop, maxTop));
+        newLeft = Math.max(10, Math.min(newLeft, maxLeft));
+
+        floatBall.style.top = newTop + "px";
+        floatBall.style.left = newLeft + "px";
+      };
+
+      const endDrag = () => {
+        document.removeEventListener('mouseup', endDrag);
+        document.removeEventListener('mousemove', elementDrag);
+        document.removeEventListener('touchend', endDrag);
+        document.removeEventListener('touchmove', elementDrag);
+
+        if (!isDragging) return;
+
+        const wasMoved = hasMoved;
+        isDragging = false;
+        hasMoved = false;
+
+        // 如果没有移动，则视为点击，恢复对话框
+        if (!wasMoved) {
+          const modal = document.getElementById('truth-game-modal');
+
+          floatBall.style.display = 'none';
+          modal.classList.remove('minimized');
+          modal.classList.add('visible');
+
+          // 移除红点指示器
+          document.getElementById('truth-game-float-indicator').classList.remove('active');
+
+          // 滚动到最新消息
+          const messagesContainer = document.getElementById('truth-game-messages');
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+      };
+
+      floatBall.addEventListener('mousedown', startDrag);
+      floatBall.addEventListener('touchstart', startDrag, { passive: false });
+    })();
+
+    document.getElementById('close-truth-game-btn')?.addEventListener('click', async () => {
+      // 强制中断所有正在进行的API请求
+      if (truthGameState.abortController) {
+        truthGameState.abortController.abort();
+        truthGameState.abortController = null;
+      }
+
+      // 立即重置等待状态
+      truthGameState.waitingForAI = false;
+
+      if (truthGameState.messages.length > 1) {
+        const chat = state.chats[state.activeChatId];
+
+        let gameRecord = '[系统提示：刚刚我们进行了一场真心话大冒险游戏（通过石头剪刀布猜拳决定谁提问问题，输的人需要真诚回答）。以下是游戏的完整对话记录] ';
+        let roundDetails = [];
+        let currentRound = '';
+        let currentWinner = null;
+
+        for (let i = 0; i < truthGameState.messages.length; i++) {
+          const msg = truthGameState.messages[i];
+
+          if (msg.role === 'system') {
+            if (msg.content.includes('第') && msg.content.includes('轮')) {
+              if (currentRound) {
+                roundDetails.push(currentRound);
+              }
+              currentRound = msg.content.replace('：请选择石头、剪刀或布开始游戏！', '').replace('：请选择石头、剪刀或布！', '') + ': ';
+              currentWinner = null;
+            } else if (msg.content.includes('你赢了')) {
+              currentRound += ' 结果: 我获胜';
+              currentWinner = 'user';
+            } else if (msg.content.includes('赢了')) {
+              const aiName = chat.isGroup ? 'AI方' : chat.name;
+              currentRound += ' 结果: ' + aiName + '获胜';
+              currentWinner = 'ai';
+            } else if (msg.content.includes('平局')) {
+              currentRound += ' 结果: 平局';
+              currentWinner = null;
+            }
+          } else if (msg.role === 'user') {
+            if (msg.content.startsWith('出了：')) {
+              currentRound += '我' + msg.content + ', ';
+            } else {
+              if (currentRound) {
+                roundDetails.push(currentRound);
+                currentRound = '';
+              }
+              roundDetails.push(`我: ${msg.content}`);
+            }
+          } else if (msg.role === 'assistant') {
+            const assistantName = (msg.senderName && chat.isGroup) ? (getDisplayNameInGroup(chat, msg.senderName) || msg.senderName) : chat.name;
+            if (msg.content.startsWith('出了：')) {
+              currentRound += assistantName + msg.content;
+            } else {
+              if (currentRound) {
+                roundDetails.push(currentRound);
+                currentRound = '';
+              }
+              roundDetails.push(`${assistantName}: ${msg.content}`);
+            }
+          }
+        }
+
+        if (currentRound) {
+          roundDetails.push(currentRound);
+        }
+
+        gameRecord += roundDetails.join(' ');
+
+        const recordMessage = {
+          role: 'system',
+          type: 'truth_game_record',
+          content: gameRecord,
+          timestamp: Date.now(),
+          isHidden: true
+        };
+
+        chat.history.push(recordMessage);
+        await db.chats.put(chat);
+
+        if (document.getElementById('chat-interface-screen').classList.contains('active') && state.activeChatId === chat.id) {
+          renderChatInterface(chat.id);
+        }
+
+        renderChatList();
+      }
+
+      // 恢复正常消息菜单的所有按钮
+      restoreNormalMessageActions();
+
+      // 重置游戏状态
+      truthGameState.isActive = false;
+
+      // 关闭对话框和悬浮球
+      document.getElementById('truth-game-modal').classList.remove('visible');
+      document.getElementById('truth-game-modal').classList.remove('minimized');
+      document.getElementById('truth-game-float-ball').style.display = 'none';
+      document.getElementById('truth-game-float-indicator').classList.remove('active');
+    });
+
+    document.querySelectorAll('.truth-rps-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!truthGameState.isActive || truthGameState.waitingForAI) return;
+
+        const userChoice = btn.dataset.choice;
+        const choices = ['rock', 'scissors', 'paper'];
+        const aiChoice = choices[Math.floor(Math.random() * 3)];
+
+        truthGameState.userChoice = userChoice;
+        truthGameState.aiChoice = aiChoice;
+
+        const chat = state.chats[state.activeChatId];
+        const choiceText = {
+          rock: '石头',
+          scissors: '剪刀',
+          paper: '布'
+        };
+
+        addTruthGameMessage('user', `出了：${choiceText[userChoice]}`);
+
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        const aiDisplayName = getTruthGameCurrentDisplayName();
+        const aiOpts = truthGameState.isGroupMode && truthGameState.currentAiMember ? {
+          senderName: truthGameState.currentAiMember.originalName,
+          senderAvatar: (state.chats[truthGameState.currentAiMember.id] && state.chats[truthGameState.currentAiMember.id].settings?.aiAvatar) || undefined
+        } : {};
+        addTruthGameMessage('assistant', `出了：${choiceText[aiChoice]}`, aiOpts);
+
+        const winner = determineRPSWinner(userChoice, aiChoice);
+        truthGameState.winner = winner;
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        if (winner === 'user') {
+          addTruthGameMessage('system', '你赢了！请向对方提问一个问题。');
+          document.getElementById('truth-rps-selector').style.display = 'none';
+          document.getElementById('truth-input').placeholder = '输入你想问的问题...';
+          document.getElementById('truth-input').focus();
+        } else if (winner === 'ai') {
+          addTruthGameMessage('system', `${aiDisplayName}赢了！正在思考问题...`);
+          document.getElementById('truth-rps-selector').style.display = 'none';
+          truthGameState.waitingForAI = true;
+          updateTruthGameFloatIndicator();
+
+          try {
+            await generateAITruthQuestion();
+          } catch (error) {
+            console.error('AI提问失败:', error);
+          } finally {
+            truthGameState.waitingForAI = false;
+            updateTruthGameFloatIndicator();
+          }
+        } else {
+          addTruthGameMessage('system', '平局！点击"开始游戏"按钮重新开始。');
+          truthGameState.winner = null;
+          document.getElementById('truth-rps-selector').style.display = 'none';
+        }
+      });
+    });
+
+    document.getElementById('truth-start-game-btn')?.addEventListener('click', async () => {
+      if (!truthGameState.isActive || truthGameState.waitingForAI) return;
+
+      const chat = state.chats[state.activeChatId];
+      if (!chat) return;
+
+      if (truthGameState.phase === 'spectator_comment') {
+        truthGameState.waitingForAI = true;
+        updateTruthGameFloatIndicator();
+        try {
+          await generateTruthGameSpectatorComments();
+        } catch (e) {
+          console.error('围观评论生成失败:', e);
+        }
+        truthGameState.waitingForAI = false;
+        updateTruthGameFloatIndicator();
+        goToTruthGameNextRound();
+        return;
+      }
+
+      if (truthGameState.hasStartedRound) {
+        truthGameState.currentRound++;
+      }
+      truthGameState.hasStartedRound = true;
+      truthGameState.winner = null;
+      truthGameState.phase = null;
+      if (truthGameState.isGroupMode && chat.members && chat.members.length > 0) {
+        pickTruthGameRoundMember(chat);
+        const name = getTruthGameCurrentDisplayName();
+        addTruthGameMessage('system', `第${truthGameState.currentRound}轮：本轮与 ${name} 猜拳，请选择石头、剪刀或布！`);
+      } else {
+        addTruthGameMessage('system', `第${truthGameState.currentRound}轮：请选择石头、剪刀或布！`);
+      }
+      document.getElementById('truth-rps-selector').style.display = 'flex';
+      document.getElementById('truth-input').placeholder = '输入消息...';
+      document.getElementById('truth-start-game-btn').textContent = '开始游戏';
+    });
+
+    function goToTruthGameNextRound() {
+      const chat = state.chats[state.activeChatId];
+      if (!chat) return;
+      truthGameState.phase = null;
+      truthGameState.currentRound++;
+      truthGameState.winner = null;
+      document.getElementById('truth-rps-selector').style.display = 'flex';
+      document.getElementById('truth-input').placeholder = '输入消息...';
+      document.getElementById('truth-start-game-btn').textContent = '开始游戏';
+      if (truthGameState.isGroupMode && chat.members && chat.members.length > 0) {
+        pickTruthGameRoundMember(chat);
+        const name = getTruthGameCurrentDisplayName();
+        addTruthGameMessage('system', `第${truthGameState.currentRound}轮：本轮与 ${name} 猜拳，请选择石头、剪刀或布！`);
+      } else {
+        addTruthGameMessage('system', `第${truthGameState.currentRound}轮：请选择石头、剪刀或布！`);
+      }
+    }
+
+    async function generateTruthGameSpectatorComments() {
+      const chat = state.chats[state.activeChatId];
+      if (!chat || !chat.isGroup || !truthGameState.currentAiMember || !chat.members) return;
+      const others = chat.members.filter(m => m.id !== truthGameState.currentAiMember.id);
+      if (others.length === 0) return;
+      const { proxyUrl, apiKey, model } = state.apiConfig;
+      if (!proxyUrl || !apiKey || !model) return;
+      const answeredName = getDisplayNameInGroup(chat, truthGameState.currentAiMember.originalName) || truthGameState.currentAiMember.originalName;
+      const lastFew = truthGameState.messages.slice(-12);
+      let qaContext = '';
+      lastFew.forEach(m => {
+        if (m.role === 'user') qaContext += `用户: ${m.content}\n`;
+        else if (m.role === 'assistant') qaContext += `${m.senderName ? (getDisplayNameInGroup(chat, m.senderName) || m.senderName) : answeredName}: ${m.content}\n`;
+      });
+      const memberList = others.map(m => `${m.originalName}(${(getDisplayNameInGroup(chat, m.originalName) || m.groupNickname || m.originalName)})`).join('、');
+      const systemPrompt = `# 任务
+你正在导演一场群聊真心话游戏。刚才是「${answeredName}」被提问并回答了上面的内容。请让【除${answeredName}以外的】其他成员每人说一句简短的围观评论（起哄、吐槽、追问、表情反应均可）。成员名单（请严格使用本名作为 name）：${memberList}。
+
+# 刚才的问答摘要
+${qaContext}
+
+# 输出格式（必须严格遵守）
+直接输出一个JSON数组，不要用\`\`\`包裹。每一条必须包含 "type":"text"、"content":"该角色说的一句话"、"name":"该角色的本名（originalName）"。
+示例：[{"type":"text","content":"哇好敢说！","name":"角色A本名"},{"type":"text","content":"我也想知道更多～","name":"角色B本名"}]
+每人仅一条，简短口语化。`;
+
+      truthGameState.abortController = new AbortController();
+      const timeoutId = setTimeout(() => truthGameState.abortController.abort(), 45000);
+      try {
+        const response = await fetch(`${proxyUrl}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+          body: JSON.stringify((() => {
+            let reqBody = { model: model, messages: [{ role: 'user', content: systemPrompt }], temperature: 0.8 };
+            if (state.globalSettings.apiTopPEnabled && state.globalSettings.apiTopP !== undefined) reqBody.top_p = state.globalSettings.apiTopP;
+            if (state.globalSettings.apiMaxTokensEnabled && state.globalSettings.apiMaxTokens > 0) reqBody.max_tokens = state.globalSettings.apiMaxTokens;
+            if (state.globalSettings.apiPresencePenaltyEnabled && state.globalSettings.apiPresencePenalty !== undefined) reqBody.presence_penalty = state.globalSettings.apiPresencePenalty;
+            if (state.globalSettings.apiFrequencyPenaltyEnabled && state.globalSettings.apiFrequencyPenalty !== undefined) reqBody.frequency_penalty = state.globalSettings.apiFrequencyPenalty;
+            return reqBody;
+          })()),
+          signal: truthGameState.abortController.signal
+        });
+        clearTimeout(timeoutId);
+        if (!response.ok) throw new Error('API调用失败');
+        const data = await response.json();
+        const rawContent = (data.choices[0].message.content || '').trim();
+        const arr = parseAiResponse(rawContent);
+        for (const item of arr) {
+          if (!item || item.type !== 'text' || !item.content) continue;
+          const name = item.name || (others[0] && others[0].originalName);
+          const member = chat.members.find(m => m.originalName === name || m.groupNickname === name);
+          const origName = member ? member.originalName : name;
+          const avatar = member && state.chats[member.id] ? (state.chats[member.id].settings?.aiAvatar) : undefined;
+          addTruthGameMessage('assistant', item.content.trim(), { senderName: origName, senderAvatar: avatar });
+          await new Promise(r => setTimeout(r, 400));
+        }
+      } catch (e) {
+        clearTimeout(timeoutId);
+        if (e.name !== 'AbortError') console.error('围观评论生成失败:', e);
+      } finally {
+        truthGameState.abortController = null;
+      }
+    }
+
+    document.getElementById('truth-send-btn')?.addEventListener('click', async () => {
+      const input = document.getElementById('truth-input');
+      const content = input.value.trim();
+      if (!content || truthGameState.waitingForAI) return;
+
+      const chat = state.chats[state.activeChatId];
+      const hasSpectatorPhase = truthGameState.isGroupMode && chat && chat.members && chat.members.length > 1;
+
+      if (truthGameState.winner === 'user') {
+        addTruthGameMessage('user', content);
+        input.value = '';
+        input.style.height = 'auto';
+      } else if (truthGameState.winner === 'ai') {
+        addTruthGameMessage('user', content);
+        input.value = '';
+        input.style.height = 'auto';
+        await new Promise(resolve => setTimeout(resolve, 500));
+        if (hasSpectatorPhase) {
+          truthGameState.phase = 'spectator_comment';
+          truthGameState.winner = null;
+          addTruthGameMessage('system', '回答完毕！其他人可以围观评论，或点击「下一轮」继续。');
+          document.getElementById('truth-start-game-btn').textContent = '下一轮';
+        } else {
+          addTruthGameMessage('system', '回答完毕！点击"开始游戏"按钮继续下一轮。');
+          truthGameState.winner = null;
+        }
+      } else {
+        addTruthGameMessage('user', content);
+        input.value = '';
+        input.style.height = 'auto';
+      }
+    });
+
+    document.getElementById('truth-call-api-btn')?.addEventListener('click', async () => {
+      if (!state.activeChatId || truthGameState.waitingForAI) return;
+
+      const chat = getTruthGameEffectiveChat();
+      if (!chat) return;
+      const aiOpts = truthGameState.isGroupMode && truthGameState.currentAiMember ? {
+        senderName: truthGameState.currentAiMember.originalName,
+        senderAvatar: (state.chats[truthGameState.currentAiMember.id] && state.chats[truthGameState.currentAiMember.id].settings?.aiAvatar) || undefined
+      } : {};
+      truthGameState.waitingForAI = true;
+
+      const input = document.getElementById('truth-input');
+      const userMessage = input.value.trim();
+
+      if (userMessage) {
+        addTruthGameMessage('user', userMessage);
+        input.value = '';
+        input.style.height = 'auto';
+      }
+
+      addTruthGameMessage('system', '对方正在思考回答...');
+
+      const { proxyUrl, apiKey, model } = state.apiConfig;
+
+      if (!proxyUrl || !apiKey || !model) {
+        addTruthGameMessage('system', 'API配置不完整，请先在设置中配置。');
+        truthGameState.waitingForAI = false;
+        return;
+      }
+
+      const conversationHistory = truthGameState.messages
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .slice(-6)
+        .map(m => ({
+          role: m.role === 'user' ? 'user' : 'assistant',
+          content: m.content
+        }));
+
+      const systemPrompt = buildTruthGamePrompt(chat, 'conversation');
+      conversationHistory.unshift({ role: 'system', content: systemPrompt });
+
+      // 创建AbortController用于中断请求
+      truthGameState.abortController = new AbortController();
+      const timeoutId = setTimeout(() => truthGameState.abortController.abort(), 60000); // 60秒超时
+
+      try {
+        const response = await fetch(`${proxyUrl}/v1/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify((() => {
+            let reqBody = {
+              model: model,
+              messages: conversationHistory,
+              temperature: 0.8
+            };
+            if (state.globalSettings.apiTopPEnabled && state.globalSettings.apiTopP !== undefined) reqBody.top_p = state.globalSettings.apiTopP;
+            if (state.globalSettings.apiMaxTokensEnabled && state.globalSettings.apiMaxTokens > 0) reqBody.max_tokens = state.globalSettings.apiMaxTokens;
+            if (state.globalSettings.apiPresencePenaltyEnabled && state.globalSettings.apiPresencePenalty !== undefined) reqBody.presence_penalty = state.globalSettings.apiPresencePenalty;
+            if (state.globalSettings.apiFrequencyPenaltyEnabled && state.globalSettings.apiFrequencyPenalty !== undefined) reqBody.frequency_penalty = state.globalSettings.apiFrequencyPenalty;
+            return reqBody;
+          })()),
+          signal: truthGameState.abortController.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) throw new Error('API调用失败');
+
+        const data = await response.json();
+        const rawContent = data.choices[0].message.content.trim();
+
+        // 使用成熟的parseAiResponse函数解析（和单聊一样）
+        const messagesArray = parseAiResponse(rawContent);
+
+        // 提取text类型的内容
+        const messages = messagesArray
+          .filter(item => item && (item.type === 'text' || item.type === 'offline_text'))
+          .map(item => item.content)
+          .filter(text => text && text.trim().length > 0);
+
+        if (messages.length > 0) {
+          for (const msg of messages) {
+            addTruthGameMessage('assistant', msg, aiOpts);
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
+        } else {
+          addTruthGameMessage('assistant', rawContent || '...', aiOpts);
+        }
+      } catch (error) {
+        clearTimeout(timeoutId);
+
+        // 如果是用户主动取消，不显示错误
+        if (error.name === 'AbortError') {
+          console.log('真心话API调用被用户中断');
+          addTruthGameMessage('system', '已取消回复');
+        } else {
+          console.error('调用API失败:', error);
+          addTruthGameMessage('system', 'API调用失败，请检查配置。');
+          alert('真心话API调用失败：' + error.message + '\n\n请检查API配置是否正确。');
+        }
+      } finally {
+        truthGameState.waitingForAI = false;
+        truthGameState.abortController = null;
+      }
+    });
+
+    document.getElementById('truth-input')?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById('truth-send-btn').click();
+      }
+    });
+
+    document.getElementById('truth-input')?.addEventListener('input', function () {
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+    });
+
+    function determineRPSWinner(user, ai) {
+      if (user === ai) return 'draw';
+      if (
+        (user === 'rock' && ai === 'scissors') ||
+        (user === 'scissors' && ai === 'paper') ||
+        (user === 'paper' && ai === 'rock')
+      ) {
+        return 'user';
+      }
+      return 'ai';
+    }
+
+    function addTruthGameMessage(role, content, opts) {
+      opts = opts || {};
+      // 验证并清理消息内容
+      if (!content || typeof content !== 'string') {
+        console.warn('真心话消息内容无效:', content);
+        return;
+      }
+
+      // 去除首尾空白并确保有实际内容
+      const cleanContent = content.trim();
+      if (cleanContent.length === 0) {
+        console.warn('真心话消息内容为空');

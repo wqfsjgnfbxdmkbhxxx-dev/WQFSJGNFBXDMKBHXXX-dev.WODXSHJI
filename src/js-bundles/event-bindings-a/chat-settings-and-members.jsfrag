@@ -1,0 +1,859 @@
+            worldBookCheckboxesContainer.appendChild(categoryHeader);
+
+            booksInCategory.forEach(book => {
+              // 全局世界书自动勾选
+              const isChecked = linkedBookIds.has(book.id) || book.isGlobal === true;
+              const label = document.createElement('label');
+              const globalTag = book.isGlobal ? ' <span style="color: #ff5722; font-size: 12px;">[全局]</span>' : '';
+              label.innerHTML = `<input type="checkbox" value="book_${book.id}" ${isChecked ? 'checked' : ''}> ${book.name}${globalTag}`;
+              worldBookCheckboxesContainer.appendChild(label);
+            });
+          }
+        });
+
+
+        const uncategorizedBooks = allBooks.filter(book => !book.categoryId);
+        if (uncategorizedBooks.length > 0) {
+          const bookHeader = document.createElement('h4');
+          bookHeader.textContent = '未分类';
+          bookHeader.style.cssText = 'margin: 15px 0 5px; color: #555; border-bottom: 1px solid #eee; padding-bottom: 3px;';
+          worldBookCheckboxesContainer.appendChild(bookHeader);
+
+          uncategorizedBooks.forEach(book => {
+            // 全局世界书自动勾选
+            const isChecked = linkedBookIds.has(book.id) || book.isGlobal === true;
+            const label = document.createElement('label');
+            const globalTag = book.isGlobal ? ' <span style="color: #ff5722; font-size: 12px;">[全局]</span>' : '';
+            label.innerHTML = `<input type="checkbox" value="book_${book.id}" ${isChecked ? 'checked' : ''}> ${book.name}${globalTag}`;
+            worldBookCheckboxesContainer.appendChild(label);
+          });
+        }
+      }
+
+
+      updateWorldBookSelectionDisplay();
+
+      const linkMemoryToggle = document.getElementById('link-memory-toggle');
+      const linkedMemorySelection = document.getElementById('linked-memory-selection');
+      const linkedChatsContainer = document.getElementById('linked-chats-checkboxes-container');
+      const linkedMemoryIds = chat.settings.linkedMemoryChatIds || [];
+      linkMemoryToggle.checked = linkedMemoryIds.length > 0;
+      linkedMemorySelection.style.display = linkMemoryToggle.checked ? 'block' : 'none';
+      linkedChatsContainer.innerHTML = '';
+      Object.values(state.chats).forEach(c => {
+        if (c.id === chat.id) return;
+        const isChecked = linkedMemoryIds.includes(c.id);
+        const prefix = c.isGroup ? '[群聊]' : '[私聊]';
+        const label = document.createElement('label');
+        label.innerHTML = `<input type="checkbox" value="${c.id}" ${isChecked ? 'checked' : ''}> ${prefix} ${c.name}`;
+        linkedChatsContainer.appendChild(label);
+      });
+
+      function updateLinkedMemorySelectionDisplay() {
+        const checkedBoxes = linkedChatsContainer.querySelectorAll('input:checked');
+        const displayText = linkedMemorySelection.querySelector('.selected-options-text');
+        if (checkedBoxes.length === 0) {
+          displayText.textContent = '-- 点击选择 --';
+        } else if (checkedBoxes.length > 2) {
+          displayText.textContent = `已选择 ${checkedBoxes.length} 项`;
+        } else {
+          displayText.textContent = Array.from(checkedBoxes).map(cb => cb.parentElement.textContent.trim()).join(', ');
+        }
+      }
+      updateLinkedMemorySelectionDisplay();
+      linkMemoryToggle.addEventListener('change', () => {
+        linkedMemorySelection.style.display = linkMemoryToggle.checked ? 'block' : 'none';
+      });
+      const linkedMemorySelectBox = linkedMemorySelection.querySelector('.select-box');
+      const newLinkedMemorySelectBox = linkedMemorySelectBox.cloneNode(true);
+      linkedMemorySelectBox.parentNode.replaceChild(newLinkedMemorySelectBox, linkedMemorySelectBox);
+      newLinkedMemorySelectBox.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (state.globalSettings.dropdownPopupMode) {
+          showMultiselectPopup('挂载聊天记忆', linkedChatsContainer, updateLinkedMemorySelectionDisplay);
+        } else {
+          linkedChatsContainer.classList.toggle('visible');
+          newLinkedMemorySelectBox.classList.toggle('expanded');
+        }
+      });
+      linkedChatsContainer.addEventListener('change', updateLinkedMemorySelectionDisplay);
+      const themeRadio = document.querySelector(`input[name="theme-select"][value="${chat.settings.theme || 'default'}"]`);
+      if (themeRadio) themeRadio.checked = true;
+      const chatFontSizeSlider = document.getElementById('chat-font-size-slider');
+      chatFontSizeSlider.value = chat.settings.fontSize || 13;
+      document.getElementById('chat-font-size-value').textContent = `${chatFontSizeSlider.value}px`;
+      const customCssInput = document.getElementById('custom-css-input');
+      customCssInput.value = chat.settings.customCss || '';
+      updateSettingsPreview();
+      document.getElementById('auto-memory-toggle').checked = chat.settings.enableAutoMemory || false;
+      document.getElementById('auto-memory-interval').value = chat.settings.autoMemoryInterval || 20;
+      document.getElementById('diary-mode-toggle').checked = chat.settings.enableDiaryMode || false;
+      document.getElementById('structured-memory-toggle').checked = chat.settings.enableStructuredMemory || false;
+      
+      // 加载记忆模式选择器
+      const memoryMode = chat.settings.memoryMode || (chat.settings.enableStructuredMemory ? 'structured' : 'diary');
+      document.querySelectorAll('#memory-mode-selector .memory-mode-option').forEach(o => {
+        o.classList.toggle('active', o.dataset.mode === memoryMode);
+      });
+      // 显示/隐藏日记模式子选项
+      const diaryOptions = document.getElementById('diary-mode-options');
+      if (diaryOptions) diaryOptions.style.display = (memoryMode === 'diary') ? 'flex' : 'none';
+      
+      // 加载限制长期记忆设置
+      document.getElementById('limit-memory-toggle').checked = chat.settings.limitLongTermMemory || false;
+      document.getElementById('memory-limit-count').value = chat.settings.longTermMemoryLimit || 50;
+      document.getElementById('memory-limit-input-group').style.display = 
+        (chat.settings.limitLongTermMemory) ? 'block' : 'none';
+      
+      document.getElementById('show-hidden-msg-toggle').checked = chat.settings.showHiddenMessages || false;
+
+      // 加载并显示/隐藏角色知晓窥屏开关（仅单聊）
+      const phoneViewingAwarenessGroup = document.getElementById('phone-viewing-awareness-group');
+      if (!isGroup) {
+        phoneViewingAwarenessGroup.style.display = 'flex';
+        document.getElementById('phone-viewing-awareness-toggle').checked = chat.settings.phoneViewingAwareness || false;
+      } else {
+        phoneViewingAwarenessGroup.style.display = 'none';
+      }
+
+      // 加载一起听时长感知开关（仅单聊）
+      const musicTimeAwarenessGroup = document.getElementById('music-time-awareness-group');
+      if (!isGroup) {
+        musicTimeAwarenessGroup.style.display = 'flex';
+        document.getElementById('music-time-awareness-toggle').checked = chat.settings.enableMusicTimeAwareness || false;
+      } else {
+        musicTimeAwarenessGroup.style.display = 'none';
+      }
+
+      // 加载情侣空间感知开关（仅单聊）
+      const coupleSpacePromptGroup = document.getElementById('couple-space-prompt-group');
+      const coupleSpaceContentGroup = document.getElementById('couple-space-content-group');
+      const coupleSpaceNotifyGroup = document.getElementById('couple-space-notify-group');
+      if (!isGroup) {
+        coupleSpacePromptGroup.style.display = 'flex';
+        coupleSpaceContentGroup.style.display = 'flex';
+        coupleSpaceNotifyGroup.style.display = 'flex';
+        document.getElementById('couple-space-prompt-toggle').checked = chat.settings.enableCoupleSpacePrompt || false;
+        document.getElementById('couple-space-content-toggle').checked = chat.settings.enableCoupleSpaceContent || false;
+        document.getElementById('couple-space-notify-toggle').checked = chat.settings.enableCoupleSpaceNotify || false;
+      } else {
+        coupleSpacePromptGroup.style.display = 'none';
+        coupleSpaceContentGroup.style.display = 'none';
+        coupleSpaceNotifyGroup.style.display = 'none';
+      }
+
+      setTimeout(() => {
+        updateTokenCountDisplay();
+
+        const inputsToWatch = [
+          'ai-persona', 'my-persona', 'max-memory',
+          'linked-memory-count', 'auto-memory-toggle', 'auto-memory-interval',
+          'diary-mode-toggle', 'structured-memory-toggle',
+          'offline-mode-toggle', 'offline-min-length-input',
+          'offline-max-length-input', 'offline-preset-select'
+        ];
+
+        inputsToWatch.forEach(id => {
+          const el = document.getElementById(id);
+          if (el) {
+            el.addEventListener('input', updateTokenCountDisplay);
+          }
+        });
+
+        // 为多选框容器添加事件监听
+        document.getElementById('world-book-checkboxes-container').addEventListener('change', updateTokenCountDisplay);
+        document.getElementById('linked-chats-checkboxes-container').addEventListener('change', updateTokenCountDisplay);
+        document.getElementById('link-memory-toggle').addEventListener('change', updateTokenCountDisplay);
+      }, 100);
+
+      // 渲染记忆库列表
+      renderMemoryArchiveList();
+
+      // 加载视频通话优化设置
+      if (typeof window.loadVideoOptimizationSettings === 'function') {
+        window.loadVideoOptimizationSettings(chat);
+      }
+
+      if (state.globalSettings.cleanChatDetail && typeof window.openCleanChatDetail === 'function') {
+        // 整洁模式：先让原有回显完成，再构建Tab界面
+        showScreen('chat-settings-screen');
+        setTimeout(() => window.openCleanChatDetail(), 50);
+      } else {
+        showScreen('chat-settings-screen');
+      }
+    });
+
+
+
+    function renderGroupMemberSettings(members) {
+      const container = document.getElementById('group-members-settings');
+      container.innerHTML = '';
+      members.forEach(member => {
+        const div = document.createElement('div');
+        div.className = 'member-editor';
+        div.dataset.memberId = member.id;
+
+
+
+
+        const memberAvatar = member.avatar || (state.chats[member.id] ? state.chats[member.id].settings.aiAvatar : defaultGroupMemberAvatar);
+
+        div.innerHTML = `<img src="${memberAvatar}" alt="${member.groupNickname}"><div class="member-name">${member.groupNickname}</div>`;
+        div.addEventListener('click', () => openMemberEditor(member.id));
+        container.appendChild(div);
+      });
+    }
+
+
+
+    document.getElementById('save-member-settings-btn').addEventListener('click', async () => {
+      if (!editingMemberId) return;
+      const chat = state.chats[state.activeChatId];
+      const member = chat.members.find(m => m.id === editingMemberId);
+      if (!member) return;
+
+      const newNickname = document.getElementById('member-name-input').value.trim();
+      if (!newNickname) {
+        alert("群昵称不能为空！");
+        return;
+      }
+      member.groupNickname = newNickname;
+      member.persona = document.getElementById('member-persona-input').value;
+
+      const newAvatarUrl = document.getElementById('member-avatar-preview').src;
+
+
+
+      member.avatar = newAvatarUrl;
+
+
+      const characterProfile = state.chats[member.id];
+      if (window.mcpManager && typeof window.mcpManager.readPermissionEditor === 'function') {
+        member.mcp = window.mcpManager.readPermissionEditor(
+          document.getElementById('member-mcp-permission-editor')
+        );
+      }
+      if (characterProfile) {
+        characterProfile.settings.aiAvatar = newAvatarUrl;
+        characterProfile.settings.mcp = member.mcp;
+        await db.chats.put(characterProfile);
+      }
+
+
+      await db.chats.put(chat);
+
+
+      renderGroupMemberSettings(chat.members);
+      document.getElementById('member-settings-modal').classList.remove('visible');
+      editingMemberId = null;
+    });
+
+
+
+    function openMemberEditor(memberId) {
+      editingMemberId = memberId;
+      const chat = state.chats[state.activeChatId];
+      const member = chat.members.find(m => m.id === memberId);
+      if (!member) return;
+
+      document.getElementById('member-name-input').value = member.groupNickname;
+      document.getElementById('member-persona-input').value = member.persona;
+
+
+
+      const memberAvatar = member.avatar || (state.chats[member.id] ? state.chats[member.id].settings.aiAvatar : defaultGroupMemberAvatar);
+      document.getElementById('member-avatar-preview').src = memberAvatar;
+      if (window.mcpManager && typeof window.mcpManager.renderPermissionEditor === 'function') {
+        const characterProfile = state.chats[member.id];
+        window.mcpManager.renderPermissionEditor(
+          document.getElementById('member-mcp-permission-editor'),
+          characterProfile || { settings: { mcp: member.mcp } }
+        );
+      }
+
+      document.getElementById('member-settings-modal').classList.add('visible');
+    }
+
+    document.getElementById('cancel-member-settings-btn').addEventListener('click', () => {
+      document.getElementById('member-settings-modal').classList.remove('visible');
+      editingMemberId = null;
+    });
+
+
+    document.getElementById('save-member-settings-btn').addEventListener('click', async () => {
+      if (!editingMemberId) return;
+      const chat = state.chats[state.activeChatId];
+      const member = chat.members.find(m => m.id === editingMemberId);
+      if (!member) return;
+
+      const newNickname = document.getElementById('member-name-input').value.trim();
+      if (!newNickname) {
+        alert("群昵称不能为空！");
+        return;
+      }
+      member.groupNickname = newNickname;
+      member.persona = document.getElementById('member-persona-input').value;
+
+      const newAvatarUrl = document.getElementById('member-avatar-preview').src;
+
+
+
+      member.avatar = newAvatarUrl;
+
+
+      const characterProfile = state.chats[member.id];
+      if (window.mcpManager && typeof window.mcpManager.readPermissionEditor === 'function') {
+        member.mcp = window.mcpManager.readPermissionEditor(
+          document.getElementById('member-mcp-permission-editor')
+        );
+      }
+      if (characterProfile) {
+        characterProfile.settings.aiAvatar = newAvatarUrl;
+        characterProfile.settings.mcp = member.mcp;
+        await db.chats.put(characterProfile);
+      }
+
+
+      await db.chats.put(chat);
+
+
+      renderGroupMemberSettings(chat.members);
+      document.getElementById('member-settings-modal').classList.remove('visible');
+      editingMemberId = null;
+    });
+
+    document.getElementById('reset-theme-btn').addEventListener('click', () => {
+      document.getElementById('theme-default').checked = true;
+    });
+
+    // --- 自定义主题按钮事件绑定 ---
+    const addCustomThemeBtn = document.getElementById('add-custom-theme-btn');
+    if (addCustomThemeBtn) {
+        addCustomThemeBtn.addEventListener('click', () => {
+            const nameInput = document.getElementById('custom-theme-name');
+            const userColor = document.getElementById('custom-user-bubble-color').value;
+            const aiColor = document.getElementById('custom-ai-bubble-color').value;
+            const themeName = nameInput.value.trim();
+
+            if (!themeName) {
+                alert('请输入自定义颜色名称！');
+                return;
+            }
+
+            // 获取现有主题
+            let customThemes = [];
+            try {
+                const saved = localStorage.getItem('custom_bubble_themes');
+                if (saved) customThemes = JSON.parse(saved);
+            } catch (e) {
+                console.error("读取自定义主题失败", e);
+            }
+
+            // 创建新主题
+            const newTheme = {
+                id: 'custom_' + Date.now() + Math.floor(Math.random() * 1000),
+                name: themeName,
+                userColor: userColor,
+                aiColor: aiColor
+            };
+
+            customThemes.push(newTheme);
+            localStorage.setItem('custom_bubble_themes', JSON.stringify(customThemes));
+
+            // 清空输入框并重新加载列表
+            nameInput.value = '';
+            if (typeof loadCustomBubbleThemes === 'function') {
+                loadCustomBubbleThemes();
+            }
+
+            // 自动选中新添加的主题
+            setTimeout(() => {
+                const newRadio = document.getElementById(`theme-${newTheme.id}`);
+                if (newRadio) {
+                    newRadio.checked = true;
+                    // 触发 change 事件以更新预览
+                    newRadio.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }, 50);
+
+            showToast('自定义颜色预设已保存');
+        });
+    }
+
+    const manageCustomThemesBtn = document.getElementById('manage-custom-themes-btn');
+    if (manageCustomThemesBtn) {
+        manageCustomThemesBtn.addEventListener('click', () => {
+            renderCustomThemeManager();
+            document.getElementById('custom-theme-manager-modal').classList.add('visible');
+        });
+    }
+
+    const closeCustomThemeManagerBtn = document.getElementById('close-custom-theme-manager-btn');
+    if (closeCustomThemeManagerBtn) {
+        closeCustomThemeManagerBtn.addEventListener('click', () => {
+            document.getElementById('custom-theme-manager-modal').classList.remove('visible');
+        });
+    }
+
+    const deleteCustomThemeBtn = document.getElementById('delete-custom-theme-btn');
+    if (deleteCustomThemeBtn) {
+        deleteCustomThemeBtn.addEventListener('click', async () => {
+            const checkboxes = document.querySelectorAll('.custom-theme-delete-checkbox:checked');
+            if (checkboxes.length === 0) {
+                alert('请先选择要删除的预设');
+                return;
+            }
+
+            const confirmed = await showCustomConfirm('删除自定义颜色', `确定要删除选中的 ${checkboxes.length} 个颜色预设吗？`, {
+                confirmButtonClass: 'btn-danger'
+            });
+
+            if (confirmed) {
+                const idsToDelete = Array.from(checkboxes).map(cb => cb.dataset.id);
+                
+                let customThemes = [];
+                try {
+                    const saved = localStorage.getItem('custom_bubble_themes');
+                    if (saved) customThemes = JSON.parse(saved);
+                } catch (e) {}
+
+                customThemes = customThemes.filter(theme => !idsToDelete.includes(theme.id));
+                localStorage.setItem('custom_bubble_themes', JSON.stringify(customThemes));
+
+                // 重新加载管理列表
+                renderCustomThemeManager();
+                
+                // 重新加载设置面板里的选择列表
+                if (typeof loadCustomBubbleThemes === 'function') {
+                    loadCustomBubbleThemes();
+                }
+
+                // 如果当前选中的主题被删除了，重置为 default
+                const currentChecked = document.querySelector('input[name="theme-select"]:checked');
+                if (currentChecked && idsToDelete.includes(currentChecked.value)) {
+                    document.getElementById('theme-default').checked = true;
+                    document.getElementById('theme-default').dispatchEvent(new Event('change', { bubbles: true }));
+                }
+
+                showToast('已删除选中颜色预设');
+            }
+        });
+    }
+
+    const selectAllCustomThemesCheckbox = document.getElementById('select-all-custom-themes');
+    if (selectAllCustomThemesCheckbox) {
+        selectAllCustomThemesCheckbox.addEventListener('change', (e) => {
+            const isChecked = e.target.checked;
+            document.querySelectorAll('.custom-theme-delete-checkbox').forEach(cb => {
+                cb.checked = isChecked;
+            });
+            updateCustomThemeDeleteBtnText();
+        });
+    }
+
+    function renderCustomThemeManager() {
+        const listContainer = document.getElementById('custom-theme-list');
+        if (!listContainer) return;
+
+        let customThemes = [];
+        try {
+            const saved = localStorage.getItem('custom_bubble_themes');
+            if (saved) customThemes = JSON.parse(saved);
+        } catch (e) {}
+
+        if (customThemes.length === 0) {
+            listContainer.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px 0;">暂无自定义颜色预设</p>';
+            document.getElementById('select-all-custom-themes').checked = false;
+            updateCustomThemeDeleteBtnText();
+            return;
+        }
+
+        listContainer.innerHTML = customThemes.map(theme => `
+            <div style="display: flex; align-items: center; padding: 10px; border-bottom: 1px solid var(--border-color);">
+                <input type="checkbox" class="custom-theme-delete-checkbox" data-id="${theme.id}" style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 24px; height: 24px; border-radius: 50%; background: linear-gradient(135deg, ${theme.userColor} 50%, ${theme.aiColor} 50%); border: 1px solid #ccc;"></div>
+                    <span>${escapeHTML(theme.name)}</span>
+                </div>
+            </div>
+        `).join('');
+
+        // 重新绑定列表里的 checkbox 事件
+        document.querySelectorAll('.custom-theme-delete-checkbox').forEach(cb => {
+            cb.addEventListener('change', () => {
+                updateCustomThemeDeleteBtnText();
+                // 同步全选框状态
+                const allChecked = document.querySelectorAll('.custom-theme-delete-checkbox:not(:checked)').length === 0;
+                document.getElementById('select-all-custom-themes').checked = allChecked;
+            });
+        });
+
+        document.getElementById('select-all-custom-themes').checked = false;
+        updateCustomThemeDeleteBtnText();
+    }
+
+    function updateCustomThemeDeleteBtnText() {
+        const count = document.querySelectorAll('.custom-theme-delete-checkbox:checked').length;
+        const btn = document.getElementById('delete-custom-theme-btn');
+        if (btn) {
+            btn.textContent = `删除 (${count})`;
+        }
+    }
+    
+    // 自定义颜色选择器实时预览
+    const customUserColorInput = document.getElementById('custom-user-bubble-color');
+    const customAiColorInput = document.getElementById('custom-ai-bubble-color');
+    
+    function previewCustomColorWhileSelecting() {
+        const previewArea = document.getElementById('settings-preview-area');
+        if (previewArea) {
+            previewArea.style.setProperty('--custom-user-bg', customUserColorInput.value);
+            previewArea.style.setProperty('--custom-ai-bg', customAiColorInput.value);
+            // 强制将预览区的主题设为一个 custom 开头的值，以触发 CSS 变量应用
+            previewArea.dataset.theme = 'custom_preview';
+        }
+    }
+
+    if (customUserColorInput) customUserColorInput.addEventListener('input', previewCustomColorWhileSelecting);
+    if (customAiColorInput) customAiColorInput.addEventListener('input', previewCustomColorWhileSelecting);
+
+
+
+
+    document.getElementById('save-chat-settings-btn').addEventListener('click', async () => {
+      if (!state.activeChatId) return;
+      const chat = state.chats[state.activeChatId];
+      const shouldOpenPetSetup = !chat.isGroup
+        && !chat.settings.enableSharedPet
+        && document.getElementById('shared-pet-switch').checked
+        && chat.sharedPet?.status !== 'active';
+
+      if (window.languagePolicy) {
+        const languageError = window.languagePolicy.validateSettingsUi(document.getElementById('bilingual-mode-toggle').checked);
+        if (languageError) {
+          await showCustomAlert('语言设置未完成', languageError);
+          return;
+        }
+      }
+
+      const oldOfflineModeState = chat.settings.isOfflineMode || false;
+
+
+      const newName = document.getElementById('chat-name-input').value.trim();
+      if (!newName) return alert('备注名/群名不能为空！');
+      if (!chat.isGroup && window.CharacterBond) {
+        window.CharacterBond.setSwitches(
+          chat,
+          document.getElementById('character-spark-switch').checked,
+          document.getElementById('shared-pet-switch').checked
+        );
+      }
+      if (!chat.isGroup && newName !== chat.name) {
+        if (!chat.nameHistory) chat.nameHistory = [];
+        if (!chat.nameHistory.includes(chat.name)) chat.nameHistory.push(chat.name);
+      }
+      chat.name = newName;
+
+      // 保存角色国籍
+      const selectedCountry = document.getElementById('character-country-select').value;
+      chat.country = selectedCountry;
+      
+      const dynamicCurrencySwitch = document.getElementById('dynamic-currency-transfer-switch');
+      if (dynamicCurrencySwitch) {
+        chat.settings.enableDynamicCurrency = dynamicCurrencySwitch.checked;
+      }
+
+      const selectedThemeRadio = document.querySelector('input[name="theme-select"]:checked');
+      chat.settings.theme = selectedThemeRadio ? selectedThemeRadio.value : 'default';
+      chat.settings.fontSize = parseInt(document.getElementById('chat-font-size-slider').value);
+      chat.settings.customCss = document.getElementById('custom-css-input').value.trim();
+      chat.settings.myPersona = document.getElementById('my-persona').value;
+      chat.settings.myAvatar = document.getElementById('my-avatar-preview').src;
+      chat.settings.maxMemory = parseInt(document.getElementById('max-memory').value) || 10;
+      chat.settings.linkedMemoryCount = parseInt(document.getElementById('linked-memory-count').value) || 10;
+
+      const checkedBookItems = document.querySelectorAll('#world-book-checkboxes-container input[type="checkbox"]:checked');
+      const newLinkedBookIds = [];
+      checkedBookItems.forEach(cb => {
+        if (cb.value.startsWith('book_')) {
+          newLinkedBookIds.push(cb.value.replace('book_', ''));
+        }
+      });
+      chat.settings.linkedWorldBookIds = newLinkedBookIds;
+
+      const linkMemoryToggleChecked = document.getElementById('link-memory-toggle').checked;
+      if (linkMemoryToggleChecked) {
+        const checkedChats = document.querySelectorAll('#linked-chats-checkboxes-container input:checked');
+        chat.settings.linkedMemoryChatIds = Array.from(checkedChats).map(cb => cb.value);
+      } else {
+        chat.settings.linkedMemoryChatIds = [];
+      }
+      chat.settings.enableAutoMemory = document.getElementById('auto-memory-toggle').checked;
+      chat.settings.autoMemoryInterval = parseInt(document.getElementById('auto-memory-interval').value) || 20;
+      chat.settings.enableDiaryMode = document.getElementById('diary-mode-toggle').checked;
+      chat.settings.enableStructuredMemory = document.getElementById('structured-memory-toggle').checked;
+      
+      // 保存记忆模式
+      const activeMode = document.querySelector('#memory-mode-selector .memory-mode-option.active');
+      if (activeMode) {
+        chat.settings.memoryMode = activeMode.dataset.mode;
+      }
+      
+      // 保存限制长期记忆设置
+      chat.settings.limitLongTermMemory = document.getElementById('limit-memory-toggle').checked;
+      chat.settings.longTermMemoryLimit = parseInt(document.getElementById('memory-limit-count').value) || 50;
+      
+      chat.settings.showHiddenMessages = document.getElementById('show-hidden-msg-toggle').checked;
+
+      // 保存角色知晓窥屏设置
+      if (!chat.isGroup) {
+        chat.settings.phoneViewingAwareness = document.getElementById('phone-viewing-awareness-toggle').checked;
+      }
+
+      // 保存一起听时长感知设置
+      if (!chat.isGroup) {
+        chat.settings.enableMusicTimeAwareness = document.getElementById('music-time-awareness-toggle').checked;
+      }
+
+      // 保存情侣空间感知设置
+      if (!chat.isGroup) {
+        chat.settings.enableCoupleSpacePrompt = document.getElementById('couple-space-prompt-toggle').checked;
+        chat.settings.enableCoupleSpaceContent = document.getElementById('couple-space-content-toggle').checked;
+        chat.settings.enableCoupleSpaceNotify = document.getElementById('couple-space-notify-toggle').checked;
+      }
+
+      chat.settings.enableTimePerception = document.getElementById('time-perception-toggle').checked;
+      chat.settings.timeZone = document.getElementById('time-zone-select').value;
+      if (window.TimeAwareness) window.TimeAwareness.saveSettingsUi(chat);
+      chat.settings.lyricsPosition = {
+        vertical: document.getElementById('lyrics-vertical-pos').value,
+        horizontal: document.getElementById('lyrics-horizontal-pos').value,
+        offset: parseInt(document.getElementById('lyrics-offset-input').value) || 10
+      };
+      chat.settings.enableSynthMusic = document.getElementById('enable-synth-music-switch').checked;
+      chat.settings.enableNarratorMode = document.getElementById('narrator-mode-toggle').checked;
+      
+      // 保存双语模式设置
+      chat.settings.enableBilingualMode = document.getElementById('bilingual-mode-toggle').checked;
+      chat.settings.bilingualDisplayMode = document.getElementById('bilingual-display-mode-select').value;
+      if (window.languagePolicy) window.languagePolicy.saveSettingsUi(chat);
+      
+      if (chat.isGroup) {
+        const checkedBilingualChars = document.querySelectorAll('#bilingual-chars-checkboxes-container input[type="checkbox"]:checked');
+        const newBilingualChars = [];
+        checkedBilingualChars.forEach(cb => {
+          newBilingualChars.push(cb.value);
+        });
+        chat.settings.bilingualCharacters = newBilingualChars;
+        chat.settings.enableBackgroundActivity = document.getElementById('group-background-activity-switch').checked;
+        chat.settings.myNickname = document.getElementById('my-group-nickname-input').value.trim();
+        chat.settings.groupAvatar = document.getElementById('group-avatar-preview').src;
+        chat.settings.actionCooldownMinutes = parseInt(document.getElementById('group-action-cooldown-input').value) || 10;
+        // 群聊也保存表情包识图与智能匹配，与单聊一致
+        chat.settings.enableStickerVision = document.getElementById('enable-sticker-vision-checkbox').checked;
+        chat.settings.enableStickerSmartMatch = document.getElementById('enable-sticker-smart-match-checkbox').checked;
+        
+        // 保存群聊线下模式设置
+        const newOfflineModeState = document.getElementById('offline-mode-toggle').checked;
+        chat.settings.isOfflineMode = newOfflineModeState;
+        chat.settings.offlineMinLength = parseInt(document.getElementById('offline-min-length-input').value) || 100;
+        chat.settings.offlineMaxLength = parseInt(document.getElementById('offline-max-length-input').value) || 300;
+        chat.settings.offlinePresetId = document.getElementById('offline-preset-select').value || null;
+        const offlineContinuousEl = document.getElementById('offline-continuous-layout-toggle');
+        if (offlineContinuousEl) chat.settings.offlineContinuousLayout = offlineContinuousEl.checked;
+        
+        if (oldOfflineModeState === true && newOfflineModeState === false) {
+          const switchInstruction = {
+            role: 'system',
+            content: '[系统指令：模式已切换！你现在回到了线上聊天模式。你的回复【必须】严格遵守线上模式的JSON数组格式，例如 [{"type": "text", "content": "你好"}]]',
+            timestamp: Date.now(),
+            isHidden: true
+          };
+          chat.history.push(switchInstruction);
+          console.log("已成功注入“切换到线上模式”的系统指令。");
+        }
+      } else {
+        chat.settings.enableBackgroundActivity = document.getElementById('char-background-activity-switch').checked;
+        chat.settings.enableAutoCartClear = document.getElementById('char-auto-cart-clear-switch').checked;
+        
+        // 新增：保存后台查看用户手机设置
+        const charViewMyPhoneBgSelect = document.getElementById('char-view-myphone-bg-select');
+        if (charViewMyPhoneBgSelect.value === 'null') {
+          chat.settings.enableViewMyPhoneInBackground = null;
+        } else {
+          chat.settings.enableViewMyPhoneInBackground = charViewMyPhoneBgSelect.value === 'true';
+        }
+        const charViewMyPhoneChanceInput = document.getElementById('char-view-myphone-chance-input');
+        chat.settings.viewMyPhoneChance = charViewMyPhoneChanceInput.value.trim() === '' ? null : parseInt(charViewMyPhoneChanceInput.value);
+        
+        chat.settings.enableTodoList = document.getElementById('enable-todo-list-switch').checked;
+        const newOfflineModeState = document.getElementById('offline-mode-toggle').checked;
+        chat.settings.isOfflineMode = newOfflineModeState;
+        const weatherEnabled = document.getElementById('enable-weather-switch').checked;
+        const weatherSettings = {
+          enabled: weatherEnabled,
+          userVirtualCity: document.getElementById('user-virtual-city').value.trim(),
+          userRealCity: document.getElementById('user-real-city-search').dataset.realName || chat.settings.weather?.userRealCity || '',
+          userLat: parseFloat(document.getElementById('user-city-lat').value) || null,
+          userLon: parseFloat(document.getElementById('user-city-lon').value) || null,
+
+          charVirtualCity: document.getElementById('char-virtual-city').value.trim(),
+          charRealCity: document.getElementById('char-real-city-search').dataset.realName || chat.settings.weather?.charRealCity || '',
+          charLat: parseFloat(document.getElementById('char-city-lat').value) || null,
+          charLon: parseFloat(document.getElementById('char-city-lon').value) || null
+        };
+
+        chat.settings.weather = weatherSettings;
+
+
+
+
+
+        if (oldOfflineModeState === true && newOfflineModeState === false) {
+
+
+          const switchInstruction = {
+            role: 'system',
+            content: '[系统指令：模式已切换！你现在回到了线上聊天模式。你的回复【必须】严格遵守线上模式的JSON数组格式，例如 [{"type": "text", "content": "你好"}]]',
+            timestamp: Date.now(),
+            isHidden: true
+          };
+
+
+          chat.history.push(switchInstruction);
+          console.log("已成功注入“切换到线上模式”的系统指令。");
+        }
+
+
+        chat.settings.injectLatestThought = document.getElementById('inject-thought-toggle').checked;
+
+        // 新增：保存AI行为控制设置
+        const thoughtsValue = document.getElementById('chat-enable-thoughts-select').value;
+        if (thoughtsValue === 'null') {
+          chat.settings.enableThoughts = null;
+        } else {
+          chat.settings.enableThoughts = thoughtsValue === 'true';
+        }
+
+        const qzoneValue = document.getElementById('chat-enable-qzone-actions-select').value;
+        if (qzoneValue === 'null') {
+          chat.settings.enableQzoneActions = null;
+        } else {
+          chat.settings.enableQzoneActions = qzoneValue === 'true';
+        }
+
+        const viewMyPhoneValue = document.getElementById('chat-enable-view-myphone-select').value;
+        if (viewMyPhoneValue === 'null') {
+          chat.settings.enableViewMyPhone = null;
+        } else {
+          chat.settings.enableViewMyPhone = viewMyPhoneValue === 'true';
+        }
+
+        const crossChatValue = document.getElementById('chat-enable-cross-chat-select').value;
+        if (crossChatValue === 'null') {
+          chat.settings.enableCrossChat = null;
+        } else {
+          chat.settings.enableCrossChat = crossChatValue === 'true';
+        }
+
+        const promptClearMemoryValue = document.getElementById('chat-prompt-clear-memory-select').value;
+        if (promptClearMemoryValue === 'null') {
+          chat.settings.promptClearMemoryOnChatClear = null;
+        } else {
+          chat.settings.promptClearMemoryOnChatClear = promptClearMemoryValue === 'true';
+        }
+
+        // 保存回复条数范围设置（仅单聊）
+        if (!chat.isGroup) {
+          chat.settings.enableMultiReply = document.getElementById('enable-reply-count-range-toggle').checked;
+          chat.settings.minReplyCount = parseInt(document.getElementById('min-reply-count-input').value) || 2;
+          chat.settings.maxReplyCount = parseInt(document.getElementById('max-reply-count-input').value) || 5;
+        }
+
+        chat.settings.offlineMinLength = parseInt(document.getElementById('offline-min-length-input').value) || 100;
+        chat.settings.offlineMaxLength = parseInt(document.getElementById('offline-max-length-input').value) || 300;
+        chat.settings.offlinePresetId = document.getElementById('offline-preset-select').value || null;
+        const offlineContinuousEl = document.getElementById('offline-continuous-layout-toggle');
+        if (offlineContinuousEl) chat.settings.offlineContinuousLayout = offlineContinuousEl.checked;
+
+        // 保存表情包识图设置
+        chat.settings.enableStickerVision = document.getElementById('enable-sticker-vision-checkbox').checked;
+
+        // 保存表情包智能匹配设置
+        chat.settings.enableStickerSmartMatch = document.getElementById('enable-sticker-smart-match-checkbox').checked;
+
+        const newOriginalName = document.getElementById('ai-original-name-input').value.trim();
+        if (!newOriginalName) return alert('对方本名不能为空！');
+        chat.originalName = newOriginalName;
+        chat.settings.aiPersona = document.getElementById('ai-persona').value;
+        
+        // 保存动态年龄设置
+        chat.settings.enableDynamicAge = document.getElementById('ai-dynamic-age-toggle').checked;
+        const bYear = parseInt(document.getElementById('ai-birthday-year').value);
+        const bMonth = parseInt(document.getElementById('ai-birthday-month').value);
+        const bDay = parseInt(document.getElementById('ai-birthday-day').value);
+        chat.settings.aiBirthday = {
+            year: isNaN(bYear) ? null : bYear,
+            month: isNaN(bMonth) ? null : bMonth,
+            day: isNaN(bDay) ? null : bDay
+        };
+        
+        chat.settings.minimaxVoiceId = document.getElementById('ai-voice-id-input').value.trim();
+
+        chat.settings.ttsLanguage = document.getElementById('ai-voice-lang-select').value;
+        chat.settings.showSeconds = document.getElementById('chat-show-seconds-switch').checked;
+        chat.settings.enableTts = document.getElementById('enable-tts-switch').checked;
+        chat.settings.enableRealVoice = document.getElementById('enable-real-voice-switch').checked;
+        chat.settings.realVoiceOperation = document.getElementById('real-voice-operation-select').value;
+        chat.settings.voiceUnderstandingMode = document.getElementById('voice-understanding-mode-select').value;
+        chat.settings.voiceTranscriptionUrl = document.getElementById('voice-transcription-url-input').value.trim();
+        chat.settings.voiceTranscriptionModel = document.getElementById('voice-transcription-model-input').value.trim() || 'whisper-1';
+        chat.settings.voiceTranscriptionKey = document.getElementById('voice-transcription-key-input').value.trim();
+        chat.settings.voiceMaxDuration = parseInt(document.getElementById('voice-max-duration-select').value, 10) || 60;
+        chat.settings.voiceConfirmTranscript = document.getElementById('voice-confirm-transcript-switch').checked;
+        chat.settings.voiceCallInputMode = document.getElementById('voice-call-input-mode-select').value;
+        chat.settings.voiceCallUnderstandingMode = document.getElementById('voice-call-understanding-select').value;
+        chat.settings.voiceCallTextFallback = document.getElementById('voice-call-text-fallback-switch').checked;
+        chat.settings.aiAvatar = document.getElementById('ai-avatar-preview').src;
+        chat.settings.myNickname = document.getElementById('my-nickname-input').value.trim() || '我';
+        chat.settings.actionCooldownMinutes = parseInt(document.getElementById('ai-action-cooldown-input').value) || 10;
+
+        const selectedGroupId = document.getElementById('assign-group-select').value;
+        chat.groupId = selectedGroupId ? parseInt(selectedGroupId) : null;
+      }
+
+      // 保存视频通话优化设置
+      if (typeof window.saveVideoOptimizationSettings === 'function') {
+        window.saveVideoOptimizationSettings(chat);
+      }
+      if (!chat.isGroup && window.mcpManager && typeof window.mcpManager.readPermissionEditor === 'function') {
+        chat.settings.mcp = window.mcpManager.readPermissionEditor(
+          document.getElementById('chat-mcp-permission-editor')
+        );
+      }
+
+      await db.chats.put(chat);
+      if (!chat.isGroup) {
+        await syncCharacterNameInGroups(chat);
+        await syncCharacterAvatarInGroups(chat);
+      }
+      applyLyricsBarPosition(chat);
+      applyScopedCss(chat.settings.customCss, '#chat-messages', 'custom-bubble-style');
+      const returningFromSettings = document.getElementById('chat-settings-screen').classList.contains('active');
+      showScreen('chat-interface-screen');
+      if (!returningFromSettings) renderChatInterface(state.activeChatId);
+      renderChatList();
+      if (shouldOpenPetSetup && window.CharacterBond) {
+        window.CharacterBond.showBondModal('pet', chat);
+      }
+      if (window.voiceRecording?.refreshAvailability) window.voiceRecording.refreshAvailability();
+    });
+    // 暴露需要跨文件引用的函数到 window
+    window.handleWorldBookImport = handleWorldBookImport;
+    window.exportWorldBooks = exportWorldBooks;
+    window.showAnnouncementActions = showAnnouncementActions;
+    window.handlePinAnnouncement = handlePinAnnouncement;
+    window.handleDeleteAnnouncement = handleDeleteAnnouncement;
+    window.forceGlobalCleanup = forceGlobalCleanup;
+
+};

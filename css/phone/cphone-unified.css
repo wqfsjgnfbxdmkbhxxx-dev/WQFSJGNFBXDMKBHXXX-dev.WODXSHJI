@@ -1,0 +1,164 @@
+           /* ================================================== */
+           /* ▼▼▼ CPhone 界面统一化修复补丁 (去除外框 + 放大图标) ▼▼▼ */
+           /* ================================================== */
+
+           /* 1. 【左侧组件】去除圆形组件的"丑"外框 */
+           .cphone-circle-widget-wrapper {
+               background: transparent !important;
+               /* 去掉背景色 */
+               border: none !important;
+               /* 去掉边框线 */
+               backdrop-filter: none !important;
+               /* 去掉磨砂玻璃 */
+               -webkit-backdrop-filter: none !important;
+               box-shadow: none !important;
+               /* 去掉阴影 */
+           }
+
+           /* 优化去除外框后的文字显示 (加强阴影，防止看不清) */
+           .circle-text-area p {
+               text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8) !important;
+               font-weight: 500 !important;
+           }
+
+           /* 去除装饰线 (既然不要框了，装饰线悬空会很怪) */
+           .line-deco {
+               display: none !important;
+           }
+
+           /* 2. 【图标大小】放大 CPhone 图标 (对齐 EPhone) */
+           /* 调整网格间距，给大图标腾出空间 */
+           .cphone-fixed-app-grid {
+               gap: 2px 15px !important;
+               /* 减小行间距 */
+           }
+
+           /* 强制放大图标背景 */
+           .app-icon.small .icon-bg {
+               width: 62px !important;
+               /* 原为 54px -> 改为 62px */
+               height: 62px !important;
+               min-width: 62px !important;
+               border-radius: 16px !important;
+               /* 稍微圆润一点 */
+               margin-bottom: 5px !important;
+           }
+
+           /* 3. 【字体统一】修正 CPhone 字体颜色和大小 */
+           .app-icon.small .label {
+               font-size: 13px !important;
+               /* 原为 11px -> 改为 EPhone 标准的 13px */
+               color: #ffffff !important;
+               /* 纯白文字 */
+               font-weight: 500 !important;
+               /* 统一使用 EPhone 的强阴影，保证在亮色壁纸上也清晰 */
+               text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6) !important;
+               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+           }
+
+           /* 4. 【Dock栏】改为 EPhone 风格 (浅色透明) */
+           .cphone-dock.glass {
+               /* 原为深灰色 rgba(40, 40, 40, 0.4) -> 改为浅白透明 */
+               background: rgba(255, 255, 255, 0.2) !important;
+               border: 1px solid rgba(255, 255, 255, 0.2) !important;
+               backdrop-filter: blur(20px) !important;
+               -webkit-backdrop-filter: blur(20px) !important;
+               /* 稍微调整圆角，使其不那么圆，更像 EPhone 的 Dock */
+               border-radius: 24px !important;
+           }
+
+           /* 5. 【Dock图标】确保 Dock 里的图标也够大 */
+           .cphone-dock .app-icon .icon-bg {
+               width: 60px !important;
+               height: 60px !important;
+           }
+
+           /* --- 暗黑模式下的适配修正 --- */
+           #phone-screen.dark-mode .cphone-dock.glass {
+               /* 暗黑模式下稍微深一点，但保持通透 */
+               background: rgba(50, 50, 50, 0.4) !important;
+               border-color: rgba(255, 255, 255, 0.1) !important;
+           }
+
+           /* ================================================== */
+           /* ▼▼▼ CPhone 界面统一化修复补丁 (去除外框 + 放大图标) ▼▼▼ */
+           /* ================================================== */
+
+           /* 1. 【左侧组件】去除圆形组件的"丑"外框 */
+           .cphone-circle-widget-wrapper {
+               background: transparent !important;
+               /* 去掉背景色 */
+               border: none !important;
+               /* 去掉边框线 */
+               backdrop-filter: none !important;
+               /* 去掉磨砂玻璃 */
+               -webkit-backdrop-filter: none !important;
+               box-shadow: none !important;
+               /* 去掉阴影 */
+           }
+
+           /* 优化去除外框后的文字显示 (加强阴影，防止看不清) */
+           .circle-text-area p {
+               text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8) !important;
+               font-weight: 500 !important;
+           }
+
+           /* 去除装饰线 (既然不要框了，装饰线悬空会很怪) */
+           .line-deco {
+               display: none !important;
+           }
+
+           /* 2. 【图标大小】放大 CPhone 图标 (对齐 EPhone) */
+           /* 调整网格间距，给大图标腾出空间 */
+           .cphone-fixed-app-grid {
+               gap: 2px 15px !important;
+               /* 减小行间距 */
+           }
+
+           /* 强制放大图标背景 */
+           .app-icon.small .icon-bg {
+               width: 62px !important;
+               /* 原为 54px -> 改为 62px */
+               height: 62px !important;
+               min-width: 62px !important;
+               border-radius: 16px !important;
+               /* 稍微圆润一点 */
+               margin-bottom: 5px !important;
+           }
+
+           /* 3. 【字体统一】修正 CPhone 字体颜色和大小 */
+           .app-icon.small .label {
+               font-size: 13px !important;
+               /* 原为 11px -> 改为 EPhone 标准的 13px */
+               color: #ffffff !important;
+               /* 纯白文字 */
+               font-weight: 500 !important;
+               /* 统一使用 EPhone 的强阴影，保证在亮色壁纸上也清晰 */
+               text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6) !important;
+               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+           }
+
+           /* 4. 【Dock栏】改为 EPhone 风格 (浅色透明) */
+           .cphone-dock.glass {
+               /* 原为深灰色 rgba(40, 40, 40, 0.4) -> 改为浅白透明 */
+               background: rgba(255, 255, 255, 0.2) !important;
+               border: 1px solid rgba(255, 255, 255, 0.2) !important;
+               backdrop-filter: blur(20px) !important;
+               -webkit-backdrop-filter: blur(20px) !important;
+               /* 稍微调整圆角，使其不那么圆，更像 EPhone 的 Dock */
+               border-radius: 24px !important;
+           }
+
+           /* 5. 【Dock图标】确保 Dock 里的图标也够大 */
+           .cphone-dock .app-icon .icon-bg {
+               width: 60px !important;
+               height: 60px !important;
+           }
+
+           /* --- 暗黑模式下的适配修正 --- */
+           #phone-screen.dark-mode .cphone-dock.glass {
+               /* 暗黑模式下稍微深一点，但保持通透 */
+               background: rgba(50, 50, 50, 0.4) !important;
+               border-color: rgba(255, 255, 255, 0.1) !important;
+           }
+

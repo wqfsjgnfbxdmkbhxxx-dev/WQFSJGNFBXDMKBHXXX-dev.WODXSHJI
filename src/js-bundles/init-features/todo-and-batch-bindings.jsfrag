@@ -1,0 +1,289 @@
+          message,
+          { confirmButtonClass: 'btn-danger', confirmText: confirmText }
+        );
+
+        if (confirmed) {
+          try {
+            if (wallet && wallet.kinshipCards) {
+              // 过滤掉当前角色的卡
+              wallet.kinshipCards = wallet.kinshipCards.filter(c => c.chatId !== chatId);
+              await db.userWallet.put(wallet);
+
+              await showCustomAlert("成功", "亲属卡已解绑。");
+
+              // 刷新界面
+              renderCharWallet();
+
+              // 3. 发送系统消息通知AI (根据方向不同，通知内容也不同)
+              const chat = state.chats[chatId];
+              if (chat) {
+                let sysContent = "";
+                if (isMyGift) {
+                  sysContent = '[系统提示：用户已收回了给你的亲属卡额度，你无法再使用代付功能了。]';
+                } else {
+                  sysContent = '[系统提示：用户主动退还/解绑了你赠送的亲属卡，不再使用你的钱了。]';
+                }
+
+                chat.history.push({
+                  role: 'system',
+                  content: sysContent,
+                  timestamp: Date.now(),
+                  isHidden: true
+                });
+                await db.chats.put(chat);
+              }
+            }
+          } catch (error) {
+            console.error(error);
+            alert("解绑失败");
+          }
+        }
+      }
+    });
+    const alipayScreen = document.getElementById('alipay-screen');
+    if (alipayScreen) {
+      alipayScreen.addEventListener('click', async (e) => {
+        // 检查点击的是不是解绑按钮
+        if (e.target.classList.contains('alipay-unbind-btn')) {
+          e.stopPropagation();
+
+          const chatId = e.target.dataset.chatId;
+          const chat = state.chats[chatId];
+          const charName = chat ? chat.name : '该角色';
+
+          // 1. 获取钱包数据判断方向
+          const wallet = await db.userWallet.get('main');
+          const card = wallet?.kinshipCards?.find(c => c.chatId === chatId);
+
+          if (!card) return;
+
+          // 2. 动态生成文案
+          const isMyGift = (card.type === 'out' || !card.type);
+
+          let title = "";
+          let message = "";
+          let confirmText = "";
+
+          if (isMyGift) {
+            title = "终止赠予";
+            message = `确定要停止赠予“${charName}”亲属卡吗？\n解绑后，对方将无法再使用该额度。`;
+            confirmText = "确认收回";
+          } else {
+            title = "解绑亲属卡";
+            message = `确定要解绑“${charName}”赠送的亲属卡吗？\n解绑后，您将失去该消费额度。`;
+            confirmText = "确认解绑";
+          }
+
+          const confirmed = await showCustomConfirm(
+            title,
+            message,
+            { confirmButtonClass: 'btn-danger', confirmText: confirmText }
+          );
+
+          if (confirmed) {
+            try {
+              if (wallet && wallet.kinshipCards) {
+                // 从数组中移除该卡片
+                wallet.kinshipCards = wallet.kinshipCards.filter(c => c.chatId !== chatId);
+                await db.userWallet.put(wallet);
+
+                await showCustomAlert("成功", "已成功解绑亲属卡。");
+
+                // 刷新支付宝界面
+                openAlipayScreen();
+
+                // 3. 通知 AI
+                if (chat) {
+                  let sysContent = "";
+                  if (isMyGift) {
+                    sysContent = '[系统提示：用户已在支付宝端单方面收回了给你的亲属卡授权。]';
+                  } else {
+                    sysContent = '[系统提示：用户已在支付宝端主动退还/解绑了你赠送的亲属卡。]';
+                  }
+
+                  chat.history.push({
+                    role: 'system',
+                    content: sysContent,
+                    timestamp: Date.now(),
+                    isHidden: true
+                  });
+                  await db.chats.put(chat);
+                }
+              }
+            } catch (error) {
+              console.error(error);
+              alert("解绑操作失败");
+            }
+          }
+        }
+      });
+    }
+    document.getElementById('export-appearance-btn')?.addEventListener('click', exportAppearanceSettings);
+    // --- To-Do List Events ---
+    const todoBtn = document.getElementById('open-todo-list-btn');
+    if (todoBtn) todoBtn.addEventListener('click', window.openTodoList);
+
+    document.getElementById('todo-list-back-btn')?.addEventListener('click', () => showScreen('chat-interface-screen'));
+
+    document.getElementById('todo-prev-day-btn')?.addEventListener('click', () => changeTodoDate(-1));
+
+    document.getElementById('todo-next-day-btn')?.addEventListener('click', () => changeTodoDate(1));
+
+    document.getElementById('add-todo-btn')?.addEventListener('click', () => openTodoEditor(null));
+
+    document.getElementById('cancel-todo-editor-btn')?.addEventListener('click', () => {
+      document.getElementById('todo-editor-modal').classList.remove('visible');
+    });
+
+    document.getElementById('save-todo-btn')?.addEventListener('click', saveTodo);
+    const todoDateDisplay = document.getElementById('todo-current-date-display');
+    if (todoDateDisplay) {
+      // 1. 动态创建一个隐藏的 input[type="date"]
+      const datePicker = document.createElement('input');
+      datePicker.type = 'date';
+      // 隐藏它，但保持可交互性
+      datePicker.style.cssText = 'position:absolute; visibility:hidden; width:0; height:0; top:0; left:0;';
+      todoDateDisplay.parentNode.appendChild(datePicker); // 插入到导航栏里
+
+      // 2. 点击文字 -> 触发选择器
+      todoDateDisplay.addEventListener('click', () => {
+        // 将当前显示的日期同步给选择器
+        datePicker.value = getTodoDateString(currentTodoDate);
+
+        // 尝试弹出原生日期面板
+        try {
+          datePicker.showPicker(); // 现代浏览器 (Chrome 99+, Safari 15+)
+        } catch (e) {
+          datePicker.click(); // 旧版兼容
+        }
+      });
+
+      // 3. 监听日期改变
+      datePicker.addEventListener('change', (e) => {
+        if (e.target.value) {
+          // 解析 YYYY-MM-DD (避免直接 new Date() 带来的时区偏差问题)
+          const [y, m, d] = e.target.value.split('-').map(Number);
+          // 构造本地时间对象
+          currentTodoDate = new Date(y, m - 1, d);
+
+          // 刷新界面
+          updateTodoDateDisplay();
+          renderTodoList();
+        }
+      });
+    }
+    // 类型选择器点击事件
+    const typeOptions = document.querySelectorAll('.todo-type-option');
+    typeOptions.forEach(opt => {
+      opt.addEventListener('click', () => {
+        typeOptions.forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+      });
+    });
+    // --- 在 init() 函数内部的事件绑定区域添加 ---
+
+    // 1. 长期记忆列表滚动监听
+    const memoryListContainer = document.getElementById('memory-list-container');
+    if (memoryListContainer) {
+      memoryListContainer.addEventListener('scroll', () => {
+        const { scrollTop, scrollHeight, clientHeight } = memoryListContainer;
+        // 距离底部 50px 时触发加载
+        if (scrollHeight - scrollTop <= clientHeight + 50) {
+          loadMoreMemories();
+        }
+      });
+    }
+
+    // 2. 待办事项列表滚动监听
+    const todoListContainer = document.getElementById('todo-list-container');
+    if (todoListContainer) {
+      todoListContainer.addEventListener('scroll', () => {
+        const { scrollTop, scrollHeight, clientHeight } = todoListContainer;
+        if (scrollHeight - scrollTop <= clientHeight + 50) {
+          loadMoreTodos();
+        }
+      });
+    }
+    // 邮箱事件由 mail-app.js 统一绑定，避免按钮被重复监听。
+    document.getElementById('manage-rules-btn')?.addEventListener('click', toggleRuleManagementMode);
+    document.getElementById('import-rules-btn')?.addEventListener('click', () => {
+      document.getElementById('import-rules-input').click();
+    });
+    document.getElementById('import-rules-input')?.addEventListener('change', handleRulesImport);
+
+    // 2. 底部操作栏按钮
+    document.getElementById('select-all-rules-checkbox')?.addEventListener('change', handleSelectAllRules);
+    document.getElementById('export-selected-rules-btn')?.addEventListener('click', exportSelectedRules);
+    document.getElementById('delete-selected-rules-btn')?.addEventListener('click', deleteSelectedRules);
+    // ... 在 init() 函数内 ...
+    const redditSearchBtn = document.getElementById('char-reddit-search-btn');
+    if (redditSearchBtn) {
+      redditSearchBtn.addEventListener('click', () => {
+        const query = document.getElementById('char-reddit-search-input').value.trim();
+        handleRedditSearch(query);
+      });
+    }
+
+    // 绑定回车搜索
+    const redditInput = document.getElementById('char-reddit-search-input');
+    if (redditInput) {
+      redditInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          const query = e.target.value.trim();
+          handleRedditSearch(query);
+        }
+      });
+    }
+    const regenRedditBtn = document.getElementById('regenerate-char-reddit-btn');
+    if (regenRedditBtn) {
+      regenRedditBtn.addEventListener('click', handleGenerateSimulatedReddit);
+    }
+    document.getElementById('nai-preset-select')?.addEventListener('change', handleNaiPresetChange);
+    document.getElementById('save-nai-preset-btn')?.addEventListener('click', () => handleSaveNaiPreset(false));
+    document.getElementById('update-nai-preset-btn')?.addEventListener('click', () => handleSaveNaiPreset(true));
+    document.getElementById('delete-nai-preset-btn')?.addEventListener('click', handleDeleteNaiPreset);
+    document.getElementById('bind-nai-preset-btn')?.addEventListener('click', openNaiBindingModal);
+
+    document.getElementById('save-nai-binding-btn')?.addEventListener('click', saveNaiBinding);
+    document.getElementById('cancel-nai-binding-btn')?.addEventListener('click', () => {
+      document.getElementById('nai-binding-modal').classList.remove('visible');
+    });
+    document.getElementById('manage-quick-reply-categories-btn')?.addEventListener('click', openQuickReplyCategoryManager);
+
+    // 2. 绑定分类管理器内的按钮
+    document.getElementById('add-new-quick-reply-category-btn')?.addEventListener('click', addNewQuickReplyCategory);
+    document.getElementById('close-quick-reply-category-manager-btn')?.addEventListener('click', () => {
+      document.getElementById('quick-reply-category-manager-modal').classList.remove('visible');
+      renderQuickReplyList(true); // 关闭时刷新主列表的Tabs
+    });
+    // --- Sticker Batch Move (表情包批量移动) ---
+    const stickerMoveBtn = document.getElementById('move-selected-stickers-btn');
+    if (stickerMoveBtn) {
+      stickerMoveBtn.addEventListener('click', executeBatchMoveStickers);
+    }
+
+    // --- Quick Reply Management (快捷回复管理) ---
+    const batchQuickReplyBtn = document.getElementById('batch-quick-reply-btn');
+    if (batchQuickReplyBtn) {
+      batchQuickReplyBtn.addEventListener('click', toggleQuickReplyManagementMode);
+    }
+
+    const selectAllQuickRepliesCb = document.getElementById('select-all-quick-replies-checkbox');
+    if (selectAllQuickRepliesCb) {
+      selectAllQuickRepliesCb.addEventListener('change', handleSelectAllQuickReplies);
+    }
+
+    const moveQuickRepliesBtn = document.getElementById('move-selected-quick-replies-btn');
+    if (moveQuickRepliesBtn) {
+      moveQuickRepliesBtn.addEventListener('click', executeBatchMoveQuickReplies);
+    }
+
+    const deleteQuickRepliesBtn = document.getElementById('delete-selected-quick-replies-btn');
+    if (deleteQuickRepliesBtn) {
+      deleteQuickRepliesBtn.addEventListener('click', executeBatchDeleteQuickReplies);
+    }
+
+    // 暴露需要跨文件引用的函数到 window
+    window.openDrawAndGuess = openDrawAndGuess;
+
+};

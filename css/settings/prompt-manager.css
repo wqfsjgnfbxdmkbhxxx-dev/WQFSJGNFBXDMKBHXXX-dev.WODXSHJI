@@ -1,0 +1,310 @@
+           /* ========================================
+   提示词管理器样式
+   ======================================== */
+
+           /* ========================================
+   提示词管理器样式 (守护甜心风格)
+   ======================================== */
+
+           #prompt-scenes-container {
+               padding: 10px;
+               background-color: transparent;
+           }
+
+           .prompt-category {
+               margin-bottom: 25px;
+               border-radius: 25px;
+               /* 加上淡淡的白色背景晕染，增加层次感 */
+               background: rgba(255, 255, 255, 0.6);
+               padding: 5px;
+               box-shadow: 0 5px 20px rgba(255, 183, 197, 0.15);
+           }
+
+           .prompt-category-header {
+               /* 守护甜心标志性的粉红渐变 - 调整为更浅的粉白风格 */
+               background: linear-gradient(90deg, #ffc2cd 0%, #ffdde1 100%);
+               color: white;
+               padding: 15px 25px;
+               font-weight: bold;
+               font-size: 16px;
+               /* 更圆润的边角 */
+               border-radius: 20px;
+               display: flex;
+               justify-content: space-between;
+               align-items: center;
+               box-shadow: 0 4px 10px rgba(255, 194, 205, 0.4);
+               text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+               letter-spacing: 1px;
+           }
+
+           .category-action-btn {
+               background: rgba(255, 255, 255, 0.4);
+               color: #fff;
+               border: 2px solid rgba(255, 255, 255, 0.8);
+               padding: 6px 15px;
+               border-radius: 15px;
+               font-size: 12px;
+               cursor: pointer;
+               transition: all 0.3s ease;
+               font-weight: bold;
+           }
+
+           .category-action-btn:hover {
+               background: white;
+               color: #ffc2cd;
+               transform: translateY(-1px);
+           }
+
+           .category-action-btn:active {
+               transform: scale(0.95);
+           }
+
+           .prompt-scene-list {
+               background: white;
+               /* 这是一个稍微缩进的设计，看起来像卡片插在口袋里 */
+               margin-top: -10px;
+               padding-top: 15px;
+               border-radius: 0 0 20px 20px;
+               overflow: hidden;
+               /* 移除外层容器已经有的阴影，避免叠加太重，或者加一种内部光泽 */
+               border: 2px solid #fff0f5;
+               border-top: none;
+           }
+
+           .prompt-scene-item {
+               display: flex;
+               justify-content: space-between;
+               align-items: center;
+               padding: 18px 25px;
+               border-bottom: 1px dashed #ffe0e6;
+               /* 虚线分割更可爱 */
+               transition: all 0.2s ease;
+           }
+
+           .prompt-scene-item:last-child {
+               border-bottom: none;
+           }
+
+           .prompt-scene-item:hover {
+               background: #fff5f7;
+               /* 极淡的粉色悬停就好 */
+           }
+
+           .prompt-scene-item:active {
+               background: #ffe6ea;
+           }
+
+           .prompt-scene-name {
+               font-size: 15px;
+               color: #666;
+               /* 稍微柔和一点的黑色 */
+               flex: 1;
+               font-family: 'Quicksand', sans-serif;
+               /* 如果有的话，可爱圆体 */
+               font-weight: 600;
+           }
+
+           .prompt-scene-status {
+               font-size: 12px;
+               color: #ffc2cd;
+               margin-right: 15px;
+               background: #fff;
+               padding: 2px 8px;
+               border-radius: 8px;
+               border: 1px solid #ffe0e6;
+           }
+
+           .prompt-scene-status.custom {
+               color: #ff9a9e;
+               border-color: #ff9a9e;
+               font-weight: 600;
+               box-shadow: 0 2px 5px rgba(255, 154, 158, 0.1);
+           }
+
+           .prompt-edit-btn {
+               /* 按钮改成可爱风格 */
+               background: white;
+               color: #ffc2cd;
+               border: 2px solid #ffc2cd;
+               padding: 6px 18px;
+               border-radius: 20px;
+               font-size: 13px;
+               cursor: pointer;
+               transition: all 0.3s ease;
+               font-weight: bold;
+               box-shadow: 0 2px 5px rgba(255, 194, 205, 0.2);
+           }
+
+           .prompt-edit-btn:hover {
+               background: #ffc2cd;
+               color: white;
+               transform: translateY(-2px);
+               box-shadow: 0 5px 10px rgba(255, 194, 205, 0.4);
+           }
+
+           .prompt-edit-btn:active {
+               transform: scale(0.95);
+               transform: translateY(0);
+           }
+
+           /* 提示词编辑器模态框 */
+           #prompt-editor-modal {
+               position: fixed;
+               top: 0;
+               left: 0;
+               width: 100%;
+               height: 100%;
+               /* 增加格纹背景，更有次元感 */
+               background: rgba(255, 240, 245, 0.4);
+               backdrop-filter: blur(8px);
+               display: flex;
+               justify-content: center;
+               align-items: center;
+               z-index: 10000;
+               transition: opacity 0.3s ease;
+           }
+
+           #prompt-editor-modal .modal-content {
+               background: white;
+               border-radius: 30px;
+               box-shadow: 0 20px 60px rgba(255, 194, 205, 0.3), 0 0 0 5px rgba(255, 255, 255, 0.8);
+               overflow: hidden;
+               animation: modalPopIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+               /* Q弹的动画 */
+               border: 2px solid #ffe0e6;
+           }
+
+           @keyframes modalPopIn {
+               0% {
+                   opacity: 0;
+                   transform: scale(0.8) translateY(20px);
+               }
+
+               100% {
+                   opacity: 1;
+                   transform: scale(1) translateY(0);
+               }
+           }
+
+           #prompt-editor-modal .modal-header {
+               /* 头部也是粉红渐变 */
+               background: linear-gradient(90deg, #ffc2cd 0%, #ffdde1 100%);
+               color: white;
+               padding: 20px 30px;
+               display: flex;
+               justify-content: space-between;
+               align-items: center;
+               border-bottom: 3px solid white;
+               /* 增加一点间隔感 */
+           }
+
+           #prompt-editor-modal .modal-header h3 {
+               margin: 0;
+               font-size: 20px;
+               font-weight: bold;
+               text-shadow: 1px 1px 0px rgba(0, 0, 0, 0.1);
+               letter-spacing: 1px;
+           }
+
+           #prompt-editor-modal .modal-close {
+               font-size: 24px;
+               cursor: pointer;
+               background: rgba(255, 255, 255, 0.3);
+               width: 36px;
+               height: 36px;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               border-radius: 50%;
+               transition: all 0.3s ease;
+               color: white;
+           }
+
+           #prompt-editor-modal .modal-close:hover {
+               background: white;
+               color: #ffc2cd;
+               transform: rotate(90deg);
+           }
+
+           #prompt-editor-textarea {
+               font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+               line-height: 1.6;
+               border: 2px solid #fff0f5;
+               border-radius: 15px;
+               padding: 15px;
+               margin: 20px;
+               background: #fffcfd;
+               /* 微微泛红的白 */
+               width: calc(100% - 40px);
+               box-sizing: border-box;
+               color: #666;
+               font-size: 14px;
+           }
+
+           #prompt-editor-textarea:focus {
+               outline: none;
+               border-color: #ffc2cd;
+               box-shadow: 0 0 0 4px rgba(255, 194, 205, 0.1);
+               background: white;
+           }
+
+           /* 按钮容器 */
+           #prompt-editor-modal .modal-footer {
+               padding: 0 20px 20px 20px;
+               display: flex;
+               justify-content: flex-end;
+               gap: 15px;
+           }
+
+           #prompt-editor-modal button {
+               padding: 10px 25px;
+               border-radius: 25px;
+               border: none;
+               cursor: pointer;
+               font-weight: bold;
+               transition: all 0.3s ease;
+               font-size: 14px;
+           }
+
+           #prompt-editor-modal .btn-cancel {
+               background: #f5f5f5;
+               color: #999;
+           }
+
+           #prompt-editor-modal .btn-cancel:hover {
+               background: #eee;
+               color: #666;
+           }
+
+           #prompt-editor-modal .btn-save {
+               background: linear-gradient(90deg, #ffc2cd 0%, #ff9a9e 100%);
+               color: white;
+               box-shadow: 0 4px 10px rgba(255, 194, 205, 0.3);
+           }
+
+           #prompt-editor-modal .btn-save:hover {
+               transform: translateY(-2px);
+               box-shadow: 0 6px 15px rgba(255, 194, 205, 0.4);
+           }
+
+           /* 移动端适配 */
+           @media (max-width: 768px) {
+               #prompt-editor-modal .modal-content {
+                   max-width: 92% !important;
+                   max-height: 90% !important;
+                   border-radius: 20px;
+               }
+
+               #prompt-editor-textarea {
+                   min-height: 300px !important;
+                   font-size: 13px;
+                   margin: 15px;
+                   width: calc(100% - 30px);
+               }
+
+               #prompt-editor-modal .modal-header {
+                   padding: 15px 20px;
+               }
+           }
+
+

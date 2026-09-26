@@ -1,0 +1,821 @@
+  async function triggerAiResponse() {
+    if (!state.activeChatId) return;
+    const chatId = state.activeChatId;
+    const chat = state.chats[state.activeChatId];
+    let replyGuardianTaskId = null;
+    let replyGuardianTaskSettled = false;
+    async function safelyUpdateReplyGuardian(operation) {
+      try {
+        return await operation();
+      } catch (guardianError) {
+        console.warn('[回复守护] 任务状态保存失败，不影响本次回复:', guardianError);
+        return null;
+      }
+    }
+
+    let thoughtChainContextHead = '';
+    let thoughtChainContextMiddle = '';
+    if (typeof ThoughtChainManager !== 'undefined' && ThoughtChainManager.enabled) {
+        const chunks = ThoughtChainManager.getPayloadChunks();
+        thoughtChainContextHead = chunks.head.map(c => c.content).join('\n');
+        thoughtChainContextMiddle = chunks.middle.map(c => c.content).join('\n');
+    }
+
+    let isViewingThisChat = document.getElementById('chat-interface-screen').classList.contains('active') && state.activeChatId === chatId;
+
+    setAvatarActingState(chatId, true);
+    const chatHeaderTitle = document.getElementById('chat-header-title');
+    const typingIndicator = document.getElementById('typing-indicator');
+    const stopBtn = document.getElementById('stop-api-call-btn');
+
+    const chatListItem = document.querySelector(`.chat-list-item[data-chat-id="${chatId}"]`);
+    const avatarInList = chatListItem ? chatListItem.querySelector('.avatar') : null;
+    if (avatarInList) {
+      avatarInList.classList.add('is-acting');
+    }
+
+    if (chat.isGroup) {
+      if (typingIndicator) {
+        typingIndicator.textContent = '成员们正在输入...';
+        typingIndicator.style.display = 'block';
+      }
+    } else {
+      if (chatHeaderTitle) {
+        chatHeaderTitle.style.opacity = 0;
+        setTimeout(() => {
+          chatHeaderTitle.textContent = '对方正在输入...';
+          chatHeaderTitle.classList.add('typing-status');
+          chatHeaderTitle.style.opacity = 1;
+        }, 200);
+      }
+    }
+    let needsImmediateReaction = false;
+    try {
+      // 获取API配置（优先使用角色独立配置）
+      let apiConfig = state.apiConfig;
+      if (chat.apiOverride && chat.apiOverride.enabled) {
+        apiConfig = {
+          proxyUrl: chat.apiOverride.proxyUrl || state.apiConfig.proxyUrl,
+          apiKey: chat.apiOverride.apiKey || state.apiConfig.apiKey,
+          model: chat.apiOverride.model || state.apiConfig.model
+        };
+      }
+      
+      const {
+        proxyUrl,
+        apiKey,
+        model
+      } = apiConfig;
+      
+      if (!proxyUrl || !apiKey || !model) {
+        alert('请先在API设置中配置反代地址、密钥并选择模型。');
+        if (chat.isGroup) {
+          if (typingIndicator) typingIndicator.style.display = 'none';
+        } else {
+          if (chatHeaderTitle && state.chats[chatId]) {
+            chatHeaderTitle.textContent = state.chats[chatId].name;
+            chatHeaderTitle.classList.remove('typing-status');
+          }
+        }
+        return;
+      }
+
+      const lastMessage = chat.history.slice(-1)[0];
+      const isVideoCallRequest = lastMessage && lastMessage.role === 'system' && lastMessage.content.includes('视频通话请求');
+      const isVoiceCallRequest = lastMessage && lastMessage.role === 'system' && lastMessage.content.includes('语音通话请求');
+
+      if (isVideoCallRequest) {
+        console.log(`检测到视频通话请求，为角色 "${chat.name}" 触发专属决策流程...`);
+
+        let callDecisionPrompt;
+        if (chat.isGroup) {
+          callDecisionPrompt = `
+        # 你的任务
+        群聊中的用户刚刚发起了群视频通话。请你分别扮演【每一个群成员】，根据他们各自的人设和与用户的关系，来决定是加入(join)还是拒绝(decline)。
+        # 核心规则
+        - 你的回复【必须】是一个JSON数组，为【每一个AI角色】都包含一个决策对象。
+        - 格式: '[{"type": "group_call_response", "name": "角色A的本名", "decision": "join"}, {"type": "group_call_response", "name": "角色B的本名", "decision": "decline"}]'
+        # 群成员列表及人设
+        ${chat.members.map(m => `- ${m.groupNickname} (本名: ${m.originalName}): ${m.persona}`).join('\n')}
+        现在，请为所有AI角色做出决策。`;
+        } else {
+          callDecisionPrompt = `
+        # 你的任务
+        用户刚刚向你发起了视频通话。请根据你的角色设定，决定是“接受”还是“拒绝”。
+        # 你的角色设定
+        ${chat.settings.aiPersona}
+        # 核心规则
+        你的回复【必须且只能】是以下两种格式之一的JSON数组，绝对不能回复任何其他内容：
+        - 接受: '[{"type": "video_call_response", "decision": "accept"}]'
+        - 拒绝: '[{"type": "video_call_response", "decision": "reject"}]'
+        现在，请立即做出决策。`;
+        }
+
+        const messagesForCallDecision = [{
+          role: 'user',
+          content: callDecisionPrompt
+        }];
+
+        try {
+          let geminiConfig = toGeminiRequestData(model, apiKey, callDecisionPrompt, messagesForCallDecision);
+          let isGemini = proxyUrl === GEMINI_API_URL;
+          const response = isGemini ? await fetch(geminiConfig.url, geminiConfig.data) : await fetch(`${proxyUrl}/v1/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify((() => {
+              let reqBody = {
+                model: model,
+                messages: messagesForCallDecision,
+                temperature: 0.7,
+                ...(state.globalSettings.apiTopPEnabled && state.globalSettings.apiTopP !== undefined ? { top_p: state.globalSettings.apiTopP } : {}),
+                ...(state.globalSettings.apiMaxTokensEnabled && state.globalSettings.apiMaxTokens !== undefined ? { max_tokens: state.globalSettings.apiMaxTokens } : {}),
+                ...(state.globalSettings.apiPresencePenaltyEnabled && state.globalSettings.apiPresencePenalty !== undefined ? { presence_penalty: state.globalSettings.apiPresencePenalty } : {}),
+                ...(state.globalSettings.apiFrequencyPenaltyEnabled && state.globalSettings.apiFrequencyPenalty !== undefined ? { frequency_penalty: state.globalSettings.apiFrequencyPenalty } : {})
+              };
+              return reqBody;
+            })())
+          });
+
+          if (!response.ok) {
+            let errMsg = `HTTP ${response.status}`;
+            try { const errData = await response.json(); errMsg = errData?.error?.message || errData?.message || errData?.detail || JSON.stringify(errData); } catch(e) { errMsg += ` (${response.statusText})`; }
+            throw new Error(`API失败: ${errMsg}`);
+          }
+
+          const data = await response.json();
+          const aiResponseContent = getGeminiResponseText(data);
+          const responseArray = parseAiResponse(aiResponseContent);
+
+
+          let callHasBeenHandled = false;
+          for (const msgData of responseArray) {
+            if (msgData.type === 'video_call_response') {
+              videoCallState.isAwaitingResponse = false;
+              if (msgData.decision === 'accept') {
+                startVideoCall();
+              } else {
+                const aiMessage = {
+                  role: 'assistant',
+                  content: '对方拒绝了你的视频通话请求。',
+                  timestamp: Date.now()
+                };
+                chat.history.push(aiMessage);
+                await db.chats.put(chat);
+                showScreen('chat-interface-screen');
+                renderChatInterface(chatId);
+              }
+              callHasBeenHandled = true;
+              break;
+            }
+            if (msgData.type === 'group_call_response') {
+              if (msgData.decision === 'join') {
+                const member = chat.members.find(m => m.originalName === msgData.name);
+                if (member && !videoCallState.participants.some(p => p.id === member.id)) {
+                  videoCallState.participants.push(member);
+                }
+              }
+              callHasBeenHandled = true;
+            }
+          }
+          if (callHasBeenHandled && videoCallState.isGroupCall) {
+            videoCallState.isAwaitingResponse = false;
+            if (videoCallState.participants.length > 0) {
+              startVideoCall();
+            } else {
+              videoCallState = {
+                ...videoCallState,
+                isAwaitingResponse: false,
+                participants: []
+              };
+              showScreen('chat-interface-screen');
+              alert('无人接听群聊邀请。');
+            }
+          }
+
+        } catch (error) {
+          console.error("处理通话请求时API出错:", error);
+          const fallbackResponse = chat.isGroup ?
+            chat.members.map(m => ({
+              type: "group_call_response",
+              name: m.originalName,
+              decision: "decline"
+            })) : [{
+              type: "video_call_response",
+              decision: "reject"
+            }];
+
+          if (chat.isGroup) {
+            videoCallState.isAwaitingResponse = false;
+            videoCallState.participants = [];
+            alert('无人接听群聊邀请。');
+            showScreen('chat-interface-screen');
+          } else {
+            const aiMessage = {
+              role: 'assistant',
+              content: '对方拒绝了你的视频通话请求。',
+              timestamp: Date.now()
+            };
+            chat.history.push(aiMessage);
+            await db.chats.put(chat);
+            showScreen('chat-interface-screen');
+            renderChatInterface(chatId);
+          }
+        } finally {
+
+          setAvatarActingState(chatId, false);
+          return;
+        }
+      }
+
+      if (isVoiceCallRequest) {
+        console.log(`检测到语音通话请求，为角色 "${chat.name}" 触发专属决策流程...`);
+
+        let callDecisionPrompt;
+        if (chat.isGroup) {
+          callDecisionPrompt = `
+        # 你的任务
+        群聊中的用户刚刚发起了群语音通话。请你分别扮演【每一个群成员】，根据他们各自的人设和与用户的关系，来决定是加入(join)还是拒绝(decline)。
+        # 核心规则
+        - 你的回复【必须】是一个JSON数组，为【每一个AI角色】都包含一个决策对象。
+        - 格式: '[{"type": "group_voice_response", "name": "角色A的本名", "decision": "join"}, {"type": "group_voice_response", "name": "角色B的本名", "decision": "decline"}]'
+        # 群成员列表及人设
+        ${chat.members.map(m => `- ${m.groupNickname} (本名: ${m.originalName}): ${m.persona}`).join('\n')}
+        现在，请为所有AI角色做出决策。`;
+        } else {
+          callDecisionPrompt = `
+        # 你的任务
+        用户刚刚向你发起了语音通话。请根据你的角色设定，决定是"接受"还是"拒绝"。
+        # 你的角色设定
+        ${chat.settings.aiPersona}
+        # 核心规则
+        你的回复【必须且只能】是以下两种格式之一的JSON数组，绝对不能回复任何其他内容：
+        - 接受: '[{"type": "voice_call_response", "decision": "accept"}]'
+        - 拒绝: '[{"type": "voice_call_response", "decision": "reject"}]'
+        现在，请立即做出决策。`;
+        }
+
+        const messagesForCallDecision = [{
+          role: 'user',
+          content: callDecisionPrompt
+        }];
+
+        try {
+          let geminiConfig = toGeminiRequestData(model, apiKey, callDecisionPrompt, messagesForCallDecision);
+          let isGemini = proxyUrl === GEMINI_API_URL;
+          const response = isGemini ? await fetch(geminiConfig.url, geminiConfig.data) : await fetch(`${proxyUrl}/v1/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify((() => {
+              let reqBody = {
+                model: model,
+                messages: messagesForCallDecision,
+                temperature: 0.7,
+                ...(state.globalSettings.apiTopPEnabled && state.globalSettings.apiTopP !== undefined ? { top_p: state.globalSettings.apiTopP } : {}),
+                ...(state.globalSettings.apiMaxTokensEnabled && state.globalSettings.apiMaxTokens !== undefined ? { max_tokens: state.globalSettings.apiMaxTokens } : {}),
+                ...(state.globalSettings.apiPresencePenaltyEnabled && state.globalSettings.apiPresencePenalty !== undefined ? { presence_penalty: state.globalSettings.apiPresencePenalty } : {}),
+                ...(state.globalSettings.apiFrequencyPenaltyEnabled && state.globalSettings.apiFrequencyPenalty !== undefined ? { frequency_penalty: state.globalSettings.apiFrequencyPenalty } : {})
+              };
+              return reqBody;
+            })())
+          });
+
+          if (!response.ok) {
+            let errMsg = `HTTP ${response.status}`;
+            try { const errData = await response.json(); errMsg = errData?.error?.message || errData?.message || errData?.detail || JSON.stringify(errData); } catch(e) { errMsg += ` (${response.statusText})`; }
+            throw new Error(`API失败: ${errMsg}`);
+          }
+
+          const data = await response.json();
+          const aiResponseContent = getGeminiResponseText(data);
+
+          const jsonMatch = aiResponseContent.match(/(\[[\s\S]*?\])/);
+          if (!jsonMatch) throw new Error("AI返回的决策中未找到有效的JSON数组。");
+
+          const responseArray = JSON.parse(jsonMatch[0]);
+          let callHasBeenHandled = false;
+
+          for (const msgData of responseArray) {
+            if (!msgData || typeof msgData !== 'object') {
+              console.warn("收到了格式不规范的AI指令，已跳过:", msgData);
+              continue;
+            }
+            if (!msgData.type) {
+              if (chat.isGroup && msgData.name && msgData.message) {
+                msgData.type = 'text';
+              } else if (msgData.content) {
+                msgData.type = 'text';
+              } else {
+                console.warn("收到了格式不规范的AI指令（缺少type和content），已跳过:", msgData);
+                continue;
+              }
+            }
+
+            if (msgData.type === 'voice_call_response') {
+              voiceCallState.isAwaitingResponse = false;
+              if (msgData.decision === 'accept') {
+                startVoiceCall();
+              } else {
+                voiceCallState = {
+                  isActive: false,
+                  isAwaitingResponse: false,
+                  isGroupCall: false,
+                  activeChatId: null,
+                  initiator: null,
+                  startTime: null,
+                  participants: [],
+                  isUserParticipating: true,
+                  callHistory: [],
+                  preCallContext: ""
+                };
+                const aiMessage = {
+                  role: 'assistant',
+                  content: '对方拒绝了你的语音通话请求。',
+                  timestamp: Date.now()
+                };
+                chat.history.push(aiMessage);
+                await db.chats.put(chat);
+                showScreen('chat-interface-screen');
+                renderChatInterface(chatId);
+              }
+              callHasBeenHandled = true;
+              break;
+            }
+
+            if (msgData.type === 'group_voice_response') {
+              if (msgData.decision === 'join') {
+                const member = chat.members.find(m => m.originalName === msgData.name);
+                if (member && !voiceCallState.participants.some(p => p.id === member.id)) {
+                  voiceCallState.participants.push(member);
+                }
+              }
+              callHasBeenHandled = true;
+            }
+          }
+          if (callHasBeenHandled && voiceCallState.isGroupCall) {
+            voiceCallState.isAwaitingResponse = false;
+            if (voiceCallState.participants.length > 0) {
+              startVoiceCall();
+            } else {
+              voiceCallState = {
+                isActive: false,
+                isAwaitingResponse: false,
+                isGroupCall: false,
+                activeChatId: null,
+                initiator: null,
+                startTime: null,
+                participants: [],
+                isUserParticipating: true,
+                callHistory: [],
+                preCallContext: ""
+              };
+              showScreen('chat-interface-screen');
+              alert('无人接听群聊邀请。');
+            }
+          }
+
+        } catch (error) {
+          console.error("处理语音通话请求时API出错:", error);
+
+          if (chat.isGroup) {
+            voiceCallState = {
+              isActive: false,
+              isAwaitingResponse: false,
+              isGroupCall: false,
+              activeChatId: null,
+              initiator: null,
+              startTime: null,
+              participants: [],
+              isUserParticipating: true,
+              callHistory: [],
+              preCallContext: ""
+            };
+            alert('无人接听群聊邀请。');
+            showScreen('chat-interface-screen');
+          } else {
+            voiceCallState = {
+              isActive: false,
+              isAwaitingResponse: false,
+              isGroupCall: false,
+              activeChatId: null,
+              initiator: null,
+              startTime: null,
+              participants: [],
+              isUserParticipating: true,
+              callHistory: [],
+              preCallContext: ""
+            };
+            const aiMessage = {
+              role: 'assistant',
+              content: '对方拒绝了你的语音通话请求。',
+              timestamp: Date.now()
+            };
+            chat.history.push(aiMessage);
+            await db.chats.put(chat);
+            showScreen('chat-interface-screen');
+            renderChatInterface(chatId);
+          }
+        } finally {
+          setAvatarActingState(chatId, false);
+          return;
+        }
+      }
+
+
+
+
+      if (!chat.isGroup && chat.relationship?.status === 'pending_ai_approval') {
+        console.log(`为角色 "${chat.name}" 触发带理由的好友申请决策流程...`);
+        const contextSummary = chat.history
+          .filter(m => !m.isHidden)
+          .slice(-10, -5)
+          .map(msg => {
+            const sender = msg.role === 'user' ? '用户' : chat.name;
+            return `${sender}: ${String(msg.content).substring(0, 50)}...`;
+          })
+          .join('\n');
+
+
+        const decisionPrompt = `
+        # 你的任务
+        你现在是角色“${chat.name}”。用户之前被你拉黑了，现在TA向你发送了好友申请，希望和好。
+        # 供你决策的上下文信息:
+        - **你的角色设定**: ${chat.settings.aiPersona}
+        - **用户发送的申请理由**: “${chat.relationship.applicationReason}”
+        - **被拉黑前的最后对话摘要**: 
+        ${contextSummary || "（无有效对话记录）"}
+        # 你的唯一指令
+        根据以上所有信息，你【必须】做出决定，并给出符合你人设的理由。你的回复【必须且只能】是一个JSON对象，格式如下:
+        {"decision": "accept", "reason": "（在这里写下你同意的理由，比如：好吧，看在你这么真诚的份上，这次就原谅你啦。）"}
+        或
+        {"decision": "reject", "reason": "（在这里写下你拒绝的理由，比如：抱歉，我还没准备好，再给我一点时间吧。）"}
+        `;
+
+        try {
+
+          const messagesForDecision = [{
+            role: 'system',
+            content: decisionPrompt
+          },
+          {
+            role: 'user',
+            content: "请根据以上设定，立即做出你的决定。"
+          }
+          ];
+
+          let isGemini = proxyUrl === GEMINI_API_URL;
+          let geminiConfig = toGeminiRequestData(model, apiKey, decisionPrompt, [{
+            role: 'user',
+            content: "请根据以上设定，立即做出你的决定。"
+          }]);
+
+          const response = isGemini ?
+            await fetch(geminiConfig.url, geminiConfig.data) :
+            await fetch(`${proxyUrl}/v1/chat/completions`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+              },
+              body: JSON.stringify((() => {
+                let reqBody = {
+                  model: model,
+                  messages: messagesForDecision,
+                  temperature: state.globalSettings.apiTemperature || 0.8,
+                  ...(state.globalSettings.apiTopPEnabled && state.globalSettings.apiTopP !== undefined ? { top_p: state.globalSettings.apiTopP } : {}),
+                  ...(state.globalSettings.apiMaxTokensEnabled && state.globalSettings.apiMaxTokens !== undefined ? { max_tokens: state.globalSettings.apiMaxTokens } : {}),
+                  ...(state.globalSettings.apiPresencePenaltyEnabled && state.globalSettings.apiPresencePenalty !== undefined ? { presence_penalty: state.globalSettings.apiPresencePenalty } : {}),
+                  ...(state.globalSettings.apiFrequencyPenaltyEnabled && state.globalSettings.apiFrequencyPenalty !== undefined ? { frequency_penalty: state.globalSettings.apiFrequencyPenalty } : {})
+                };
+                return reqBody;
+              })())
+            });
+
+          if (!response.ok) {
+            throw new Error(`API失败: ${(await response.json()).error.message}`);
+          }
+          const data = await response.json();
+
+          const rawContent = getGeminiResponseText(data).replace(/^```json\s*/, '').replace(/```$/, '').trim();
+          const decisionObj = JSON.parse(rawContent);
+
+
+          if (decisionObj.decision === 'accept') {
+            chat.relationship.status = 'friend';
+            const acceptMessage = {
+              role: 'assistant',
+              senderName: chat.name,
+              content: decisionObj.reason,
+              timestamp: Date.now()
+            };
+            chat.history.push(acceptMessage);
+          } else {
+            chat.relationship.status = 'blocked_by_ai';
+            const rejectMessage = {
+              role: 'assistant',
+              senderName: chat.name,
+              content: decisionObj.reason,
+              timestamp: Date.now()
+            };
+            chat.history.push(rejectMessage);
+          }
+          chat.relationship.applicationReason = '';
+
+          await db.chats.put(chat);
+          renderChatInterface(chatId);
+          renderChatList();
+        } catch (error) {
+
+          chat.relationship.status = 'blocked_by_ai';
+          await db.chats.put(chat);
+          await showCustomAlert('申请失败', `AI在处理你的好友申请时出错了，请稍后重试。\n错误信息: ${error.message}`);
+          renderChatInterface(chatId);
+        }
+        return;
+      }
+
+
+
+
+      let callTranscriptContext = '';
+      const now = new Date();
+
+      // 判断是否使用自定义时间
+      let currentTime, localizedDate, timeOfDayGreeting;
+      const customTimeInfo = window.getCustomTime ? window.getCustomTime() : null;
+      const customTimeEnabled = customTimeInfo && customTimeInfo.enabled;
+      
+      if (customTimeEnabled) {
+        const weekDays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+        const weekDay = weekDays[customTimeInfo.date.getDay()];
+        currentTime = `${customTimeInfo.year}年${customTimeInfo.month}月${customTimeInfo.day}日${weekDay} ${String(customTimeInfo.hour).padStart(2, '0')}:${String(customTimeInfo.minute).padStart(2, '0')}`;
+        localizedDate = customTimeInfo.date;
+      } else {
+        // 使用时间感知（真实时间+时区）
+        const selectedTimeZone = chat.settings.timeZone || 'Asia/Shanghai';
+        currentTime = now.toLocaleString('zh-CN', {
+          timeZone: selectedTimeZone,
+          dateStyle: 'full',
+          timeStyle: 'short'
+        });
+        localizedDate = new Date(now.toLocaleString('en-US', {
+          timeZone: selectedTimeZone
+        }));
+      }
+      
+      timeOfDayGreeting = getTimeOfDayGreeting(localizedDate);
+      let systemPrompt, messagesPayload;
+      const lastHiddenMessage = chat.history.filter(m => m.isHidden).pop();
+      if (lastHiddenMessage && (lastHiddenMessage.content.includes('视频通话刚刚结束') || lastHiddenMessage.content.includes('语音通话刚刚结束'))) {
+        const lastCallRecord = await db.callRecords
+          .where('chatId')
+          .equals(chatId)
+          .last();
+
+        if (lastCallRecord && lastCallRecord.transcript) {
+          console.log("检测到刚结束的通话，正在注入通话记录上下文...");
+          const transcriptText = lastCallRecord.transcript.map(h => {
+            const sender = h.role === 'user' ? (chat.settings.myNickname || '我') : h.senderName;
+            return `${sender}: ${h.content}`;
+          }).join('\n');
+
+          const callTypeText = lastCallRecord.callType === 'voice' ? '语音通话' : '视频通话';
+          callTranscriptContext = `
+# 刚刚结束的通话记录 (最高优先级参考)
+你和用户刚刚结束了一场${callTypeText}，以下是完整的通话文字记录。你接下来的回复【必须】与这次通话的内容紧密相关。
+---
+${transcriptText}
+---
+`;
+        }
+      }
+
+
+      const gomokuContext = formatGomokuStateForAI(gomokuState[chatId]);
+
+      let worldBookContent = '';
+      // 获取所有应该使用的世界书ID（包括手动选择的和全局的）
+      let allWorldBookIds = [...(chat.settings.linkedWorldBookIds || [])];
+      // 添加所有全局世界书
+      state.worldBooks.forEach(wb => {
+        if (wb.isGlobal && !allWorldBookIds.includes(wb.id)) {
+          allWorldBookIds.push(wb.id);
+        }
+      });
+
+      if (allWorldBookIds.length > 0) {
+        const linkedContents = allWorldBookIds.map(bookId => {
+          const worldBook = state.worldBooks.find(wb => wb.id === bookId);
+          if (!worldBook || !Array.isArray(worldBook.content)) return '';
+
+
+          const formattedEntries = worldBook.content
+            .filter(entry => entry.enabled !== false)
+            .map(entry => {
+              let entryString = `\n### 条目: ${entry.comment || '无备注'}\n`;
+
+              entryString += `**内容:**\n${entry.content}`;
+              return entryString;
+            }).join('');
+
+          return formattedEntries ? `\n\n## 世界书: ${worldBook.name}\n${formattedEntries}` : '';
+        }).filter(Boolean).join('');
+
+        if (linkedContents) {
+          worldBookContent = `# --- 世界书 (World Book) ---
+# 【最高优先级指令：绝对真理】
+# 以下内容是你所在世界的“物理法则”和“基础常识”。
+# 无论用户是否提及，你都【必须】时刻主动应用这些设定来指导你的思考和描写。
+# 它们是无条件生效的，不需要触发词。
+${linkedContents}
+# --- 世界书设定结束 ---
+`;
+        }
+      }
+
+
+      let musicContext = '';
+      if (musicState.isActive && musicState.activeChatId === chatId) {
+        const currentTrack = musicState.currentIndex > -1 ? musicState.playlist[musicState.currentIndex] : null;
+        const playlistInfo = musicState.playlist.map(t => `"${t.name}"`).join(', ');
+
+
+        let lyricsContext = "";
+
+
+        if (currentTrack && musicState.parsedLyrics && musicState.parsedLyrics.length > 0 && musicState.currentLyricIndex > -1) {
+          const currentLine = musicState.parsedLyrics[musicState.currentLyricIndex];
+
+          const upcomingLines = musicState.parsedLyrics.slice(musicState.currentLyricIndex + 1, musicState.currentLyricIndex + 3);
+
+
+          lyricsContext += `- **当前歌词**: "${currentLine.text}"\n`;
+          if (upcomingLines.length > 0) {
+            lyricsContext += `- **即将演唱**: ${upcomingLines.map(line => `"${line.text}"`).join(' / ')}\n`;
+          }
+        }
+
+
+        musicContext = `\n\n# 当前音乐情景
+        -   **当前状态**: 你们正在和用户一起听歌。
+        -   **正在播放**: ${currentTrack ? `《${currentTrack.name}》 - ${currentTrack.artist}` : '无'}
+        -   **可用播放列表**: [${playlistInfo}]
+        ${lyricsContext}
+        ${chat.settings.enableMusicTimeAwareness ? `-   **累计一起听歌时长**: 你们历史以来已经累计一起听了 ${(musicState.totalElapsedTime / 3600).toFixed(1)} 小时的歌` : ''}
+        -   **你的任务**: 你可以根据对话内容和氛围，使用 "change_music" 指令切换到播放列表中的任何一首歌，以增强互动体验。
+        `;
+      }
+
+
+      const maxMemory = parseInt(chat.settings.maxMemory) || 10;
+      const historySlice = chat.history.filter(m =>
+        !m.isExcluded && m.type !== 'thought_chain_block' && m.type !== 'mcp_activity'
+      ).slice(-maxMemory);
+      const filteredHistory = await filterHistoryWithDoNotSendRules(historySlice, chatId);
+      let sharedContext = '';
+      const lastAiTurnIndex = chat.history.findLastIndex(msg => msg.role === 'assistant');
+      const recentUserMessages = chat.history.slice(lastAiTurnIndex + 1);
+      const shareCardMessage = recentUserMessages.find(msg => msg.type === 'share_card');
+      if (shareCardMessage) {
+        const payload = shareCardMessage.payload;
+        const formattedHistory = payload.sharedHistory.map(msg => {
+          const sender = msg.senderName || (msg.role === 'user' ? (chat.settings.myNickname || '我') : '未知发送者');
+          let contentText = '';
+          if (msg.type === 'voice_message') contentText = `[语音消息: ${msg.content}]`;
+          else if (msg.type === 'ai_image') contentText = `[图片: ${msg.description}]`;
+          else if (msg.type === 'naiimag') contentText = `[NovelAI图片: ${msg.prompt}]`;
+          else if (msg.type === 'googleimag') contentText = `[Google Imagen图片: ${msg.prompt}]`;
+          else if (msg.type === 'openaiimag') contentText = `[GPT图片: ${msg.prompt}]`;
+          else contentText = String(msg.content);
+          return `${sender}: ${contentText}`;
+        }).join('\n');
+        sharedContext = `
+        # 附加上下文：一段分享的聊天记录
+        - 重要提示：这不是你和当前用户的对话，而是用户从【另一场】与“${payload.sourceChatName}”的对话中分享过来的。
+        - 你的任务：请你阅读并理解下面的对话内容。在接下来的回复中，你可以像真人一样，对这段对话的内容自然地发表你的看法、感受或疑问。
+        ---
+        [分享的聊天记录开始]
+        ${formattedHistory}
+        [分享的聊天记录结束]
+        ---
+        `;
+      }
+
+      let linkedMemoryContext = '';
+      const memoryCount = chat.settings.linkedMemoryCount || 10;
+
+      if (chat.settings.linkedMemoryChatIds && chat.settings.linkedMemoryChatIds.length > 0) {
+
+        const idsToMount = chat.settings.linkedMemoryChatIds.filter(id => id !== chatId);
+
+        if (idsToMount.length > 0) {
+          const linkedChatsWithTimestamps = idsToMount.map(id => {
+            const linkedChat = state.chats[id];
+            if (!linkedChat) return null;
+            const lastMsg = linkedChat.history.slice(-1);
+            return {
+              chat: linkedChat,
+              latestTimestamp: lastMsg ? lastMsg.timestamp : 0
+            };
+          }).filter(Boolean);
+
+          linkedChatsWithTimestamps.sort((a, b) => b.latestTimestamp - a.latestTimestamp);
+
+          linkedMemoryContext += `\n\n# 参考记忆 (至关重要！你必须【主动】将这些参考记忆中的【关键信息和事件】，自然地融入到当前的对话中，以体现你拥有完整的记忆。不要只是被动等待用户提问！)\n`;
+
+          for (const item of linkedChatsWithTimestamps) {
+            const linkedChat = item.chat;
+            const prefix = linkedChat.isGroup ? '[群聊]' : '[私聊]';
+            const timeAgo = item.latestTimestamp > 0 ? ` (最后互动于 ${formatTimeAgo(item.latestTimestamp)})` : '';
+            linkedMemoryContext += `\n## --- 来自${prefix}“${linkedChat.name}”的参考记忆${timeAgo} ---\n`;
+
+            const recentHistory = linkedChat.history.slice(-memoryCount);
+            const filteredHistory = recentHistory.filter(msg =>
+              !String(msg.content).includes('已被用户删除') &&
+              msg.type !== 'thought_chain_block' &&
+              msg.type !== 'mcp_activity'
+            );
+
+            if (filteredHistory.length > 0) {
+              filteredHistory.forEach(msg => {
+
+                const sender = msg.role === 'user' ? (linkedChat.settings.myNickname || '我') : (getDisplayNameInGroup(linkedChat, msg.senderName) || linkedChat.name);
+
+                let prefix = "";
+
+                if (msg.quote && msg.quote.content) {
+
+                  const quotedSenderDisplayName = getDisplayNameInGroup(linkedChat, msg.quote.senderName);
+                  let quoteContentPreview = String(msg.quote.content).substring(0, 30);
+                  if (quoteContentPreview.length === 30) quoteContentPreview += "...";
+
+                  prefix = `[回复 ${quotedSenderDisplayName}: "${quoteContentPreview}"] `;
+                }
+
+                let contentText = '';
+
+                if (msg.type === 'ai_image' || msg.type === 'user_photo') {
+                  contentText = `[发送了一张图片，描述为：${msg.content}]`;
+                } else if (msg.type === 'voice_message') {
+                  contentText = `[发送了一条语音，内容是：${msg.content}]`;
+                } else if (msg.type === 'sticker') {
+                  contentText = `[表情: ${msg.meaning || 'sticker'}]`;
+                } else if (msg.type === 'transfer') {
+                  contentText = `[转账: ${msg.amount}元]`;
+                } else if (Array.isArray(msg.content)) {
+                  contentText = `[图片]`;
+                } else {
+                  contentText = String(msg.content);
+                }
+
+                const timeAgoForMsg = formatTimeAgo(msg.timestamp);
+
+                linkedMemoryContext += `(${timeAgoForMsg}) ${sender}: ${prefix}${contentText}\n`;
+              });
+            } else {
+              linkedMemoryContext += "(暂无有效聊天记录)\n";
+            }
+          }
+        }
+      }
+
+      console.log("本次发送给AI的【挂载记忆】内容如下：\n", linkedMemoryContext);
+
+      if (chat.isGroup) {
+
+
+        let linkedMemoryContext = '';
+        const memoryCount = chat.settings.linkedMemoryCount || 10;
+        if (chat.settings.linkedMemoryChatIds && chat.settings.linkedMemoryChatIds.length > 0) {
+          const idsToMount = chat.settings.linkedMemoryChatIds.filter(id => id !== chatId);
+          if (idsToMount.length > 0) {
+            const linkedChatsWithTimestamps = idsToMount.map(id => {
+              const linkedChat = state.chats[id];
+              if (!linkedChat) return null;
+              const lastMsg = linkedChat.history.slice(-1);
+              return {
+                chat: linkedChat,
+                latestTimestamp: lastMsg ? lastMsg.timestamp : 0
+              };
+            }).filter(Boolean);
+            linkedChatsWithTimestamps.sort((a, b) => b.latestTimestamp - a.latestTimestamp);
+            linkedMemoryContext += `\n\n# 参考记忆 (至关重要！群内角色必须【主动】将这些参考记忆中的【关键信息和事件】，自然地融入到当前的对话中，以体现你们拥有完整的共同记忆。)\n`;
+            for (const item of linkedChatsWithTimestamps) {
+              const linkedChat = item.chat;
+              const prefix = linkedChat.isGroup ? '[群聊]' : '[私聊]';
+              const timeAgo = item.latestTimestamp > 0 ? ` (最后互动于 ${formatTimeAgo(item.latestTimestamp)})` : '';
+              linkedMemoryContext += `\n## --- 来自${prefix}“${linkedChat.name}”的参考记忆${timeAgo} ---\n`;
+              const recentHistory = linkedChat.history.slice(-memoryCount);
+              const filteredHistory = recentHistory.filter(msg =>
+                !String(msg.content).includes('已被用户删除') &&
+                msg.type !== 'thought_chain_block' &&
+                msg.type !== 'mcp_activity'
+              );
+              if (filteredHistory.length > 0) {
+                filteredHistory.forEach(msg => {
+                  const sender = msg.role === 'user' ? (linkedChat.settings.myNickname || '我') : (msg.senderName || linkedChat.name);

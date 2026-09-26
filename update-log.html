@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>更新日志</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--primary-bg, #f5f5f5);
+      color: var(--text-color, #333);
+      line-height: 1.6;
+    }
+
+    .header {
+      position: sticky;
+      top: 0;
+      background: var(--primary-bg, #fff);
+      border-bottom: 1px solid var(--border-color, #eee);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      z-index: 100;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .back-btn {
+      font-size: 28px;
+      cursor: pointer;
+      color: var(--text-color, #333);
+      margin-right: 12px;
+      line-height: 1;
+    }
+
+    .header-title {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text-color, #333);
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px 16px;
+    }
+
+    .notice {
+      background: var(--primary-bg, #fff);
+      border: 1px solid var(--border-color, #e0e0e0);
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+      border-left: 4px solid var(--accent-color, #007AFF);
+    }
+
+    .notice h2 {
+      font-size: 16px;
+      margin-bottom: 12px;
+      font-weight: 600;
+      color: var(--text-color, #333);
+    }
+
+    .notice p {
+      font-size: 14px;
+      line-height: 1.8;
+      color: var(--text-secondary, #666);
+    }
+
+    .version-card {
+      background: var(--primary-bg, #fff);
+      border: 1px solid var(--border-color, #e0e0e0);
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 20px;
+      transition: border-color 0.2s;
+    }
+
+    .version-card:hover {
+      border-color: var(--accent-color, #007AFF);
+    }
+
+    .version-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-color, #e0e0e0);
+    }
+
+    .version-number {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text-color, #333);
+      margin-right: 12px;
+    }
+
+    .version-date {
+      font-size: 13px;
+      color: var(--text-secondary, #999);
+    }
+
+    .section {
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-secondary, #666);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .item-list {
+      list-style: none;
+      padding-left: 12px;
+    }
+
+    .item-list li {
+      padding: 6px 0;
+      padding-left: 20px;
+      position: relative;
+      font-size: 14px;
+      color: var(--text-color, #555);
+    }
+
+    .item-list li::before {
+      content: '·';
+      position: absolute;
+      left: 0;
+      color: var(--text-secondary, #999);
+      font-size: 18px;
+    }
+
+    @media (max-width: 600px) {
+      .container {
+        padding: 16px 12px;
+      }
+
+      .version-card {
+        padding: 16px;
+      }
+
+      .version-number {
+        font-size: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="back-btn" onclick="history.back()">‹</span>
+    <span class="header-title">更新日志</span>
+  </div>
+
+  <div class="container">
+    <div class="notice">
+      <h2>关于更新日志</h2>
+      <p>之前有人建议我把330的更新日志做个日志放上去，问题是我的更新日志文件因为换电脑不慎丢失了，所以更新日志从本次（明天）更新后开始记录。</p>
+      <p>另有一部分功能更新因忘记记录而遗失，未能完整列入本页，敬请谅解。</p>
+    </div>
+
+    <!-- 9.23 版本 -->
+    <div class="version-card">
+      <div class="version-header">
+        <span class="version-number">v9.23</span>
+        <span class="version-date">最新版本</span>
+      </div>
+
+      <div class="section">
+        <div class="section-title new">新增与完善</div>
+        <ul class="item-list">
+          <li>新增自由布局，支持自定义小组件。</li>
+          <li>补充教程 App 的内容。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title fix">问题修复</div>
+        <ul class="item-list">
+          <li>修复返回按钮位置偏下、从聊天设置返回后页面渲染异常的问题。</li>
+          <li>修复图标被覆盖的问题。更新后需重新设置一次，后续不会再被覆盖。</li>
+          <li>修复线下预设重复发送、API 保存失败的问题。</li>
+          <li>修复朋友圈在夜间模式下变白的问题。</li>
+          <li>修复 MCP 及类似 App 在 iOS 上的安全区适配问题。</li>
+          <li>修复联机相关问题。</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 9.18 版本 -->
+    <div class="version-card">
+      <div class="version-header">
+        <span class="version-number">v9.18</span>
+      </div>
+
+      <div class="section">
+        <div class="section-title optimize">稳定性与体验优化</div>
+        <ul class="item-list">
+          <li>修复简洁 API 模式及部分美化场景下的卡顿问题，优化整体使用流畅度。</li>
+          <li>修复心声中 HTML / CSS 内容较多时可能导致页面卡顿的问题。</li>
+          <li>优化番茄钟功能及部分交互体验。</li>
+          <li>优化部分页面 UI 与移动端使用体验，包括弹窗、安全区域及不同屏幕尺寸下的显示。</li>
+          <li>优化部分公共组件、语言设置、时间感知、角色关系及提示词相关模块，减少不同功能之间互相影响的问题。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title new">新增功能</div>
+        <ul class="item-list">
+          <li>新增真实语音发送与语音对话功能，安卓设备同样可以使用。</li>
+          <li>新增「小火人 / 火花」互动功能。</li>
+          <li>新增提示词分层管理：可按用途拆分管理，编辑和查找更加方便，并支持更清晰地控制提示词作用范围。分层设计灵感来源于 <strong>1900老师</strong>，感谢分享与授权。</li>
+          <li>邮件系统新增向陌生人发送邮件、邮件回信及主动发送信件功能。</li>
+          <li>备份与记忆管理新增独立的「分类备份」入口、记忆导出类型选择及记忆单独导入功能。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title optimize">备份、记忆与双语优化</div>
+        <ul class="item-list">
+          <li>修复分类备份相关 BUG。</li>
+          <li>优化向量记忆与结构化记忆，修复部分记忆处理异常，优化记忆写入、读取及转换流程，提升大量记忆情况下的稳定性。</li>
+          <li>优化向量记忆的多语言兼容，更好地处理不同语言的记忆内容。</li>
+          <li>全面优化双语功能：可分别设置原文输出与翻译方式，可自由开启或关闭双语，并支持在高级设置中自定义双语提示词。</li>
+          <li>优化时间感知，改进角色对当前时间、日期及时间变化的理解，并优化相关时间信息的注入与处理。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title fix">问题修复</div>
+        <ul class="item-list">
+          <li>修复酒馆角色卡导入世界书时，默认关闭的世界书条目可能丢失的问题。</li>
+          <li>修复导入书籍时部分书名出现乱码的问题。</li>
+          <li>修复部分情况下旁白内容被错误识别成角色本人发言的问题。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title optimize">邮件、世界书与 iOS 适配</div>
+        <ul class="item-list">
+          <li>优化邮件往来及相关交互逻辑。</li>
+          <li>优化世界书页面显示与操作体验，调整列表、编辑页面和部分按钮样式。</li>
+          <li>进一步适配 iOS 安全区与动态视口：优化顶部、底部安全区域及键盘弹出后的页面高度处理，减少部分 iPhone / iOS 页面被遮挡或弹窗超出屏幕的问题。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title new">情侣空间</div>
+        <ul class="item-list">
+          <li>新增历史奖励检查：可以检查情侣树历史记录中可能缺失的奖励。</li>
+          <li>修复前会先进行预览，不会直接修改数据，可逐条确认需要修复的记录。</li>
+          <li>避免历史奖励被重复补发。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title">致谢与第三方引用</div>
+        <ul class="item-list">
+          <li>感谢 <strong>穗穗 / 笨蛋小姐</strong> 提供及公开分享的相关代码与实现思路。本次参考并结合当前版本进行了适配，包括情侣空间、iOS 安全区、语音电话、本地音乐资源处理等部分内容。由于涉及内容较多，具体引用范围及来源请前往「引用第三方」查看。</li>
+        </ul>
+      </div>
+
+      <p style="margin-top: 16px; font-size: 13px; color: var(--text-secondary, #999); font-style: italic;">本次更新涉及内容较多，如果出现遗漏或异常欢迎反馈。</p>
+    </div>
+
+    <!-- 9.4 版本 -->
+    <div class="version-card">
+      <div class="version-header">
+        <span class="version-number">v9.4</span>
+      </div>
+
+      <div class="section">
+        <div class="section-title new">GPT 生图功能</div>
+        <ul class="item-list">
+          <li>新增 GPT 生图功能，可在设置中单独开启和配置。</li>
+          <li>支持填写自己的 API 地址、API Key 和模型名称。</li>
+          <li>可选择图片尺寸、生成质量、输出格式、背景是否透明、内容过滤强度和附加提示词。</li>
+          <li>支持直接测试生成，方便确认配置是否可用。</li>
+          <li>角色现在可以在私聊、群聊、线下互动中发送 GPT 生成的图片。</li>
+          <li>角色现在可以在动态中发布 GPT 生成的图片。</li>
+          <li>GPT 图片支持在聊天中查看、下载、重新生成、转发，也会正常显示在聊天列表和图片图库里。</li>
+          <li>手动编辑消息时，新增“谷歌图”和“GPT 图”格式快捷按钮。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title optimize">图片功能优化</div>
+        <ul class="item-list">
+          <li>优化图片转发，NovelAI、谷歌生图和 GPT 生图转发后会保留图片和提示词，不再容易只剩下空内容。</li>
+          <li>优化图片图库和动态中的图片显示，减少特殊文字或链接导致图片显示异常的情况。</li>
+          <li>优化谷歌生图的模型获取，只显示可实际用于生成图片的模型，减少选到无效模型的情况。</li>
+          <li>优化谷歌生图请求方式，提高部分配置下获取模型和生成图片的成功率。</li>
+          <li>NovelAI 生图及测试新增超时提醒：等待超过 3 分钟会提示检查网络或稍后再试，避免一直无反应。</li>
+          <li>优化 NovelAI 图片生成流程，部分场景下角色发送 NovelAI 图片会更稳定。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title optimize">音乐功能补充优化</div>
+        <ul class="item-list">
+          <li>优化播放器控制栏，顺序播放、随机播放、单曲循环、上一首、下一首等按钮改为更直观的图标显示。</li>
+          <li>优化深色模式下的音乐播放器显示，按钮和文字更清晰。</li>
+          <li>优化播放列表顶部布局，把上传、批量管理、歌单管理、音乐账号、清理失效歌曲等操作收进“更多”菜单，页面更整洁。</li>
+          <li>新增网络音频批量导入：可一次粘贴多行链接，也支持“歌名、歌手、链接”的格式。</li>
+          <li>优化本地音乐批量导入：一次选择多首歌时会自动从文件名识别歌名和歌手，不再逐首弹窗询问。</li>
+          <li>优化单首音乐添加流程，添加完成后提示更简洁。</li>
+          <li>优化本地歌曲保存：未配置上传服务时会直接保存在本地；上传失败时会自动改为本地保存，减少导入失败。</li>
+          <li>优化空播放列表时的提示方式，不再弹出突兀的系统提示。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title optimize">聊天与使用稳定性</div>
+        <ul class="item-list">
+          <li>优化聊天列表，点击整条聊天记录都可以进入对话，不必只点文字区域。</li>
+          <li>修复长按聊天或消息后又误触普通点击的问题，长按操作更稳定。</li>
+          <li>优化部分功能页面的加载处理，页面尚未加载完成时，不容易因为按钮找不到而影响其他功能使用。</li>
+          <li>优化图片消息的显示处理，减少特殊内容造成图片卡片显示异常的情况。</li>
+          <li>优化自动相册定时任务的启动位置，情侣空间自动生成相册的功能会更稳定。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title">致谢与第三方引用</div>
+        <ul class="item-list">
+          <li>角色手机与“我的手机”播放器中的本地歌曲 Blob URL 回收逻辑，参考并改写自穗穗 / 笨蛋小姐的 <a href="https://github.com/yxlforever/YYY/commit/ece2d6bec633ced55c89af3871f96c97ebf3aa7e" target="_blank" rel="noopener noreferrer">yxlforever/YYY ece2d6b 提交</a>。感谢作者的公开分享。</li>
+          <li>语音通话持久化与资源治理、事件防重、API 历史兼容、iOS 安全区和启动装配思路，分别参考并按当前项目结构改写自 <a href="https://github.com/yxlforever/YYY" target="_blank" rel="noopener noreferrer">yxlforever/YYY</a> 的相关提交及 <a href="https://github.com/wq70/xinyuan330/pull/1" target="_blank" rel="noopener noreferrer">xinyuan330 PR #1</a>；具体提交与采用范围见《致谢与第三方引用说明》。</li>
+          <li>情侣树历史缺失奖励仅生成预览清单，逐条显示建议金额、钱包和树累计影响；只有用户单独确认后才修正，并防止重复补发。</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 8.31 版本 -->
+    <div class="version-card">
+      <div class="version-header">
+        <span class="version-number">v8.31</span>
+      </div>
+
+      <div class="section">
+        <div class="section-title optimize">回复与整体体验</div>
+        <ul class="item-list">
+          <li>优化后台保活，切换应用或页面暂停时，回复任务更不容易丢失。</li>
+          <li>新增回复恢复功能，遇到刷新或意外中断时，可以继续生成回复。</li>
+          <li>新增回复完成通知，回复完成后可以及时收到提醒。</li>
+          <li>优化页面打开和加载方式，直接打开首页也可以正常使用。</li>
+          <li>优化整体运行的稳定性和流畅度。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title new">MCP 功能</div>
+        <ul class="item-list">
+          <li>新增 MCP 功能中心，可连接和管理自己的外部工具服务。</li>
+          <li>支持添加、测试和查看 MCP 连接状态，使用起来更方便。</li>
+          <li>可查看已连接服务提供的功能，并直接进行调用。</li>
+          <li>新增连接记录，方便回看最近的使用情况和问题。</li>
+          <li>优化页面界面和整体操作流畅度。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title optimize">思维链功能</div>
+        <ul class="item-list">
+          <li>优化思维链预设管理，新增复制、重命名和撤销修改功能。</li>
+          <li>新增未保存提醒，切换预设时不容易误删正在修改的内容。</li>
+          <li>新增思考内容识别设置，可根据不同模型调整开始和结束标记。</li>
+          <li>新增提示词插入位置、聊天深度和顺序设置，使用方式更加灵活。</li>
+          <li>新增最终效果预览和提取规则测试，保存前就能检查设置是否正确。</li>
+          <li>优化手机窄屏和深色模式下的显示效果，并提升回复内容显示的稳定性。</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 9.1 版本 -->
+    <div class="version-card">
+      <div class="version-header">
+        <span class="version-number">v9.1</span>
+      </div>
+
+      <div class="section">
+        <div class="section-title new">音乐功能更新</div>
+        <ul class="item-list">
+          <li>新增在线音乐服务支持，可以更方便地搜索和播放音乐。</li>
+          <li>优化音乐播放器界面和手机端显示，使用时更清晰、操作更顺手。</li>
+          <li>完善播放列表、切歌和音量等常用操作，让听歌过程更稳定。</li>
+          <li>修复部分音乐功能的连接和加载问题，减少无法播放或显示异常的情况。</li>
+          <li>新增扫码功能。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title new">绿江小说功能更新</div>
+        <ul class="item-list">
+          <li>优化小说创作和续写流程，写作时更容易接上前面的剧情。</li>
+          <li>新增故事设定、人物、时间线和伏笔等内容的统一整理，方便长期创作时查看。</li>
+          <li>章节现在会自动分段，手机阅读更清晰，也更方便针对某一段留言。</li>
+          <li>新增章节修改记录，改错内容后可以回到之前保存的版本。</li>
+          <li>优化读者评论和导出功能，查看、保存小说内容更方便。</li>
+          <li>调整绿江页面和手机端显示，使用起来更顺手、更稳定。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title optimize">情侣空间功能更新</div>
+        <ul class="item-list">
+          <li>优化日记、相册、清单、消息等自动互动，错过设定时间后会更稳定地补上。</li>
+          <li>优化情侣树浇水奖励，奖励到账更清楚，也减少重复到账的情况。</li>
+          <li>新增纪念日和特殊日期的浇水奖励，让重要日子更有仪式感。</li>
+          <li>修复切换不同角色后，情侣空间内容偶尔显示混乱的问题。</li>
+          <li>优化情侣空间的加载和回复稳定性，使用过程更顺畅。</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 6.27 版本 -->
+    <div class="version-card">
+      <div class="version-header">
+        <span class="version-number">v6.27</span>
+      </div>
+
+      <div class="section">
+        <div class="section-title new">新增</div>
+        <ul class="item-list">
+          <li>新增绿江可以导出TXT</li>
+          <li>新增豆瓣可以选择绑定USER人设</li>
+          <li>新增豆瓣可以选择绑定世界书</li>
+          <li>新增豆瓣可以增量生成/新增豆瓣可以删除</li>
+          <li>新增导出记录可以为TXT和HTML，HTML主要用于观赏</li>
+          <li>新增美化没保存的时候切换或者覆盖会显示提醒弹窗</li>
+          <li>新增优化群聊双语可以选择</li>
+          <li><span style="color: #ff4757; font-weight: bold; background: #ffeaa7; padding: 2px 4px; border-radius: 4px;">新增思维链，感谢 <a href="https://discord.com/channels/1291925535324110879/1436589419074424882" target="_blank" style="color: #0984e3; text-decoration: underline;">老师们的指导</a>，思维链功能灵感来源1900老师，感谢授权。默认预设是330老师写在提示词里面的思维链，我提取出来做成符合当前版本的了。</span></li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title optimize">优化</div>
+        <ul class="item-list">
+          <li>删除作者追更这个功能</li>
+          <li>优化豆瓣生成报错的功能</li>
+          <li>优化了一下豆瓣如果生图失败会恢复默认头像，新增USER可以设置自己的头像/昵称</li>
+          <li>优化查找聊天记录过多转跳不过去的BUG，现在可以实时转跳了，点击按钮可以回到最新</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 5.28 版本 -->
+    <div class="version-card">
+      <div class="version-header">
+        <span class="version-number">v5.28</span>
+      </div>
+
+      <div class="section">
+        <div class="section-title new">新增</div>
+        <ul class="item-list">
+          <li>新增导出长期记忆，可以选择导出JSON和TXT</li>
+          <li>新增可以用酒馆兼容模式导出角色卡</li>
+          <li>新增可以多图发送识别</li>
+          <li>新增转换向量可以智能分类与精炼（需要配置向量模型）</li>
+          <li>新增可以多选删除向量记忆</li>
+          <li>新增群聊多人线下</li>
+          <li>新增收藏可以全选删除</li>
+          <li>新增后台保活无声。尝试的</li>
+          <li>新增紧急跳过锁屏</li>
+          <li>新增清除聊天记忆一并清除长期记忆的按钮</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title fix">修复</div>
+        <ul class="item-list">
+          <li>修复精炼记忆的BUG</li>
+          <li>修复谷歌生图</li>
+          <li>修复代付BUG</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 5.21 版本 -->
+    <div class="version-card">
+      <div class="version-header">
+        <span class="version-number">v5.21</span>
+      </div>
+
+      <div class="section">
+        <div class="section-title new">新增</div>
+        <ul class="item-list">
+          <li>新增流式输出</li>
+          <li>新增API可以自己选择参数开关</li>
+          <li>新增GEMINI生图参数</li>
+          <li>新增心声可以多选/全选删除</li>
+          <li>新增情侣空间提醒弹窗</li>
+          <li>新增长期记忆精简的时候可以同时保存原本的记忆和精简后的，不会读取原本的，如果选择了还原，能一下恢复之前的记忆</li>
+          <li>新增长期总结的精简有个反馈渠道，可以进行多轮反馈，直到你满意为止</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title optimize">优化</div>
+        <ul class="item-list">
+          <li>优化MYPHONE的生成日期</li>
+          <li>优化MYPHONE移动端按钮</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title fix">修复</div>
+        <ul class="item-list">
+          <li>修复结构化表格不读日期的BUG</li>
+          <li>修复内存BUG</li>
+          <li>修复自定义提示词BUG</li>
+          <li>修复向量转换失败的BUG，需要配置向量模型</li>
+          <li>修复开场白切换问题</li>
+          <li>修复向量每轮提取的BUG</li>
+          <li>修复一下移动端保存情侣空间可能失效的BUG</li>
+          <li>修复B站返回键的问题</li>
+          <li>修复简洁模式卡顿的问题</li>
+        </ul>
+      </div>
+      
+      <p style="margin-top: 16px; font-size: 13px; color: var(--text-secondary, #999); font-style: italic;">
+        主要是优化，可能马上还有一次更新，因为有些新功能还没做完，但是速度不保证。<br>祝大家521快乐！
+      </p>
+    </div>
+
+    <!-- 4.9 版本 -->
+    <div class="version-card">
+      <div class="version-header">
+        <span class="version-number">v4.9</span>
+      </div>
+
+      <div class="section">
+        <div class="section-title new">新增</div>
+        <ul class="item-list">
+          <li>新增可以影响对话质量的多个参数，可调节</li>
+          <li>新增情侣空间角色可以主动发出邀约</li>
+          <li>新增情侣空间可以解除</li>
+          <li>新增角色可以主动解除情侣空间</li>
+          <li>新增长期记忆可以转换为向量，包括其他记忆转换的问题</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title optimize">优化</div>
+        <ul class="item-list">
+          <li>优化向量记忆，新增embedding模型教程</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title fix">修复</div>
+        <ul class="item-list">
+          <li>修复NAI生图保存问题</li>
+          <li>修复云备份上传大数据问题</li>
+          <li>修复聊天提示词编写后出现各种BUG</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 4.8 版本 -->
+    <div class="version-card">
+      <div class="version-header">
+        <span class="version-number">v4.8</span>
+      </div>
+
+      <div class="section">
+        <div class="section-title fix">修复</div>
+        <ul class="item-list">
+          <li>修复GitHub云备份大数据上传失败的BUG</li>
+          <li>修复情侣空间API手写不会自动更新</li>
+          <li>修复情侣空间各种BUG</li>
+          <li>修复点击图片无法看大图的BUG</li>
+          <li>修复CPHONE日记不能记录的BUG</li>
+          <li>修复绿江评论样式丢失</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title optimize">优化</div>
+        <ul class="item-list">
+          <li>优化新增向量记忆</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title new">新增</div>
+        <ul class="item-list">
+          <li>新增对话条数范围</li>
+          <li>新增悬浮球，可以快速切换API预设·角色专属API·聊天设置配置模板</li>
+          <li>新增情侣空间修改天数时起始日也跟随修改</li>
+          <li>新增可以自定义聊天提示词</li>
+        </ul>
+      </div>
+
+      <p style="margin-top: 16px; font-size: 13px; color: var(--text-secondary, #999); font-style: italic;">
+        应该没什么大BUG了吧。
+      </p>
+    </div>
+
+    <!-- 4.7 版本 -->
+    <div class="version-card">
+      <div class="version-header">
+        <span class="version-number">v4.7</span>
+      </div>
+
+      <div class="section">
+        <div class="section-title fix">修复</div>
+        <ul class="item-list">
+          <li>修复邮箱BUG</li>
+          <li>修复记忆表格和向量记忆总结没有过滤隐藏消息的BUG</li>
+          <li>修复GitHub云备份按钮的BUG</li>
+          <li>修复情侣空间导入导出问题</li>
+          <li>修复一起听的BUG</li>
+          <li>修复情侣空间CHAR写日记的BUG</li>
+          <li>修复情侣空间编辑的BUG</li>
+          <li>修复识图API配置刷新后消失的BUG</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="section-title new">新增</div>
+        <ul class="item-list">
+          <li>新增情侣空间专属API</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 支持主题切换
+    if (window.opener && window.opener.state && window.opener.state.globalSettings) {
+      const theme = window.opener.state.globalSettings.theme || 'light';
+      if (theme === 'dark') {
+        document.documentElement.style.setProperty('--primary-bg', '#1a1a1a');
+        document.documentElement.style.setProperty('--text-color', '#e0e0e0');
+        document.documentElement.style.setProperty('--text-secondary', '#999');
+        document.documentElement.style.setProperty('--border-color', '#333');
+        document.documentElement.style.setProperty('--accent-color', '#0a84ff');
+      }
+    }
+  </script>
+</body>
+</html>

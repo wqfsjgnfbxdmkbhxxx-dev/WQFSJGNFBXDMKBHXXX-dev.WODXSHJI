@@ -1,0 +1,1089 @@
+           .nai-image-container .nai-gallery-controls {
+               position: absolute;
+               bottom: 0;
+               left: 0;
+               width: 100%;
+               padding: 4px;
+               background: rgba(0, 0, 0, 0.4);
+               display: none;
+               /* 仅在管理模式下显示 */
+               justify-content: space-around;
+               align-items: center;
+           }
+
+           .nai-gallery-controls button {
+               background: none;
+               border: none;
+               color: white;
+               cursor: pointer;
+               padding: 2px;
+           }
+
+           .nai-gallery-controls svg {
+               width: 16px;
+               height: 16px;
+           }
+
+           #nai-gallery-grid.management-mode .nai-gallery-controls {
+               display: flex;
+           }
+
+           #nai-gallery-grid.management-mode .nai-gallery-item::after {
+               content: '';
+               position: absolute;
+               top: 0;
+               left: 0;
+               width: 100%;
+               height: 100%;
+               border: 4px solid transparent;
+               border-radius: 10px;
+               box-sizing: border-box;
+               transition: border-color 0.2s;
+               pointer-events: none;
+           }
+
+           #nai-gallery-grid.management-mode .nai-gallery-item.selected::after {
+               border-color: var(--accent-color);
+           }
+
+           #nai-gallery-action-bar {
+               display: none;
+               flex-shrink: 0;
+               padding: 10px 15px;
+               padding-bottom: calc(10px + env(safe-area-inset-bottom));
+               background-color: rgba(247, 247, 247, 0.9);
+               backdrop-filter: blur(10px);
+               -webkit-backdrop-filter: blur(10px);
+               border-top: 1px solid var(--border-color);
+               justify-content: space-between;
+               align-items: center;
+               gap: 10px;
+               /* <-- 新增了间距 */
+           }
+
+           #nai-gallery-action-bar .select-all-label {
+               font-size: 16px;
+               color: var(--text-primary);
+               cursor: pointer;
+               flex-grow: 1;
+               /* <-- 新增，让“全选”占据剩余空间 */
+           }
+
+           #nai-gallery-action-bar .action-bar-btn {
+               padding: 10px 15px;
+               /* <-- 修改了内边距 */
+               border-radius: 20px;
+               border: none;
+               font-size: 14px;
+               /* <-- 修改了字号 */
+               font-weight: 600;
+               cursor: pointer;
+               background-color: #ff3b30;
+               color: white;
+               flex-shrink: 0;
+               /* <-- 新增，防止按钮被压缩 */
+           }
+
+           /* 适配暗黑模式 */
+           #phone-screen.dark-mode #nai-gallery-panel {
+               background-color: rgba(28, 28, 30, 0.85);
+               border-top-color: #38383a;
+           }
+
+           #phone-screen.dark-mode #nai-gallery-panel-header {
+               border-bottom-color: #38383a;
+           }
+
+           #phone-screen.dark-mode #nai-gallery-grid {
+               background-color: #000;
+           }
+
+           #phone-screen.dark-mode #nai-gallery-action-bar {
+               background-color: rgba(28, 28, 30, 0.9);
+               border-top-color: #38383a;
+           }
+
+           #phone-screen.dark-mode #nai-gallery-action-bar .select-all-label {
+               color: #f0f0f0;
+           }
+
+           /* --- NAI 图片重新生成按钮 (V3 - 悬停显示修复版) --- */
+           .nai-image-wrapper {
+               position: relative;
+               /* 关键：必须有这行，用于按钮定位！ */
+               display: inline-block;
+               line-height: 0;
+           }
+
+           .nai-regenerate-btn {
+               position: absolute;
+               bottom: 10px;
+               /* 从底部偏移 10px */
+               right: 10px;
+               /* 从右侧偏移 10px */
+               width: 32px;
+               height: 32px;
+               background-color: rgba(0, 0, 0, 0.6);
+               backdrop-filter: blur(5px);
+               -webkit-backdrop-filter: blur(5px);
+               border: 1px solid rgba(255, 255, 255, 0.2);
+               border-radius: 50%;
+               color: white;
+               cursor: pointer;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               padding: 0;
+
+               /* 核心修复：默认设置为透明，即隐藏 */
+               opacity: 0;
+
+               transition: opacity 0.2s ease-in-out;
+               z-index: 5;
+           }
+
+           /* 核心修复：当鼠标悬停在 *图片包裹层* 上时，才显示按钮 */
+           .nai-image-wrapper:hover .nai-regenerate-btn {
+               opacity: 0.85;
+               /* 悬停时显示 */
+           }
+
+           /* 按钮本身的悬停效果（变亮） */
+           .nai-regenerate-btn:hover {
+               opacity: 1 !important;
+               /* 确保悬停在按钮上时更亮 */
+               background-color: rgba(0, 0, 0, 0.8);
+           }
+
+           .nai-regenerate-btn svg {
+               width: 16px;
+               height: 16px;
+           }
+
+           /* 加载中状态 */
+           .nai-regenerate-btn.loading {
+               pointer-events: none;
+               opacity: 1;
+               /* 加载时强制显示 */
+           }
+
+           .nai-regenerate-btn.loading svg {
+               animation: spin 1s linear infinite;
+           }
+
+           /* 修复暗黑模式下的样式 */
+           #phone-screen.dark-mode .nai-regenerate-btn {
+               background-color: rgba(30, 30, 30, 0.7);
+               border-color: rgba(255, 255, 255, 0.2);
+           }
+
+           /* --- NAI 图片重新生成按钮 结束 --- */
+           /* ▼▼▼ 【新功能】手机外框样式 (374x674px 精确版) ▼▼▼ */
+
+           /* 1. 手机外框的背景 (你想要的白色) */
+           body.frame-mode-active {
+               background-color: #f0f2f5;
+               /* 保持白色背景 */
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               padding: 20px;
+               box-sizing: border-box;
+               overflow: hidden;
+           }
+
+           /* 在暗黑模式下，背景则为浅灰色 */
+           body.dark-mode.frame-mode-active {
+               background-color: #f0f2f5;
+           }
+
+           /* 2. 手机外框本身 (使用你计算的精确尺寸) */
+           body.frame-mode-active #phone-screen {
+               /* 总宽度: 374px
+      总高度: 674px
+      (这会使内部内容区域精确为 350x650px)
+    */
+               width: 374px;
+               height: 700px;
+
+               /* 12px 的黑色边框 */
+               border: 12px solid #ffffff;
+
+               /* 适配的圆角 */
+               border-radius: 54px;
+
+               /* 移除内边距 (padding) 来匹配你的计算 */
+               /* padding: 0; (移除) */
+
+               /* 覆盖全屏样式 */
+               min-height: auto;
+               max-width: 100%;
+               max-height: 95vh;
+               /* 最大高度，防止溢出 */
+               box-shadow: inset 0 0 0 1px #000, 0 10px 35px rgba(0, 0, 0, 0.1);
+               box-sizing: border-box;
+               position: relative;
+               overflow: hidden;
+           }
+
+           /* 3. 屏幕内部的圆角遮罩 */
+           body.frame-mode-active #phone-screen::before {
+               content: '';
+               position: absolute;
+               top: 0;
+               left: 0;
+               right: 0;
+               bottom: 0;
+
+               /* 内部圆角 (比 54px 小 12px) */
+               border-radius: 42px;
+
+               /* 移除内边框，因为它不再需要 */
+               /* border: 0; (移除) */
+
+               pointer-events: none;
+               z-index: 1000;
+
+               /* 添加一个非常细微的内阴影，模拟屏幕玻璃感 */
+               box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
+           }
+
+           /* 4. 模拟灵动岛 (Dynamic Island) */
+           body.frame-mode-active #phone-screen::after {
+               content: '';
+               position: absolute;
+               top: 22px;
+               left: 50%;
+               transform: translateX(-50%);
+               /* 调整为更协调的灵动岛尺寸 (已缩小) */
+               width: 100px;
+               /* <-- 已从 120px 减小 */
+               height: 25px;
+               /* <-- 已从 28px 减小 */
+               background-color: #000;
+               border-radius: 12.5px;
+               /* <-- 调整圆角以保持形状 */
+               z-index: 1002;
+           }
+
+           /* [新增] 当手机外框激活时，等比缩小主屏幕和CPhone/MYPhone内容以适应屏幕 (V3 - 最终布局修复版) */
+           body.frame-mode-active #home-screen-pages-container,
+           body.frame-mode-active #char-clock-container,
+           body.frame-mode-active #char-app-grid,
+           body.frame-mode-active #myphone-layout-container {
+               transform: scale(0.9);
+               transform-origin: top center;
+               transition: transform 0.3s ease, margin-top 0.3s ease, margin-bottom 0.3s ease;
+               /* 添加过渡效果 */
+           }
+
+           /* EPhone 主屏幕的布局修正 */
+           body.frame-mode-active #home-screen-pages-container {
+               margin-bottom: -55px;
+           }
+
+           body.frame-mode-active #home-screen-pagination {
+               transform: scale(0.9);
+           }
+
+           body.frame-mode-active #desktop-dock {
+               transform: scale(0.9);
+               margin-bottom: -5px;
+           }
+
+           /* ▼▼▼ CPhone 布局的核心修正 ▼▼▼ */
+           body.frame-mode-active #char-clock-container {
+               /* 替换默认的大间距，给一个适合框内视图的上边距 */
+               margin-top: 60px;
+               /* 大幅减小下边距，把下面的App图标拉上来 */
+               margin-bottom: 50px;
+           }
+
+           body.frame-mode-active #char-app-grid {
+               /* 移除之前过于激进的负边距，让它自然排列在时钟下方 */
+               margin-top: 0;
+           }
+
+           /* ▼▼▼ MYPhone 布局的核心修正 ▼▼▼ */
+           body.frame-mode-active #myphone-layout-container {
+               /* 适配框内视图的上下边距 */
+               margin-top: 60px;
+               margin-bottom: 50px;
+           }
+
+           /* ▲▲▲ 修正结束 ▲▲▲ */
+           #dynamic-island-content {
+               position: absolute;
+               top: 22px;
+               /* 与手机外框的刘海伪元素位置完全重合 */
+               left: 50%;
+               transform: translateX(-50%);
+               width: 120px;
+               /* 默认宽度，与刘海一致 */
+               height: 28px;
+               /* 默认高度，与刘海一致 */
+               background-color: #000;
+               border-radius: 14px;
+               z-index: 1003;
+               /* 确保在刘海伪元素之上 */
+
+               display: flex;
+               align-items: center;
+               padding: 3px;
+               box-sizing: border-box;
+
+               /* 核心动画：宽度、透明度的变化都带过渡效果 */
+               transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+
+               /* 默认状态：完全透明，不可见，不响应点击 */
+               opacity: 0;
+               pointer-events: none;
+               visibility: hidden;
+               overflow: hidden;
+               /* 隐藏内部溢出的内容 */
+           }
+
+           /* 2. 当音乐播放时，灵动岛“展开” */
+           /* 规则 1: 在有框模式下，调整回刘海的位置并展开 */
+           body.frame-mode-active #phone-screen.dynamic-island-active #dynamic-island-content {
+               opacity: 1;
+               visibility: visible;
+               pointer-events: auto;
+               width: 190px;
+               top: 22px;
+               /* 覆盖默认值，对齐刘海 */
+           }
+
+           /* 规则 2: 在无框模式下，在顶部展开 */
+           body:not(.frame-mode-active) #phone-screen.dynamic-island-active #dynamic-island-content {
+               opacity: 1;
+               visibility: visible;
+               pointer-events: auto;
+               width: 190px;
+               /* (这里会使用我们在第6303行设置的新top值) */
+           }
+
+           /* 3. 同时，隐藏掉原来的刘海伪元素，防止重叠 */
+           body.frame-mode-active #phone-screen.dynamic-island-active::after {
+               opacity: 0;
+           }
+
+           /* 4. 岛内的专辑封面 */
+           #island-album-art {
+               width: 22px;
+               /* 高度28px - 上下各3px内边距 = 22px */
+               height: 22px;
+               border-radius: 50%;
+               object-fit: cover;
+               margin-right: 8px;
+               flex-shrink: 0;
+               /* 防止被压缩 */
+           }
+
+           /* 5. 歌词的容器，用于裁剪滚动文字 */
+           #island-lyric-container {
+               flex-grow: 1;
+               /* 占据剩余所有空间 */
+               overflow: hidden;
+               /* 【关键】裁剪掉超出部分的歌词 */
+               white-space: nowrap;
+               /* 【关键】强制歌词不换行 */
+           }
+
+           #island-lyric-container.center-content {
+               display: flex;
+               justify-content: center;
+           }
+
+           /* 6. 歌词文字本身 */
+           #island-lyric-text {
+               color: #aeaeae;
+               /* 柔和的灰色 */
+               font-size: 13px;
+               font-weight: 500;
+               display: inline-block;
+               /* 动画需要 */
+               transition: opacity 0.2s ease-in-out;
+           }
+
+           /* 您可以在 L2910 附近找到 .frame-mode-active 的相关样式
+   然后在这附近添加下面的新规则
+*/
+
+           body.frame-mode-active #main-content-area {
+               /* * 在这里修改您想要的距离。
+     * 原本是 30px，您可以改成 40px 或 50px 来增大间距。
+     * * 请注意：在有框模式下，整个主页被 transform: scale(0.9) 缩小了，
+     * 所以您设置 50px，视觉上看起来会是 45px。
+     */
+               gap: 10px;
+           }
+
+           /* 仅在有框模式下，修改组件距离顶部的间距 */
+           body.frame-mode-active #main-content-area {
+               /* * 原本是 20px。
+     * 您可以改成 0px 来让它更靠上，
+     * 或者改成 40px 来让它更靠下。
+     */
+               margin-top: 0px;
+           }
+
+           /* 仅在有框模式下，调整【第二页】的间距 */
+           body.frame-mode-active .home-screen-page:nth-child(2) .polaroid-widget-container {
+
+               /* 1. 修改这个来调整 [拍立得] 与 [屏幕顶部] 的距离 (原为 20px) */
+               /* 您可以改成 0px 或 10px 来让它更靠上 */
+               margin-top: 0px;
+
+               /* 2. 修改这个来调整 [拍立得] 与 [下方应用/小组件] 的距离 (原为 30px) */
+               /* 您可以改成 40px 或 50px 来增大它们之间的间距 */
+               margin-bottom: 10px;
+           }
+
+           /* 【修复】在有框模式下，增加聊天页面头部的顶部内边距，以避开灵动岛 */
+           body.frame-mode-active #chat-interface-screen>.header {
+               /* * 灵动岛区域大约在 22px + 25px = 47px 结束。
+     * 我们可以设置 55px 或 60px 来给它留出一些呼吸空间。
+     */
+               padding-top: 48px !important;
+           }
+
+           body:not(.frame-mode-active) #phone-screen.dynamic-island-active #chat-interface-screen>.header {
+               padding-top: 48px !important;
+           }
+
+           /* --- 歌词循环滚动 (Marquee) 动画 --- */
+
+           /* 1. 默认状态：居中 (用于短歌词) */
+           #island-lyric-container.center-content {
+               display: flex;
+               justify-content: center;
+           }
+
+           #island-lyric-container.center-content #island-lyric-text.scrolling {
+               animation: none;
+               /* 短歌词不需要滚动 */
+           }
+
+           #island-lyric-container.center-content #island-lyric-text span+span {
+               display: none;
+               /* 短歌词只显示一个 */
+           }
+
+           /* 2. 滚动容器：内部有两个span */
+           #island-lyric-text.scrolling {
+               /* 使用 --marquee-duration 变量作为动画时长，从JS传入 */
+               animation: marquee var(--marquee-duration, 10s) linear infinite;
+               display: block;
+               /* 必须是 block 才能应用 transform */
+               width: fit-content;
+               /* 确保宽度由内容撑开 */
+           }
+
+           /* 3. 两个span并排 */
+           #island-lyric-text.scrolling span {
+               display: inline-block;
+               padding-right: 50px;
+               /* 两个歌词之间的间距 */
+               white-space: nowrap;
+           }
+
+           /* 4. 定义动画 */
+           @keyframes marquee {
+               0% {
+                   transform: translateX(0%);
+               }
+
+               100% {
+                   /* * 滚动 50% 的宽度。
+         * 因为我们的总宽度是两个 <span>，所以滚动 50% 
+         * 意味着第一个 <span> 刚好完全移出，第二个 <span> 完美接上。
+         */
+                   transform: translateX(-50%);
+               }
+           }
+
+           /* 【新功能】分离状态栏 / 真·全屏模式 v2.0 */
+
+           /* 当 body 标签拥有 detach-mode-active 类时，应用以下样式 */
+           body.detach-mode-active #phone-screen {
+               /* 核心修改1：保持固定定位，但只定义三边 */
+               position: fixed;
+               left: 0;
+               right: 0;
+               bottom: 0;
+
+               /* 核心修改2：这是最关键的一步！
+       让元素的顶部从“安全区域的底部”开始，而不是屏幕的绝对顶部。
+       env(safe-area-inset-top) 会自动获取刘海或状态栏的高度。*/
+               top: env(safe-area-inset-top);
+
+               /* 核心修改3：移除固定的 height 属性，让 top 和 bottom 自动决定高度 */
+               height: auto;
+               width: auto;
+               /* 同样移除固定的 width */
+
+               /* 移除手机外框样式，实现真正的全屏感 */
+               border-radius: 0;
+               border: none;
+               box-shadow: none;
+
+               /* 其他布局属性保持不变 */
+               overflow: hidden;
+               display: flex;
+               flex-direction: column;
+               background-color: var(--secondary-bg);
+           }
+
+           /* 在此模式下，隐藏模拟的刘海和屏幕圆角遮罩，因为我们要显示物理的 */
+           body.detach-mode-active #phone-screen::after,
+           body.detach-mode-active #phone-screen::before {
+               display: none;
+           }
+
+           /* 【全局修复】将Dock栏和分页点的位置固定在更低的位置，忽略底部安全区 */
+           #home-screen-pagination {
+               /* 移除 calc 和 env() */
+               padding-bottom: 10px;
+           }
+
+           #desktop-dock {
+               /* 移除 calc 和 env() */
+               margin-bottom: 20px;
+           }
+
+           /* ======================================= */
+           /* ▼▼▼ 【新功能】简洁聊天界面 (Minimal Chat UI) ▼▼▼ */
+           /* ======================================= */
+
+           /* 1. 默认隐藏“+”号展开按钮 */
+           #chat-expand-btn {
+               display: none;
+               flex-shrink: 0;
+               width: 40px;
+               /* 与发送按钮同高 */
+               height: 40px;
+               font-size: 28px;
+               font-weight: 300;
+               line-height: 38px;
+               /* 垂直居中 */
+               padding: 0;
+               background-color: var(--secondary-bg);
+               color: var(--text-primary);
+               border: 1px solid var(--border-color);
+               transition: transform 0.3s ease, background-color 0.2s, color 0.2s;
+           }
+
+           /* 2. 当简洁模式开启时 (body上会有这个class) */
+           body.minimal-chat-ui-active #chat-input-actions-top {
+               /* 默认隐藏工具栏 */
+               display: none;
+           }
+
+           body.minimal-chat-ui-active #chat-input-main-row {
+               /* 确保“+”按钮和输入框底对齐 */
+               align-items: flex-end;
+           }
+
+           body.minimal-chat-ui-active #chat-expand-btn {
+               /* 显示“+”按钮 */
+               display: flex;
+               justify-content: center;
+               align-items: center;
+           }
+
+           body.minimal-chat-ui-active #chat-input {
+               /* 修复“+”按钮出现后，输入框没有自动适应宽度的问题 */
+               flex-grow: 1;
+           }
+
+           /* 3. 当用户点击“+”号，工具栏展开时 (body上会临时添加这个class) */
+           body.minimal-chat-ui-active.chat-actions-expanded #chat-input-actions-top {
+               /* 重新显示工具栏 */
+               display: flex;
+           }
+
+           body.minimal-chat-ui-active.chat-actions-expanded #chat-expand-btn {
+               /* “+”号旋转45度变成“x”号 */
+               transform: rotate(45deg);
+               background-color: #f0f2f5;
+               color: #8a8a8a;
+           }
+
+           #phone-screen.dark-mode body.minimal-chat-ui-active.chat-actions-expanded #chat-expand-btn {
+               background-color: #3e3e42;
+               color: #8d8d92;
+           }
+
+           /* 4. 暗黑模式下的“+”按钮 */
+           #phone-screen.dark-mode #chat-expand-btn {
+               background-color: #3e3e42;
+               color: #f0f0f0;
+               border: 1px solid #38383a;
+           }
+
+           /* ▲▲▲ 简洁聊天界面样式结束 ▲▲▲ */
+
+
+           /* 1. 当简洁模式开启 (且工具栏折叠时)，减小聊天列表的底部内边距 */
+           body.minimal-chat-ui-active #chat-interface-screen #chat-messages {
+               /* 原本是 150px，我们把它缩小到 80px，刚好容纳单行输入框 */
+               padding-bottom: calc(80px + env(safe-area-inset-bottom)) !important;
+               /* 确保过渡平滑 */
+               transition: padding-bottom 0.3s ease;
+           }
+
+           /* 2. 当简洁模式开启 (且工具栏展开时)，恢复原来的内边距 */
+           body.minimal-chat-ui-active.chat-actions-expanded #chat-interface-screen #chat-messages {
+               /* 恢复 150px，为展开的图标行腾出空间 */
+               padding-bottom: calc(120px + env(safe-area-inset-bottom)) !important;
+           }
+
+           /* --- 新增：功能锁定样式 --- */
+           .locked-feature {
+               opacity: 0.7;
+               /* 让按钮看起来有点灰 */
+               position: relative;
+               /* 为图标定位 */
+               cursor: help;
+               /* 鼠标悬停时显示帮助图标 */
+           }
+
+
+
+           /* 在暗黑模式下让锁更清晰 */
+           #phone-screen.dark-mode .locked-feature::after {
+               background-color: rgba(0, 0, 0, 0.5);
+           }
+
+           /* 【新功能】PIN码激活弹窗样式 */
+           #pin-modal-overlay {
+               position: fixed;
+               top: 0;
+               left: 0;
+               width: 100%;
+               height: 100%;
+               background-color: rgba(0, 0, 0, 0.4);
+               display: none;
+               /* 默认隐藏 */
+               justify-content: center;
+               align-items: center;
+               z-index: 2000;
+           }
+
+           #pin-modal-overlay.visible {
+               display: flex;
+               /* 激活时显示 */
+           }
+
+           #pin-modal-content .form-group {
+               margin-bottom: 15px;
+           }
+
+           /* 解决您无法复制的问题：让这个输入框看起来像个显示框，但内容可选 */
+           #pin-device-id-display {
+               -webkit-user-select: text;
+               /* 兼容 Safari */
+               user-select: text;
+               /* 标准 */
+               cursor: text;
+               background-color: #f0f2f5;
+               color: #555;
+               border: 1px dashed #ccc;
+               font-size: 14px !important;
+               /* 确保字体大小正确 */
+               padding: 10px !important;
+           }
+
+           #phone-screen.dark-mode #pin-device-id-display {
+               background-color: #2c2c2e;
+               color: #f0f0f0;
+               border-color: #38383a;
+           }
+
+           #character-profile-modal .thought-content .text:has(div),
+           #character-profile-modal .thought-content .text:has(table) {
+               padding: 0 !important;
+               font-family: inherit !important;
+               /* 恢复默认字体，让卡片自己控制 */
+               font-size: inherit !important;
+               line-height: normal !important;
+               /* 恢复正常的行高 */
+               color: inherit !important;
+               background: none !important;
+               white-space: normal !important;
+               /* 允许卡片正常换行和布局 */
+           }
+
+           .quick-reply-item {
+               display: flex;
+               justify-content: space-between;
+               align-items: center;
+               padding: 15px 20px;
+               border-bottom: 1px solid var(--border-color);
+               flex-shrink: 0;
+               /* 防止在flex布局中被压缩 */
+           }
+
+           .quick-reply-item:last-child {
+               border-bottom: none;
+           }
+
+           .quick-reply-text {
+               font-size: 16px;
+               color: var(--text-primary);
+               cursor: pointer;
+               flex-grow: 1;
+               /* 占据主要空间 */
+               padding-right: 15px;
+               /* 和按钮保持距离 */
+               word-break: break-all;
+               /* 修复长文本溢出 */
+               white-space: pre-wrap;
+               /* 支持换行符显示 */
+           }
+
+           .quick-reply-text:hover {
+               color: var(--accent-color);
+           }
+
+           .quick-reply-actions {
+               display: flex;
+               gap: 10px;
+               flex-shrink: 0;
+               /* 防止按钮被压缩 */
+           }
+
+           .quick-reply-edit-btn,
+           .quick-reply-delete-btn {
+               background: none;
+               border: none;
+               padding: 5px;
+               cursor: pointer;
+               color: var(--text-secondary);
+               border-radius: 50%;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               transition: all 0.2s;
+           }
+
+           .quick-reply-edit-btn:hover {
+               background-color: #e9e9eb;
+               color: var(--accent-color);
+           }
+
+           .quick-reply-delete-btn:hover {
+               background-color: #ffebee;
+               color: #ff3b30;
+           }
+
+           #phone-screen.dark-mode .quick-reply-item {
+               border-bottom-color: #38383a;
+           }
+
+           #phone-screen.dark-mode .quick-reply-text:hover {
+               color: #58a6ff;
+           }
+
+           #phone-screen.dark-mode .quick-reply-edit-btn:hover {
+               background-color: #3a3a3c;
+               color: #58a6ff;
+           }
+
+           #phone-screen.dark-mode .quick-reply-delete-btn:hover {
+               background-color: #5c1f24;
+               color: #ff8080;
+           }
+
+           /* 确保 modal-body 可以滚动 */
+           #quick-reply-modal .modal-body {
+               overflow-y: auto;
+           }
+
+           #char-music-player-modal #char-music-lyrics {
+               /* display: none;  <-- 删除这一行，或者改为下面这样: */
+               display: block;
+               width: 100%;
+               height: 60px;
+               /* 给个固定高度 */
+               overflow: hidden;
+               position: relative;
+               margin-bottom: 20px;
+               font-size: 14px;
+               line-height: 20px;
+               color: #888;
+               text-align: center;
+               transition: all 0.3s ease;
+               mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+               -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+           }
+
+           .char-player-minimize-btn {
+               position: absolute;
+               top: 15px;
+               right: 85px;
+               /* 放在关闭按钮左边 */
+               background: none;
+               border: none;
+               color: #aaa;
+               cursor: pointer;
+               line-height: 1;
+               z-index: 10;
+               padding: 5px;
+               /* 给予点击区域 */
+               display: flex;
+               /* 用于居中SVG */
+               align-items: center;
+               /* 用于居中SVG */
+               justify-content: center;
+               /* 用于居中SVG */
+           }
+
+           .char-player-minimize-btn:hover {
+               color: #333;
+           }
+
+           /* 3. 添加悬浮恢复球样式 */
+           #char-music-restore-btn {
+               position: absolute;
+               top: 120px;
+               right: 15px;
+               width: 45px;
+               height: 45px;
+               background: transparent;
+               /* 1. 改为完全透明 */
+               backdrop-filter: none;
+               /* 2. 移除毛玻璃 */
+               -webkit-backdrop-filter: none;
+               border-radius: 50%;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               box-shadow: none;
+               /* 3. 移除阴影 */
+               z-index: 900;
+               /* 确保在最上层 */
+               cursor: pointer;
+               animation: float-music 3s ease-in-out infinite;
+               border: none;
+               /* 4. 移除边框 */
+           }
+
+           @keyframes float-music {
+
+               0%,
+               100% {
+                   transform: translateY(0);
+               }
+
+               50% {
+                   transform: translateY(-5px);
+               }
+           }
+
+           .video-call-top-bar #minimize-call-btn {
+               position: absolute;
+               left: 20px;
+               top: 48px;
+               /* 适配顶部的 padding-top */
+               background: none;
+               border: none;
+               color: white;
+               font-size: 20px;
+               cursor: pointer;
+               padding: 5px;
+               z-index: 11;
+               opacity: 0.7;
+               transition: opacity 0.2s;
+               pointer-events: auto;
+           }
+
+           .video-call-top-bar #minimize-call-btn:hover {
+               opacity: 1;
+           }
+
+           #video-call-restore-btn {
+               position: absolute;
+               top: 120px;
+               /* 默认显示位置，和音乐按钮错开一点 */
+               right: 15px;
+               width: 45px;
+               height: 45px;
+               background-color: #4cd964;
+               /* 绿色，代表通话中 */
+               backdrop-filter: blur(10px);
+               -webkit-backdrop-filter: blur(10px);
+               border-radius: 50%;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+               z-index: 900;
+               /* 确保在最上层 */
+               cursor: pointer;
+               animation: pulse 1.5s infinite;
+               /* 复用充电/来电的呼吸动画 */
+               border: 2px solid rgba(255, 255, 255, 0.3);
+           }
+
+           .nai-image-wrapper {
+               position: relative;
+               display: inline-block;
+               line-height: 0;
+           }
+
+           /* DING: 在这里添加新规则 */
+           .bubble-image-controls {
+               position: absolute;
+               bottom: 10px;
+               right: 10px;
+               display: flex;
+               gap: 8px;
+               z-index: 5;
+           }
+
+           /* DING: 找到约 10235 行的 .nai-regenerate-btn 规则并将其修改为： */
+           .nai-regenerate-btn,
+           .nai-upload-imgbb-btn {
+               position: static;
+               width: 32px;
+               height: 32px;
+               background-color: rgba(0, 0, 0, 0.6);
+               backdrop-filter: blur(5px);
+               -webkit-backdrop-filter: blur(5px);
+               border: 1px solid rgba(255, 255, 255, 0.2);
+               border-radius: 50%;
+               color: white;
+               cursor: pointer;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               padding: 0;
+
+
+               opacity: 0;
+
+               transition: opacity 0.2s ease-in-out;
+           }
+
+           /* DING: 找到约 10260 行的 hover 规则并修改选择器： */
+           .nai-image-wrapper:hover .nai-regenerate-btn,
+           .nai-image-wrapper:hover .nai-upload-imgbb-btn {
+               opacity: 1;
+           }
+
+           /* DING: 找到约 10266 行的 hover 规则并修改选择器： */
+           .nai-regenerate-btn:hover,
+           .nai-upload-imgbb-btn:hover {
+               opacity: 1;
+               background-color: rgba(0, 0, 0, 0.8);
+           }
+
+           /* DING: 找到约 10272 行的 loading 规则并修改选择器： */
+           .nai-regenerate-btn.loading,
+           .nai-upload-imgbb-btn.loading {
+               pointer-events: none;
+               opacity: 1;
+           }
+
+           .nai-regenerate-btn.loading svg,
+           .nai-upload-imgbb-btn.loading svg,
+           .nai-save-local-btn.loading svg {
+               /* DING: 同样修改这里 */
+               animation: spin 1s linear infinite;
+           }
+
+           /* DING: 在 .nai-image-wrapper 规则后添加 */
+           .bubble-image-wrapper {
+               position: relative;
+               display: inline-block;
+               /* 确保 wrapper 包裹图片 */
+               line-height: 0;
+               /* 移除图片下的空隙 */
+           }
+
+           /* DING: 在 .bubble-image-controls 规则 (约 10243 行) 后添加 */
+           .bubble-image-controls.user-controls {
+               left: 10px;
+               /* DING: 用户按钮在左侧 */
+               right: auto;
+           }
+
+           /* DING: 在 .nai-regenerate-btn, .nai-upload-imgbb-btn 规则 (约 10250 行) 后添加 */
+           .user-upload-imgbb-btn {
+               position: static;
+               width: 32px;
+               height: 32px;
+               background-color: rgba(0, 0, 0, 0.6);
+               backdrop-filter: blur(5px);
+               -webkit-backdrop-filter: blur(5px);
+               border: 1px solid rgba(255, 255, 255, 0.2);
+               border-radius: 50%;
+               color: white;
+               cursor: pointer;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               padding: 0;
+               opacity: 0;
+               /* DING: 默认显示 */
+               transition: opacity 0.2s ease-in-out;
+           }
+
+           /* DING: 在 .nai-image-wrapper:hover ... 规则 (约 10271 行) 后添加 */
+           .user-image-wrapper:hover .user-upload-imgbb-btn {
+               opacity: 1;
+           }
+
+           /* DING: 在 .nai-regenerate-btn:hover, ... 规则 (约 10277 行) 后添加 */
+           .user-upload-imgbb-btn:hover {
+               opacity: 1;
+               background-color: rgba(0, 0, 0, 0.8);
+           }
+
+           /* DING: 在 .nai-regenerate-btn.loading, ... 规则 (约 10283 行) 后添加 */
+           .user-upload-imgbb-btn.loading {
+               pointer-events: none;
+               opacity: 1;
+           }
+
+           .user-upload-imgbb-btn.loading svg {
+               animation: spin 1s linear infinite;
+           }
+
+           #nai-gallery-tabs {
+               display: flex;
+               justify-content: center;
+               position: absolute;
+               left: 50%;
+               transform: translateX(-50%);
+               background-color: rgba(128, 128, 128, 0.15);
+               border-radius: 8px;
+               padding: 2px;
+           }
+
+           .nai-gallery-tab {
+               padding: 5px 25px;
+               border-radius: 7px;
+               font-size: 14px;
+               font-weight: 500;
+               color: var(--text-secondary);
+               cursor: pointer;
+               transition: all 0.2s ease-in-out;
+           }
+
+           .nai-gallery-tab.active {
+               background-color: var(--secondary-bg);
+               color: var(--text-primary);
+               box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+           }
+
+           #phone-screen.dark-mode .nai-gallery-tabs {
+               background-color: rgba(80, 80, 80, 0.5);
+           }
+
+           #phone-screen.dark-mode .nai-gallery-tab.active {
+               background-color: #3e3e42;
+           }
+

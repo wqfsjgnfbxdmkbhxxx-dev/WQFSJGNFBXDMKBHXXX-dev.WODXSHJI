@@ -1,0 +1,931 @@
+          }
+
+
+          await updateSinglePostInDOM(postId);
+        }
+
+        return;
+      }
+
+
+      const stickerBtn = target.closest('.comment-sticker-btn');
+      if (stickerBtn) {
+        const postContainer = stickerBtn.closest('.qzone-post-container');
+        if (!postContainer) return;
+        const postId = parseInt(postContainer.dataset.postId);
+        if (qzoneStickerPanelState.isOpen && qzoneStickerPanelState.activePostId === postId) {
+          closeQzoneStickerPanel();
+        } else {
+          openQzoneStickerPanel(postId, stickerBtn);
+        }
+        return;
+      }
+      const commentItem = target.closest('.comment-item');
+      if (commentItem) {
+        const postId = parseInt(commentItem.dataset.postId);
+        const commenterOriginalName = commentItem.dataset.commenterOriginalName;
+        const commenterDisplayName = commentItem.dataset.commenterDisplayName;
+
+        if (!commenterOriginalName || !commenterDisplayName || commenterOriginalName === state.qzoneSettings.nickname) {
+          clearQzoneReplyContext(commentItem.closest('.qzone-post-container'));
+          return;
+        }
+        currentQzoneReplyContext = {
+          postId,
+          replyToName: commenterOriginalName,
+          replyToDisplayName: commenterDisplayName
+        };
+        const postContainer = commentItem.closest('.qzone-post-container');
+        const commentInput = postContainer.querySelector('.comment-input');
+        commentInput.placeholder = `回复 ${commenterDisplayName}:`;
+        commentInput.focus();
+        return;
+      }
+      const actionsBtn = target.closest('.post-actions-btn');
+      if (actionsBtn) {
+        const container = actionsBtn.closest('.qzone-post-container');
+        if (container && container.dataset.postId) showPostActions(parseInt(container.dataset.postId));
+        return;
+      }
+      if (target.tagName === 'IMG' && target.dataset.hiddenText) {
+        showCustomAlert("图片内容", target.dataset.hiddenText.replace(/<br>/g, '\n'));
+        return;
+      }
+
+
+      const postContainer = target.closest('.qzone-post-container');
+      if (!postContainer) return;
+      const postId = parseInt(postContainer.dataset.postId);
+      if (isNaN(postId)) return;
+
+      if (target.closest('.qzone-post-delete-action')) {
+        const confirmed = await showCustomConfirm('删除动态', '确定要永久删除这条动态吗？', {
+          confirmButtonClass: 'btn-danger'
+        });
+        if (confirmed) {
+          postContainer.style.transition = 'all 0.3s ease';
+          postContainer.style.transform = 'scale(0.8)';
+          postContainer.style.opacity = '0';
+          setTimeout(async () => {
+            await db.qzonePosts.delete(postId);
+            const notificationIdentifier = `(ID: ${postId})`;
+            for (const chatId in state.chats) {
+              const chat = state.chats[chatId];
+              const originalHistoryLength = chat.history.length;
+              chat.history = chat.history.filter(msg => !(msg.role === 'system' && msg.content.includes(notificationIdentifier)));
+              if (chat.history.length < originalHistoryLength) await db.chats.put(chat);
+            }
+            await renderQzonePosts();
+            alert('动态已删除。');
+          }, 300);
+        }
+        return;
+      }
+
+      const icon = target.closest('.action-icon');
+      if (icon) {
+        if (icon.classList.contains('repost')) {
+          openRepostModal(postId);
+          return;
+        }
+        if (icon.classList.contains('like')) {
+          const post = qzonePostsCache.find(p => p.id === postId);
+          if (!post) return;
+          if (!post.likes) post.likes = [];
+          const userOriginalName = state.qzoneSettings.nickname;
+          const userLikeIndex = post.likes.indexOf(userOriginalName);
+          if (userLikeIndex > -1) {
+            post.likes.splice(userLikeIndex, 1);
+          } else {
+            post.likes.push(userOriginalName);
+            icon.classList.add('animate-like');
+            icon.addEventListener('animationend', () => icon.classList.remove('animate-like'), {
+              once: true
+            });
+          }
+          await db.qzonePosts.update(postId, {
+            likes: post.likes
+          });
+          await updateSinglePostInDOM(postId);
+        }
+        if (icon.classList.contains('favorite')) {
+          const existingFavorite = await db.favorites.where({
+            type: 'qzone_post',
+            'content.id': postId
+          }).first();
+          if (existingFavorite) {
+            await db.favorites.delete(existingFavorite.id);
+            await showCustomAlert('提示', '已取消收藏');
+          } else {
+            const postToSave = await db.qzonePosts.get(postId);
+            if (postToSave) {
+              await db.favorites.add({
+                type: 'qzone_post',
+                content: postToSave,
+                timestamp: Date.now()
+              });
+              await showCustomAlert('提示', '收藏成功！');
+            }
+          }
+          await updateSinglePostInDOM(postId);
+        }
+        return;
+      }
+
+      const sendBtn = target.closest('.comment-send-btn');
+      if (sendBtn) {
+        const commentInput = postContainer.querySelector('.comment-input');
+        const commentText = commentInput.value.trim();
+        if (!commentText) return alert('评论内容不能为空哦！');
+
+        const post = qzonePostsCache.find(p => p.id === postId);
+        if (!post) return;
+
+        if (!post.comments) post.comments = [];
+
+        const newComment = {
+          commenterName: state.qzoneSettings.nickname,
+          text: commentText,
+          timestamp: Date.now(),
+          replyTo: (currentQzoneReplyContext && currentQzoneReplyContext.postId === postId) ? currentQzoneReplyContext.replyToName : null
+        };
+
+        post.comments.push(newComment);
+        await db.qzonePosts.update(postId, {
+          comments: post.comments
+        });
+
+        let postSummary = (post.publicText || post.content || '').substring(0, 30);
+        const userNickname = state.qzoneSettings.nickname;
+        const notifiedAiIds = new Set();
+        if (post.authorId !== 'user') notifiedAiIds.add(post.authorId);
+        if (newComment.replyTo && newComment.replyTo !== userNickname) {
+          const repliedToChat = Object.values(state.chats).find(c => c.originalName === newComment.replyTo);
+          if (repliedToChat) notifiedAiIds.add(repliedToChat.id);
+        }
+        for (const aiId of notifiedAiIds) {
+          const chat = state.chats[aiId];
+          if (chat && !chat.isGroup) {
+            const stickerMatch = state.userStickers.find(s => s.url === commentText);
+            let notificationText = stickerMatch ? `用户'${userNickname}'刚刚在你的动态“${postSummary}”下，发送了一个表情评论，意思是：“${stickerMatch.name}”。` :
+              newComment.replyTo ? `用户'${userNickname}'刚刚在你的动态“${postSummary}”下，回复了'${currentQzoneReplyContext.replyToDisplayName}'的评论，内容是：“${commentText}”。` :
+                `用户'${userNickname}'刚刚评论了你的动态“${postSummary}”，内容是：“${commentText}”。`;
+            const historyMessage = {
+              role: 'system',
+              content: `[系统提示：${notificationText}请你对此作出回应。]`,
+              timestamp: Date.now(),
+              isHidden: true
+            };
+            chat.history.push(historyMessage);
+            await db.chats.put(chat);
+          }
+        }
+
+        commentInput.value = '';
+        clearQzoneReplyContext(postContainer);
+        await updateSinglePostInDOM(postId);
+        return;
+      }
+    }
+
+
+
+
+
+
+    const handleSwipeStart = (e) => {
+      const target = e.target;
+
+      if (target.closest('.post-footer, .post-feedback-icons, .post-actions-btn, .post-comments-container, .reposted-content-wrapper')) {
+        return;
+      }
+      const targetContainer = e.target.closest('.qzone-post-container');
+      if (!targetContainer) return;
+
+      resetAllSwipes(targetContainer);
+      swipeState.activeContainer = targetContainer;
+      swipeState.isDragging = true;
+      swipeState.isClick = true;
+      swipeState.swipeDirection = null;
+      swipeState.startX = e.type.includes('mouse') ? e.pageX : e.touches[0].pageX;
+      swipeState.startY = e.type.includes('mouse') ? e.pageY : e.touches[0].pageY;
+      swipeState.activeContainer.querySelector('.qzone-post-item').style.transition = 'none';
+
+
+      document.addEventListener('mousemove', handleSwipeMove);
+      document.addEventListener('mouseup', handleSwipeEnd);
+      document.addEventListener('touchmove', handleSwipeMove, {
+        passive: false
+      });
+      document.addEventListener('touchend', handleSwipeEnd);
+    };
+
+
+    const handleSwipeMove = (e) => {
+      if (!swipeState.isDragging || !swipeState.activeContainer) return;
+
+      const currentX = e.type.includes('mouse') ? e.pageX : e.touches[0].pageX;
+      const currentY = e.type.includes('mouse') ? e.pageY : e.touches[0].pageY;
+      const diffX = currentX - swipeState.startX;
+      const diffY = currentY - swipeState.startY;
+
+      if (swipeState.isClick && (Math.abs(diffX) > 5 || Math.abs(diffY) > 5)) {
+        swipeState.isClick = false;
+      }
+
+      if (!swipeState.swipeDirection) {
+        if (Math.abs(diffX) > Math.abs(diffY)) {
+          swipeState.swipeDirection = 'horizontal';
+        } else {
+          swipeState.swipeDirection = 'vertical';
+        }
+      }
+
+      if (swipeState.swipeDirection === 'horizontal') {
+        e.preventDefault();
+        swipeState.currentX = currentX;
+        let translation = Math.min(0, Math.max(-90, diffX));
+        swipeState.activeContainer.querySelector('.qzone-post-item').style.transform = `translateX(${translation}px)`;
+      }
+    };
+
+
+    const handleSwipeEnd = (e) => {
+
+      document.removeEventListener('mousemove', handleSwipeMove);
+      document.removeEventListener('mouseup', handleSwipeEnd);
+      document.removeEventListener('touchmove', handleSwipeMove);
+      document.removeEventListener('touchend', handleSwipeEnd);
+
+      if (!swipeState.isDragging || !swipeState.activeContainer) return;
+
+      const postItem = swipeState.activeContainer.querySelector('.qzone-post-item');
+      postItem.style.transition = 'transform 0.3s ease';
+
+      if (swipeState.swipeDirection === 'horizontal' && !swipeState.isClick) {
+        const finalX = e.type.includes('touchend') ? e.changedTouches[0].pageX : e.pageX;
+        const diffX = finalX - swipeState.startX;
+        if (diffX < -40) {
+          postItem.classList.add('swiped');
+        } else {
+          postItem.classList.remove('swiped');
+        }
+      }
+
+      postItem.style.transform = '';
+
+
+      swipeState.isDragging = false;
+      swipeState.activeContainer = null;
+      swipeState.swipeDirection = null;
+      swipeState.isClick = true;
+    };
+
+
+
+
+
+
+
+
+
+
+
+    postsList.addEventListener('click', handlePostClick);
+    postsList.addEventListener('mousedown', handleSwipeStart);
+    postsList.addEventListener('touchstart', handleSwipeStart, {
+      passive: true
+    });
+
+
+
+    postsList.addEventListener('click', (e) => {
+
+      if (e.target && e.target.id === 'load-more-qzone-btn') {
+        loadMoreQzonePosts();
+      }
+    });
+
+
+    document.getElementById('refine-memory-btn-header').addEventListener('click', () => {
+      if (state.activeChatId) {
+        summarizeExistingLongTermMemory(state.activeChatId);
+      }
+    });
+
+    document.getElementById('api-preset-select').addEventListener('change', handlePresetSelectionChange);
+    document.getElementById('save-api-preset-btn').addEventListener('click', saveApiPreset);
+    document.getElementById('delete-api-preset-btn').addEventListener('click', deleteApiPreset);
+
+
+    document.getElementById('add-world-book-entry-btn').addEventListener('click', () => {
+      const container = document.getElementById('world-book-entries-container');
+
+      if (container.querySelector('p')) {
+        container.innerHTML = '';
+      }
+      const newBlock = createWorldBookEntryBlock();
+      container.appendChild(newBlock);
+      newBlock.querySelector('.entry-content-textarea').focus();
+    });
+
+
+    document.getElementById('switch-greeting-btn').addEventListener('click', handleSwitchGreeting);
+
+    document.getElementById('manage-stickers-btn').addEventListener('click', toggleStickerManagementMode);
+    document.getElementById('delete-selected-stickers-btn').addEventListener('click', executeBatchDeleteStickers);
+    document.getElementById('export-selected-stickers-btn').addEventListener('click', executeBatchExportStickers);
+
+    document.getElementById('qzone-back-btn').addEventListener('click', () => switchToChatListView('messages-view'));
+    document.getElementById('favorites-back-btn').addEventListener('click', () => switchToChatListView('messages-view'));
+
+
+
+
+
+
+    const searchInput = document.getElementById('favorites-search-input');
+    const searchClearBtn = document.getElementById('favorites-search-clear-btn');
+
+    searchInput.addEventListener('input', () => {
+      const searchTerm = searchInput.value.trim().toLowerCase();
+
+
+      searchClearBtn.style.display = searchTerm ? 'block' : 'none';
+
+      if (!searchTerm) {
+        displayFilteredFavorites(allFavoriteItems);
+        return;
+      }
+
+
+      const filteredItems = allFavoriteItems.filter(item => {
+        let contentToSearch = '';
+        let authorToSearch = '';
+
+        if (item.type === 'qzone_post') {
+          const post = item.content;
+          contentToSearch += (post.publicText || '') + ' ' + (post.content || '');
+          if (post.authorId === 'user') {
+            authorToSearch = state.qzoneSettings.nickname;
+          } else if (state.chats[post.authorId]) {
+            authorToSearch = state.chats[post.authorId].name;
+          }
+        } else if (item.type === 'chat_message') {
+          const msg = item.content;
+          if (typeof msg.content === 'string') {
+            contentToSearch = msg.content;
+          }
+          const chat = state.chats[item.chatId];
+          if (chat) {
+            if (msg.role === 'user') {
+              authorToSearch = chat.isGroup ? (chat.settings.myNickname || '我') : '我';
+            } else {
+              authorToSearch = chat.isGroup ? msg.senderName : chat.name;
+            }
+          }
+        }
+
+
+        return contentToSearch.toLowerCase().includes(searchTerm) ||
+          authorToSearch.toLowerCase().includes(searchTerm);
+      });
+
+      displayFilteredFavorites(filteredItems);
+    });
+
+
+    searchClearBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      searchClearBtn.style.display = 'none';
+      displayFilteredFavorites(allFavoriteItems);
+      searchInput.focus();
+    });
+
+
+
+
+
+
+
+    document.getElementById('selection-favorite-btn').addEventListener('click', async () => {
+      if (selectedMessages.size === 0) return;
+      const chat = state.chats[state.activeChatId];
+      if (!chat) return;
+
+      const favoritesToAdd = [];
+      const timestampsToFavorite = [...selectedMessages];
+
+      for (const timestamp of timestampsToFavorite) {
+
+        const existing = await db.favorites.where('originalTimestamp').equals(timestamp).first();
+
+        if (!existing) {
+          const messageToSave = chat.history.find(msg => msg.timestamp === timestamp);
+          if (messageToSave) {
+            favoritesToAdd.push({
+              type: 'chat_message',
+              content: messageToSave,
+              chatId: state.activeChatId,
+              timestamp: Date.now(),
+              originalTimestamp: messageToSave.timestamp
+            });
+          }
+        }
+      }
+
+      if (favoritesToAdd.length > 0) {
+        await db.favorites.bulkAdd(favoritesToAdd);
+        allFavoriteItems = await db.favorites.orderBy('timestamp').reverse().toArray();
+        await showCustomAlert('收藏成功', `已成功收藏 ${favoritesToAdd.length} 条消息。`);
+      } else {
+        await showCustomAlert('提示', '选中的消息均已收藏过。');
+      }
+
+      exitSelectionMode();
+    });
+
+
+    const favoritesEditBtn = document.getElementById('favorites-edit-btn');
+    const favoritesView = document.getElementById('favorites-view');
+    const favoritesActionBar = document.getElementById('favorites-action-bar');
+    const mainBottomNav = document.getElementById('chat-list-bottom-nav');
+    const favoritesList = document.getElementById('favorites-list');
+
+    const selectAllFavoritesCheckbox = document.getElementById('select-all-favorites-checkbox');
+
+    favoritesEditBtn.addEventListener('click', () => {
+      isFavoritesSelectionMode = !isFavoritesSelectionMode;
+      favoritesView.classList.toggle('selection-mode', isFavoritesSelectionMode);
+
+      if (isFavoritesSelectionMode) {
+
+        favoritesEditBtn.textContent = '完成';
+        favoritesActionBar.style.display = 'flex';
+        mainBottomNav.style.display = 'none';
+        favoritesList.style.paddingBottom = '80px';
+        if (selectAllFavoritesCheckbox) selectAllFavoritesCheckbox.checked = false;
+      } else {
+
+        favoritesEditBtn.textContent = '编辑';
+        favoritesActionBar.style.display = 'none';
+        mainBottomNav.style.display = 'flex';
+        favoritesList.style.paddingBottom = '';
+
+
+        selectedFavorites.clear();
+        document.querySelectorAll('.favorite-item-card.selected').forEach(card => card.classList.remove('selected'));
+        document.getElementById('favorites-delete-selected-btn').textContent = `删除 (0)`;
+        if (selectAllFavoritesCheckbox) selectAllFavoritesCheckbox.checked = false;
+      }
+    });
+
+    if (selectAllFavoritesCheckbox) {
+      selectAllFavoritesCheckbox.addEventListener('change', (e) => {
+        const isChecked = e.target.checked;
+        const allCards = document.querySelectorAll('.favorite-item-card');
+        
+        allCards.forEach(card => {
+          const favId = parseInt(card.dataset.favid);
+          if (isNaN(favId)) return;
+          
+          if (isChecked) {
+            selectedFavorites.add(favId);
+            card.classList.add('selected');
+          } else {
+            selectedFavorites.delete(favId);
+            card.classList.remove('selected');
+          }
+        });
+        
+        document.getElementById('favorites-delete-selected-btn').textContent = `删除 (${selectedFavorites.size})`;
+      });
+    }
+
+    document.getElementById('favorites-list').addEventListener('click', (e) => {
+      const target = e.target;
+      const card = target.closest('.favorite-item-card');
+
+
+      if (target.tagName === 'IMG' && target.dataset.hiddenText) {
+        const hiddenText = target.dataset.hiddenText;
+        showCustomAlert("图片内容", hiddenText.replace(/<br>/g, '\n'));
+        return;
+      }
+
+
+      if (!isFavoritesSelectionMode) return;
+
+
+      if (!card) return;
+
+      const favId = parseInt(card.dataset.favid);
+      if (isNaN(favId)) return;
+
+
+      if (selectedFavorites.has(favId)) {
+        selectedFavorites.delete(favId);
+        card.classList.remove('selected');
+      } else {
+        selectedFavorites.add(favId);
+        card.classList.add('selected');
+      }
+
+      if (selectAllFavoritesCheckbox) {
+        const allCardsCount = document.querySelectorAll('.favorite-item-card').length;
+        selectAllFavoritesCheckbox.checked = (selectedFavorites.size === allCardsCount && allCardsCount > 0);
+      }
+
+      document.getElementById('favorites-delete-selected-btn').textContent = `删除 (${selectedFavorites.size})`;
+    });
+
+
+
+    document.getElementById('favorites-delete-selected-btn').addEventListener('click', async () => {
+      if (selectedFavorites.size === 0) return;
+
+      const confirmed = await showCustomConfirm(
+        '确认删除',
+        `确定要从收藏夹中移除这 ${selectedFavorites.size} 条内容吗？`, {
+        confirmButtonClass: 'btn-danger'
+      }
+      );
+
+      if (confirmed) {
+        const idsToDelete = [...selectedFavorites];
+        await db.favorites.bulkDelete(idsToDelete);
+        await showCustomAlert('删除成功', '选中的收藏已被移除。');
+
+
+        allFavoriteItems = allFavoriteItems.filter(item => !idsToDelete.includes(item.id));
+
+
+        displayFilteredFavorites(allFavoriteItems);
+
+
+        favoritesEditBtn.click();
+      }
+    });
+
+
+    if (state.globalSettings.enableBackgroundActivity) {
+      startBackgroundSimulation();
+      console.log("后台活动模拟已自动启动。");
+    }
+
+
+
+
+
+
+
+    document.querySelectorAll('input[name="theme-select"]').forEach(radio => {
+      radio.addEventListener('change', updateSettingsPreview);
+    });
+
+
+    const chatFontSizeSlider = document.getElementById('chat-font-size-slider');
+    chatFontSizeSlider.addEventListener('input', () => {
+
+      document.getElementById('chat-font-size-value').textContent = `${chatFontSizeSlider.value}px`;
+
+      updateSettingsPreview();
+    });
+
+
+    const customCssInputForPreview = document.getElementById('custom-css-input');
+    customCssInputForPreview.addEventListener('input', updateSettingsPreview);
+
+
+    document.getElementById('reset-theme-btn').addEventListener('click', () => {
+      document.getElementById('theme-default').checked = true;
+      updateSettingsPreview();
+    });
+
+    document.getElementById('reset-custom-css-btn').addEventListener('click', () => {
+      document.getElementById('custom-css-input').value = '';
+      updateSettingsPreview();
+    });
+
+
+
+    document.getElementById('lyrics-vertical-pos').addEventListener('change', updateSettingsPreview);
+    document.getElementById('lyrics-horizontal-pos').addEventListener('change', updateSettingsPreview);
+    document.getElementById('lyrics-offset-input').addEventListener('input', updateSettingsPreview);
+
+    document.querySelectorAll('input[name="visibility"]').forEach(radio => {
+      radio.addEventListener('change', function () {
+        const groupsContainer = document.getElementById('post-visibility-groups');
+        if (this.value === 'include' || this.value === 'exclude') {
+          groupsContainer.style.display = 'block';
+        } else {
+          groupsContainer.style.display = 'none';
+        }
+      });
+    });
+
+
+
+    document.getElementById('manage-groups-btn').addEventListener('click', openGroupManager);
+    document.getElementById('close-group-manager-btn').addEventListener('click', () => {
+      document.getElementById('group-management-modal').classList.remove('visible');
+
+      const chatSettingsBtn = document.getElementById('chat-settings-btn');
+      if (document.getElementById('chat-settings-modal').classList.contains('visible')) {
+        chatSettingsBtn.click();
+      }
+    });
+
+    document.getElementById('add-new-group-btn').addEventListener('click', addNewGroup);
+    document.getElementById('existing-groups-list').addEventListener('click', (e) => {
+      if (e.target.classList.contains('delete-group-btn')) {
+        const groupId = parseInt(e.target.dataset.id);
+        deleteGroup(groupId);
+      }
+    });
+
+
+
+
+    document.getElementById('cancel-message-action-btn').addEventListener('click', hideMessageActions);
+
+    // 翻译按钮事件监听器
+    document.getElementById('translate-message-btn').addEventListener('click', translateMessageContent);
+
+    document.getElementById('edit-message-btn').addEventListener('click', openAdvancedMessageEditor);
+
+    document.getElementById('copy-message-btn').addEventListener('click', copyMessageContent);
+
+
+    document.getElementById('recall-message-btn').addEventListener('click', handleRecallClick);
+
+
+
+    document.getElementById('select-message-btn').addEventListener('click', () => {
+
+      const timestampToSelect = activeMessageTimestamp;
+      hideMessageActions();
+
+      if (timestampToSelect) {
+        enterSelectionMode(timestampToSelect);
+      }
+    });
+
+    // 排除消息按钮 (单条) - 已移至聊天设置批量管理
+
+    // 排除消息按钮 (多选) - 已移至聊天设置批量管理
+
+    // 批量管理排除消息 (聊天详情入口)
+    document.getElementById('batch-exclude-manage-btn').addEventListener('click', openBatchExcludeManager);
+    document.getElementById('batch-exclude-cancel-btn').addEventListener('click', closeBatchExcludeManager);
+    document.getElementById('view-excluded-detail-btn').addEventListener('click', openExcludedDetailView);
+    document.getElementById('excluded-detail-close-btn').addEventListener('click', closeExcludedDetailView);
+    document.getElementById('token-detail-trigger').addEventListener('click', openTokenBreakdown);
+    document.getElementById('token-breakdown-close-btn').addEventListener('click', closeTokenBreakdown);
+    document.getElementById('token-breakdown-refresh-btn').addEventListener('click', refreshTokenBreakdown);
+    document.getElementById('batch-exclude-action-btn').addEventListener('click', () => batchExcludeAction(true));
+    document.getElementById('batch-include-action-btn').addEventListener('click', () => batchExcludeAction(false));
+    document.getElementById('batch-exclude-select-all').addEventListener('click', () => {
+      document.querySelectorAll('#batch-exclude-list .batch-exclude-item').forEach(item => {
+        const ts = parseInt(item.dataset.timestamp);
+        window.batchExcludeChecked.add(ts);
+        item.classList.add('checked');
+      });
+      document.getElementById('batch-exclude-selected-count').textContent = `已选 ${window.batchExcludeChecked.size} 条`;
+    });
+    document.getElementById('batch-exclude-deselect-all').addEventListener('click', () => {
+      window.batchExcludeChecked.clear();
+      document.querySelectorAll('#batch-exclude-list .batch-exclude-item').forEach(item => item.classList.remove('checked'));
+      document.getElementById('batch-exclude-selected-count').textContent = '已选 0 条';
+    });
+    document.getElementById('batch-exclude-select-range').addEventListener('click', async () => {
+      const rangeStr = await showCustomPrompt('按范围选择', '输入要选择的消息范围，例如：1-50 表示第1到第50条', '', 'text');
+      if (!rangeStr) return;
+      const match = rangeStr.match(/(\d+)\s*[-~到]\s*(\d+)/);
+      if (!match) return;
+      const start = parseInt(match[1]) - 1;
+      const end = parseInt(match[2]);
+      const items = document.querySelectorAll('#batch-exclude-list .batch-exclude-item');
+      items.forEach((item, i) => {
+        if (i >= start && i < end) {
+          window.batchExcludeChecked.add(parseInt(item.dataset.timestamp));
+          item.classList.add('checked');
+        }
+      });
+      document.getElementById('batch-exclude-selected-count').textContent = `已选 ${window.batchExcludeChecked.size} 条`;
+    });
+
+
+
+
+
+
+
+    document.getElementById('transfer-action-accept').addEventListener('click', () => {
+      // 检查是否在 My Phone 环境中
+      if (activeMyPhoneTransferTimestamp !== null && typeof activeMyPhoneTransferTimestamp !== 'undefined') {
+        handleMyPhoneTransferResponse('accepted');
+      } else {
+        handleUserTransferResponse('accepted');
+      }
+    });
+    document.getElementById('transfer-action-decline').addEventListener('click', () => {
+      // 检查是否在 My Phone 环境中
+      if (activeMyPhoneTransferTimestamp !== null && typeof activeMyPhoneTransferTimestamp !== 'undefined') {
+        handleMyPhoneTransferResponse('declined');
+      } else {
+        handleUserTransferResponse('declined');
+      }
+    });
+    document.getElementById('transfer-action-cancel').addEventListener('click', () => {
+      hideTransferActionModal();
+      // 清除 My Phone 转账状态
+      if (typeof activeMyPhoneTransferTimestamp !== 'undefined') {
+        activeMyPhoneTransferTimestamp = null;
+      }
+    });
+
+
+
+
+
+    document.getElementById('edit-post-btn').addEventListener('click', openPostEditor);
+    document.getElementById('copy-post-btn').addEventListener('click', copyPostContent);
+    document.getElementById('cancel-post-action-btn').addEventListener('click', hidePostActions);
+
+
+
+
+    document.getElementById('cancel-contact-picker-btn').addEventListener('click', () => {
+      showScreen('chat-list-screen');
+    });
+
+    document.getElementById('contact-picker-list').addEventListener('click', (e) => {
+      const item = e.target.closest('.contact-picker-item');
+      if (!item) return;
+
+      const contactId = item.dataset.contactId;
+      item.classList.toggle('selected');
+
+      if (selectedContacts.has(contactId)) {
+        selectedContacts.delete(contactId);
+      } else {
+        selectedContacts.add(contactId);
+      }
+      updateContactPickerConfirmButton();
+    });
+
+
+    document.getElementById('manage-members-btn').addEventListener('click', () => {
+
+
+
+      openMemberManagementScreen();
+    });
+
+
+
+    document.getElementById('back-from-member-management').addEventListener('click', () => {
+
+      showScreen('chat-interface-screen');
+      document.getElementById('chat-settings-btn').click();
+    });
+
+
+    document.getElementById('member-management-list').addEventListener('click', (e) => {
+
+      if (e.target.classList.contains('remove-member-btn')) {
+        removeMemberFromGroup(e.target.dataset.memberId);
+      }
+    });
+
+    document.getElementById('add-existing-contact-btn').addEventListener('click', async () => {
+
+
+      const confirmBtn = document.getElementById('confirm-contact-picker-btn');
+
+      const newConfirmBtn = confirmBtn.cloneNode(true);
+      confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+      newConfirmBtn.addEventListener('click', handleAddMembersToGroup);
+
+      await openContactPickerForAddMember();
+    });
+
+    document.getElementById('create-new-member-btn').addEventListener('click', createNewMemberInGroup);
+
+
+
+
+
+    document.getElementById('video-call-btn').addEventListener('click', handleInitiateCall);
+    document.getElementById('group-video-call-btn').addEventListener('click', handleInitiateCall);
+    document.getElementById('voice-call-btn').addEventListener('click', handleInitiateVoiceCall);
+    document.getElementById('group-voice-call-btn').addEventListener('click', handleInitiateVoiceCall);
+
+
+    document.getElementById('hang-up-btn').addEventListener('click', endVideoCall);
+    document.getElementById('minimize-call-btn').addEventListener('click', minimizeVideoCall);
+    document.getElementById('video-call-restore-btn').addEventListener('click', restoreVideoCall);
+
+    makeDraggable(document.getElementById('video-call-restore-btn'), document.getElementById('video-call-restore-btn'));
+
+    // 语音通话按钮事件监听器
+    document.getElementById('voice-hang-up-btn').addEventListener('click', endVoiceCall);
+    document.getElementById('minimize-voice-call-btn').addEventListener('click', minimizeVoiceCall);
+    document.getElementById('voice-call-restore-btn').addEventListener('click', restoreVoiceCall);
+    makeDraggable(document.getElementById('voice-call-restore-btn'), document.getElementById('voice-call-restore-btn'));
+    document.getElementById('voice-join-call-btn').addEventListener('click', handleUserJoinVoiceCall);
+    const voiceUserSpeakButton = document.getElementById('voice-user-speak-btn');
+    let suppressVoiceCallClick = false;
+    const getVoiceCallInputMode = () => state.chats[voiceCallState.activeChatId]?.settings?.voiceCallInputMode || 'text';
+    const setUserVoiceSpeaking = speaking => {
+      const userAvatar = document.querySelector('#voice-participant-avatars-grid .participant-avatar-wrapper[data-participant-id="user"] .participant-avatar');
+      userAvatar?.classList.toggle('speaking', speaking);
+    };
+    const finishVoiceCallRecording = async cancelled => {
+      setUserVoiceSpeaking(false);
+      const result = await window.voiceRecording?.stopCallRecording(cancelled);
+      if (result?.text) triggerAiInVoiceCallAction(result.text, result);
+    };
+    window.addEventListener('real-voice-call-result', event => {
+      setUserVoiceSpeaking(false);
+      const result = event.detail;
+      if (voiceCallState.isActive && result?.text) triggerAiInVoiceCallAction(result.text, result);
+    });
+    voiceUserSpeakButton.addEventListener('click', async () => {
+      if (!voiceCallState.isActive) return;
+      if (suppressVoiceCallClick) {
+        suppressVoiceCallClick = false;
+        return;
+      }
+      const inputMode = getVoiceCallInputMode();
+      if (inputMode === 'tap' && window.voiceRecording) {
+        if (window.voiceRecording.isRecording('call')) await finishVoiceCallRecording(false);
+        else {
+          setUserVoiceSpeaking(true);
+          const started = await window.voiceRecording.startCallRecording();
+          if (!started) setUserVoiceSpeaking(false);
+        }
+        return;
+      }
+      if (inputMode !== 'text' && !window.voiceRecording) showToast('真实语音组件尚未加载，已切换为文字输入', 'error');
+      setUserVoiceSpeaking(true);
+      const userInput = await showCustomPrompt('你说', '请输入你想说的话...');
+      setUserVoiceSpeaking(false);
+      if (userInput && userInput.trim()) {
+        triggerAiInVoiceCallAction(userInput.trim());
+      }
+    });
+    voiceUserSpeakButton.addEventListener('pointerdown', async event => {
+      if (!voiceCallState.isActive || getVoiceCallInputMode() !== 'hold' || !window.voiceRecording) return;
+      event.preventDefault();
+      suppressVoiceCallClick = true;
+      try { voiceUserSpeakButton.setPointerCapture(event.pointerId); } catch (error) { /* Optional. */ }
+      setUserVoiceSpeaking(true);
+      const started = await window.voiceRecording.startCallRecording();
+      if (!started) setUserVoiceSpeaking(false);
+    });
+    voiceUserSpeakButton.addEventListener('pointerup', event => {
+      if (getVoiceCallInputMode() !== 'hold' || !window.voiceRecording) return;
+      event.preventDefault();
+      finishVoiceCallRecording(false);
+      setTimeout(() => { suppressVoiceCallClick = false; }, 0);
+    });
+    voiceUserSpeakButton.addEventListener('pointercancel', () => {
+      suppressVoiceCallClick = false;
+      if (getVoiceCallInputMode() === 'hold') finishVoiceCallRecording(true);
+    });
+    voiceUserSpeakButton.addEventListener('contextmenu', event => {
+      if (getVoiceCallInputMode() === 'hold') event.preventDefault();
+    });
+    document.getElementById('voice-regenerate-call-btn').addEventListener('click', () => {
+      if (!voiceCallState.isActive) return;
+      if (voiceCallState.callHistory.length > 0) {
+        voiceCallState.callHistory.pop();
+        const callFeed = document.getElementById('voice-call-main');
+        const lastBubble = callFeed.querySelector('.call-message-bubble:last-child');
+        if (lastBubble) lastBubble.remove();
+      }
+      triggerAiInVoiceCallAction();
+    });
+
+    document.getElementById('cancel-call-btn').addEventListener('click', () => {
+      videoCallState.isAwaitingResponse = false;
+      showScreen('chat-interface-screen');
+    });
+
+
+    document.getElementById('join-call-btn').addEventListener('click', handleUserJoinCall);
+
+
+
+    document.getElementById('decline-call-btn').addEventListener('click', async () => {
+      hideIncomingCallModal();
+      
+      // 获取通话类型
+      const modal = document.getElementById('incoming-call-modal');
+      const callType = modal.dataset.callType || 'video';
+      const isVideoCall = callType === 'video';
+      
+      const currentCallState = isVideoCall ? videoCallState : voiceCallState;
+      const chat = state.chats[currentCallState.activeChatId];

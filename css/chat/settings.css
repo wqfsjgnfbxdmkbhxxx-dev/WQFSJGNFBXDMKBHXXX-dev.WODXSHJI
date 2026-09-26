@@ -1,0 +1,784 @@
+           /* --- 聊天设置页 (Chat Settings) 精致 iOS 风格重构 --- */
+
+           /* 背景色：纯白无杂质 */
+           #chat-settings-screen {
+               background-color: #ffffff !important;
+           }
+
+           #phone-screen.dark-mode #chat-settings-screen {
+               background-color: #000000 !important;
+           }
+
+           /* 容器 */
+           .settings-container {
+               padding: 16px 16px 36px;
+               padding-top: 12px !important;
+               padding-bottom: calc(30px + env(safe-area-inset-bottom)) !important;
+               overflow-y: auto;
+               height: 100%;
+               box-sizing: border-box;
+               background-color: #ffffff !important;
+           }
+
+           #phone-screen.dark-mode .settings-container {
+               background-color: #000000 !important;
+           }
+
+           /* 分组卡片：精致微浮雕层级 */
+           .settings-section {
+               background-color: #ffffff;
+               border-radius: 14px;
+               margin-bottom: 16px;
+               border: 0.5px solid rgba(0, 0, 0, 0.08);
+               box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
+               position: relative;
+           }
+
+           #phone-screen.dark-mode .settings-section {
+               background-color: #1c1c1e;
+               border: 0.5px solid rgba(255, 255, 255, 0.08);
+               box-shadow: none;
+           }
+
+           /* 手动处理圆角，替代 overflow: hidden */
+           .settings-section>.settings-item:first-child,
+           .settings-section>.settings-item-block:first-child {
+               border-top-left-radius: 14px;
+               border-top-right-radius: 14px;
+           }
+
+           .settings-section>.settings-item:last-child,
+           .settings-section>.settings-item-block:last-child {
+               border-bottom-left-radius: 14px;
+               border-bottom-right-radius: 14px;
+               border-bottom: none;
+           }
+
+           /* 单行设置项 */
+           .settings-item {
+               display: flex;
+               justify-content: space-between;
+               align-items: center;
+               padding: 12px 16px;
+               background-color: #ffffff;
+               border-bottom: 0.5px solid rgba(60, 60, 67, 0.08);
+               min-height: 44px;
+               transition: background-color 0.15s ease;
+               position: relative;
+               box-sizing: border-box;
+           }
+
+           #phone-screen.dark-mode .settings-item {
+               background-color: #1c1c1e;
+               border-bottom-color: rgba(255, 255, 255, 0.08);
+           }
+
+           /* 可点击项反馈 */
+           .settings-item.clickable:active {
+               background-color: rgba(0, 0, 0, 0.03);
+           }
+
+           #phone-screen.dark-mode .settings-item.clickable:active {
+               background-color: #2c2c2e;
+           }
+
+           /* 块级设置项 (用于多行内容) */
+           .settings-item-block {
+               padding: 12px 16px;
+               background-color: #ffffff;
+               border-bottom: 0.5px solid rgba(60, 60, 67, 0.08);
+               display: flex;
+               flex-direction: column;
+               gap: 8px;
+               position: relative;
+               box-sizing: border-box;
+           }
+
+           #phone-screen.dark-mode .settings-item-block {
+               background-color: #1c1c1e;
+               border-bottom-color: rgba(255, 255, 255, 0.08);
+           }
+
+           /* 标签文本 */
+           .settings-item label,
+           .settings-item-block label {
+               font-size: 16px;
+               color: #000;
+               font-weight: 400;
+               margin: 0;
+               flex-shrink: 0;
+           }
+
+           #phone-screen.dark-mode .settings-item label,
+           #phone-screen.dark-mode .settings-item-block label {
+               color: #fff;
+           }
+
+           /* 描述文本 (小字) */
+           .settings-desc {
+               font-size: 12px;
+               color: #8a8a8a;
+               margin-top: 2px;
+           }
+
+           /* 右侧区域 (输入框、按钮等) */
+           .settings-right {
+               display: flex;
+               align-items: center;
+               gap: 10px;
+               flex-grow: 1;
+               justify-content: flex-end;
+               min-width: 0;
+               /* 防止溢出 */
+           }
+
+           /* 标签文字允许收缩和换行 */
+           .settings-item label {
+               flex-shrink: 1;
+               min-width: 0;
+               word-break: break-word;
+           }
+
+           /* 移动端响应式优化 */
+           @media (max-width: 768px) {
+               .settings-item {
+                   padding: 12px 12px;
+               }
+               
+               .settings-item label {
+                   font-size: 13px;
+                   line-height: 1.4;
+                   margin-right: 8px;
+               }
+               
+               .settings-right {
+                   flex-shrink: 0;
+                   width: 120px;
+                   gap: 6px;
+               }
+               
+               .settings-right input[type="range"] {
+                   width: 100%;
+               }
+           }
+
+           /* 输入框样式 (无边框，右对齐) */
+           .settings-item input[type="text"],
+           .settings-item input[type="number"] {
+               text-align: right;
+               border: none;
+               background: transparent;
+               font-size: 15px;
+               color: #666;
+               width: 100%;
+               padding: 0;
+               outline: none;
+           }
+
+           #phone-screen.dark-mode .settings-item input {
+               color: #aaa;
+           }
+
+           .settings-item input::placeholder {
+               color: #ccc;
+           }
+
+           /* 文本域样式 */
+           .settings-textarea {
+               width: 100%;
+               border: 1px solid rgba(60, 60, 67, 0.12);
+               background-color: #f9f9fb;
+               border-radius: 10px;
+               padding: 10px 12px;
+               font-size: 14px;
+               line-height: 1.5;
+               resize: vertical;
+               box-sizing: border-box;
+               color: #000000;
+               outline: none;
+               transition: border-color 0.2s, background-color 0.2s;
+           }
+
+           .settings-textarea:focus {
+               border-color: #007aff;
+               background-color: #ffffff;
+           }
+
+           #phone-screen.dark-mode .settings-textarea {
+               background-color: #2c2c2e;
+               border-color: #38383a;
+               color: #ffffff;
+           }
+           #phone-screen.dark-mode .settings-textarea:focus {
+               border-color: #0a84ff;
+               background-color: #242426;
+           }
+
+           /* 头像预览 */
+           .settings-avatar {
+               width: 40px;
+               height: 40px;
+               border-radius: 50%;
+               object-fit: cover;
+               border: 1px solid #eee;
+           }
+
+           /* 纯文本按钮 (蓝色小字) */
+           .settings-text-btn {
+               background: none;
+               border: none;
+               color: #007bff;
+               font-size: 14px;
+               padding: 4px 8px;
+               cursor: pointer;
+           }
+
+           .settings-text-btn:active {
+               opacity: 0.7;
+           }
+
+           /* 块级按钮 (灰色背景) */
+           .settings-full-btn {
+               width: 100%;
+               padding: 10px;
+               background-color: #f5f5f7;
+               color: #333;
+               border: none;
+               border-radius: 8px;
+               font-size: 14px;
+               font-weight: 500;
+               cursor: pointer;
+           }
+
+           #phone-screen.dark-mode .settings-full-btn {
+               background-color: #2c2c2e;
+               color: #fff;
+           }
+
+           /* 下拉框 */
+           .settings-select {
+               padding: 6px 20px 6px 10px;
+               border-radius: 6px;
+               border: none;
+               background-color: #f2f2f7;
+               font-size: 14px;
+               color: #333;
+               appearance: none;
+               -webkit-appearance: none;
+               /* 这里可以加个箭头图标base64 */
+           }
+
+           #phone-screen.dark-mode .settings-select {
+               background-color: #3a3a3c;
+               color: #fff;
+           }
+
+           /* 数字输入框 (小) */
+           .settings-num-input {
+               width: 60px !important;
+               text-align: center !important;
+               background-color: #f2f2f7 !important;
+               border-radius: 6px;
+               padding: 4px !important;
+           }
+
+           #phone-screen.dark-mode .settings-num-input {
+               background-color: #3a3a3c !important;
+               color: #fff !important;
+           }
+
+           /* 头部右侧按钮：iOS 原生纯色绿胶囊完成按钮 (无渐变) */
+           #chat-settings-screen .header .save-btn {
+               display: inline-flex !important;
+               align-items: center !important;
+               justify-content: center !important;
+               min-width: 50px !important;
+               height: 30px !important;
+               padding: 0 12px !important;
+               border-radius: 8px !important;
+               background-color: #34c759 !important;
+               color: #ffffff !important;
+               font-size: 14px !important;
+               font-weight: 600 !important;
+               border: none !important;
+               cursor: pointer !important;
+               box-shadow: none !important;
+               transition: opacity 0.15s ease, transform 0.15s ease !important;
+           }
+
+           #chat-settings-screen .header .save-btn:active {
+               opacity: 0.8 !important;
+               transform: scale(0.96) !important;
+           }
+
+           #chat-settings-screen .header .back-btn {
+               font-size: 24px !important;
+               color: #007aff !important;
+               cursor: pointer !important;
+               display: inline-flex !important;
+               align-items: center !important;
+               padding-right: 8px !important;
+               transition: opacity 0.15s !important;
+           }
+
+           #chat-settings-screen .header .back-btn:active {
+               opacity: 0.5 !important;
+           }
+
+           /* 头像操作区 */
+           .avatar-action-wrapper {
+               display: flex;
+               align-items: center;
+               gap: 8px;
+           }
+
+           /* 背景预览图 */
+           .settings-bg-preview {
+               width: 30px;
+               height: 50px;
+               object-fit: cover;
+               border-radius: 4px;
+               border: 1px solid #eee;
+               display: none;
+               /* JS 控制显示 */
+           }
+
+           /* 修复多选框在设置页的样式 */
+           .settings-item-block .custom-multiselect .select-box {
+               background-color: #f5f5f7;
+               border: none;
+           }
+
+           #phone-screen.dark-mode .settings-item-block .custom-multiselect .select-box {
+               background-color: #2c2c2e;
+           }
+
+           /* 【核心修复】：多选下拉框层级问题 */
+           .checkboxes-container {
+               z-index: 1000 !important;
+               /* 确保在最上层 */
+               background-color: #ffffff;
+               box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+               border-radius: 8px;
+               max-height: 200px;
+               /* 限制高度 */
+               overflow-y: auto;
+           }
+
+           #phone-screen.dark-mode .checkboxes-container {
+               background-color: #2c2c2e;
+               border: 1px solid #38383a;
+           }
+
+           /* 横向滚动列表 (群成员) */
+           .horizontal-scroll-list {
+               display: flex;
+               overflow-x: auto;
+               gap: 10px;
+               padding-bottom: 5px;
+           }
+
+           .horizontal-scroll-list .member-editor {
+               flex-shrink: 0;
+           }
+
+           /* 气泡主题选择器美化 */
+           .theme-selector label {
+               display: inline-flex;
+               align-items: center;
+               font-size: 14px;
+               color: #333;
+               cursor: pointer;
+               padding: 4px 8px;
+               background-color: #f5f5f7;
+               border-radius: 6px;
+               transition: background-color 0.2s;
+           }
+
+           #phone-screen.dark-mode .theme-selector label {
+               background-color: #2c2c2e;
+               color: #fff;
+           }
+
+           .theme-selector label:has(input:checked) {
+               background-color: #e7f3ff;
+               /* 选中态高亮 */
+               color: #007bff;
+               font-weight: 500;
+           }
+
+           #phone-screen.dark-mode .theme-selector label:has(input:checked) {
+               background-color: #0a84ff33;
+               color: #0a84ff;
+           }
+
+           .theme-selector input[type="radio"] {
+               margin-right: 6px;
+               accent-color: #007bff;
+           }
+
+           /* --- 核心修复：强制纠正“注入心声”的布局 --- */
+           #inject-thought-group {
+               display: flex !important;
+               /* 强制左右横向排列，覆盖 JS 的 block */
+               justify-content: space-between;
+               /* 左右撑开 */
+               align-items: center;
+               /* 垂直居中 */
+           }
+
+           /* 针对该选项下的文字区域，防止被压缩 */
+           #inject-thought-group>div:first-child {
+               flex: 1;
+               /* 占据左侧所有空间 */
+               padding-right: 10px;
+               /* 和开关保持距离 */
+           }
+
+           /* --- 头像设置栏专用样式修复 --- */
+
+           /* 让右侧容器占满剩余空间 */
+           .settings-right.full-width {
+               flex: 1;
+               width: 100%;
+               margin-left: 15px;
+               /* 让头像和左边标签保持一点距离 */
+           }
+
+           /* 头像操作区容器：两端对齐 */
+           .avatar-action-wrapper {
+               display: flex;
+               align-items: center;
+               justify-content: space-between;
+               /* 关键：头像靠左，按钮靠右 */
+               width: 100%;
+           }
+
+           /* 按钮组容器 */
+           .avatar-btn-group {
+               display: flex;
+               gap: 8px;
+               /* 按钮之间的间距 */
+           }
+
+           /* 新的实体小按钮样式 (有框框了！) */
+           .settings-mini-btn {
+               background-color: #f2f2f7;
+               /* 浅灰背景 */
+               border: 1px solid #e5e5ea;
+               /* 淡淡的边框 */
+               color: #333;
+               padding: 5px 12px;
+               border-radius: 6px;
+               /* 圆角 */
+               font-size: 13px;
+               font-weight: 500;
+               cursor: pointer;
+               transition: all 0.2s;
+               line-height: 1.2;
+           }
+
+           /* 按钮悬停效果 */
+           .settings-mini-btn:active {
+               background-color: #e5e5ea;
+               transform: scale(0.95);
+           }
+
+           /* 暗黑模式适配 */
+           #phone-screen.dark-mode .settings-mini-btn {
+               background-color: #3a3a3c;
+               border-color: #48484a;
+               color: #fff;
+           }
+
+           #phone-screen.dark-mode .settings-mini-btn:active {
+               background-color: #48484a;
+           }
+
+           /* 修复头像大小，确保不会过大 */
+           .settings-avatar {
+               width: 44px;
+               height: 44px;
+               border-radius: 6px;
+               /* 微信风格的小圆角，或者50%变成圆形 */
+               object-fit: cover;
+               border: 1px solid #eee;
+               flex-shrink: 0;
+           }
+
+           #phone-screen.dark-mode .settings-avatar {
+               border-color: #333;
+           }
+
+           /* --- 1. 修复顶部空白过大的问题 --- */
+           .settings-container {
+               /* 原来是 80px，改为 10px 即可，因为 header 已经占据了空间 */
+               padding-top: 10px !important;
+               /* 保持底部 padding */
+               padding-bottom: calc(20px + env(safe-area-inset-bottom));
+           }
+
+           /* --- 2. 优化头像右侧按钮的间距和样式 --- */
+
+           /* 按钮组容器：稍微缩小按钮之间的距离 */
+           .avatar-btn-group {
+               display: flex;
+               gap: 6px;
+               /* 从 8px 减小到 6px，更紧凑 */
+               align-items: center;
+           }
+
+           /* 按钮样式微调：让按钮更精致 */
+           .settings-mini-btn {
+               /* 稍微减小内边距，让按钮不那么“胖” */
+               padding: 4px 10px !important;
+
+               /* 字体稍微调小一点点，更显精致 */
+               font-size: 12px !important;
+
+               /* 增加一点边框颜色深度，更有质感 */
+               border: 1px solid #d1d1d6 !important;
+
+               /* 稍微缩小圆角 */
+               border-radius: 4px !important;
+
+               /* 确保背景色 */
+               background-color: #fff !important;
+
+               /* 确保文字颜色 */
+               color: #333 !important;
+
+               /* 防止换行 */
+               white-space: nowrap;
+           }
+
+           /* 暗黑模式适配 */
+           #phone-screen.dark-mode .settings-mini-btn {
+               background-color: #2c2c2e !important;
+               border-color: #48484a !important;
+               color: #fff !important;
+           }
+
+           /* 头部样式微调：纯白毛玻璃，精致无杂质 */
+           #chat-settings-screen .header {
+               background-color: rgba(255, 255, 255, 0.96) !important;
+               backdrop-filter: blur(20px) !important;
+               -webkit-backdrop-filter: blur(20px) !important;
+               border-bottom: 0.5px solid rgba(60, 60, 67, 0.08) !important;
+               box-shadow: none !important;
+               padding-bottom: 0 !important;
+           }
+
+           #phone-screen.dark-mode #chat-settings-screen .header {
+               background-color: rgba(0, 0, 0, 0.92) !important;
+               border-bottom: 0.5px solid rgba(255, 255, 255, 0.1) !important;
+           }
+
+           /* 统一精致 iOS 小按钮（更换、图库、挂件等）无渐变微胶囊 */
+           #chat-settings-screen .settings-mini-btn {
+               margin: 0 !important;
+               background-color: #f2f2f7 !important;
+               border: 0.5px solid rgba(60, 60, 67, 0.12) !important;
+               border-radius: 7px !important;
+               color: #007aff !important;
+               padding: 5px 12px !important;
+               font-size: 13px !important;
+               font-weight: 500 !important;
+               cursor: pointer !important;
+               box-shadow: none !important;
+               transition: all 0.15s ease !important;
+               line-height: 1.2 !important;
+           }
+
+           #chat-settings-screen .settings-mini-btn:active {
+               background-color: #e5e5ea !important;
+               opacity: 0.7 !important;
+               transform: scale(0.96) !important;
+           }
+
+           /* 统一头像按钮间距 */
+           .avatar-btn-group {
+               display: flex !important;
+               gap: 8px !important;
+               align-items: center !important;
+           }
+
+           /* 暗黑模式下的适配 */
+           #phone-screen.dark-mode #chat-settings-screen .settings-mini-btn {
+               background-color: #2c2c2e !important;
+               border-color: rgba(255, 255, 255, 0.12) !important;
+               color: #0a84ff !important;
+           }
+           #phone-screen.dark-mode #chat-settings-screen .settings-mini-btn:active {
+               background-color: #3a3a3c !important;
+           }
+
+           /* --- 终极修复 V2：完美解决显隐冲突与布局问题 --- */
+
+           /* 1. 基础布局：去掉 display 的 !important */
+           /* 这样当 JS 设置 display: none 时，元素就能正常隐藏了 */
+           .settings-item {
+               display: flex;
+               align-items: center !important;
+               justify-content: space-between !important;
+               flex-direction: row !important;
+           }
+
+           /* 2. 关键拦截：当 JS 把它设为显示(block)时，强制转为 flex */
+           /* 解释：JS 默认会用 display: block 来显示元素，这会导致换行。
+   我们用属性选择器捕获这种情况，并强制改为 flex 布局 */
+           .settings-item[style*="display: block"],
+           .settings-item[style*="display:block"] {
+               display: flex !important;
+           }
+
+           /* 3. 修复“按钮贴边”问题 (保持不变) */
+           .settings-right.full-width {
+               width: auto !important;
+               flex: 1;
+               margin-left: 15px;
+               padding-right: 4px !important;
+           }
+
+           /* 4. 确保头像操作区布局 (保持不变) */
+           .avatar-action-wrapper {
+               width: 100%;
+               box-sizing: border-box;
+               display: flex;
+               align-items: center;
+               justify-content: space-between;
+           }
+
+           /* --- 终极圆角修复方案 --- */
+
+           /* 1. 全局强制卡片圆角裁剪 */
+           .settings-section {
+               overflow: hidden !important;
+               border-radius: 14px !important;
+           }
+
+           /* 2. 特例豁免：只有包含“自定义多选下拉框”的卡片才允许内容溢出 */
+           .settings-section:has(.custom-multiselect) {
+               overflow: visible !important;
+           }
+
+           /* 3. 针对上述“豁免”的卡片，手动修补首尾圆角 */
+           .settings-section:has(.custom-multiselect)>div:first-child {
+               border-top-left-radius: 14px !important;
+               border-top-right-radius: 14px !important;
+           }
+
+           .settings-section:has(.custom-multiselect)>div:last-child {
+               border-bottom-left-radius: 14px !important;
+               border-bottom-right-radius: 14px !important;
+               border-bottom: none !important;
+           }
+
+           /* --- 核心修复：给嵌套在透明容器里的“注入心声”补圆角 --- */
+
+           .settings-section:has(.custom-multiselect)>div:first-child>.settings-item:first-child {
+               border-top-left-radius: 14px !important;
+               border-top-right-radius: 14px !important;
+           }
+
+           #group-background-activity-group {
+               border-top-left-radius: 14px;
+               border-top-right-radius: 14px;
+           }
+
+           #ai-persona-group[style*="none"]+#my-persona-group {
+               border-top-left-radius: 14px !important;
+               border-top-right-radius: 14px !important;
+           }
+
+           #my-persona-group[style*="none"]+#group-members-group {
+               border-top-left-radius: 14px !important;
+               border-top-right-radius: 14px !important;
+           }
+
+           /* 多选模式下的头部图标样式调整 */
+           #chat-interface-screen .selection-controls .header-actions {
+               gap: 8px;
+               /* [修改] 减小图标之间的间距 (原 15px) */
+           }
+
+           #chat-interface-screen .selection-controls .action-btn {
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               padding: 6px;
+               /* [修改] 稍微调整点击区域 */
+               cursor: pointer;
+               transition: opacity 0.2s;
+               /* [新增] 限制按钮本身的大小，防止过大 */
+               width: 32px;
+               height: 32px;
+               border-radius: 50%;
+               /* 保持圆形 */
+           }
+
+           #chat-interface-screen .selection-controls .action-btn:hover {
+               opacity: 0.7;
+               background-color: rgba(0, 0, 0, 0.05);
+               /* 鼠标悬停时的轻微背景 */
+           }
+
+           #chat-interface-screen .selection-controls .action-btn svg {
+               width: 18px;
+               /* [修改] 减小图标宽度 (原 24px) */
+               height: 18px;
+               /* [修改] 减小图标高度 (原 24px) */
+               stroke-width: 2;
+               /* 确保线条粗细适中 */
+           }
+
+           /* 暗黑模式适配 (保持不变，只是为了完整性列出) */
+           #phone-screen.dark-mode #chat-interface-screen .selection-controls .action-btn:hover {
+               background-color: rgba(255, 255, 255, 0.1);
+           }
+
+           /* --- 新增：专门针对左侧取消按钮的样式 --- */
+           #chat-interface-screen .selection-controls #selection-cancel-btn {
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               padding: 6px;
+               cursor: pointer;
+
+               /* 限制大小为 32px，与右侧保持一致 */
+               width: 32px;
+               height: 32px;
+               border-radius: 50%;
+               transition: opacity 0.2s;
+
+               /* 确保没有额外的文字大小干扰 */
+               font-size: 0;
+           }
+
+           #chat-interface-screen .selection-controls #selection-cancel-btn:hover {
+               background-color: rgba(0, 0, 0, 0.05);
+           }
+
+           /* 缩小内部的 SVG 图标 */
+           #chat-interface-screen .selection-controls #selection-cancel-btn svg {
+               width: 18px;
+               height: 18px;
+               stroke-width: 2.5;
+               /* 稍微加粗一点，因为图标变小了 */
+           }
+
+           /* 暗黑模式适配 */
+           #phone-screen.dark-mode #chat-interface-screen .selection-controls #selection-cancel-btn:hover {
+               background-color: rgba(255, 255, 255, 0.1);
+           }
+
+           #contact-picker-screen .header #cancel-contact-picker-btn {
+               font-size: 16px;
+               /* 将字体改回正常的 16px */
+               width: auto;
+               /* 取消图标专用的固定宽度，让文字自然撑开 */
+               font-weight: normal;
+               /* 不需要太粗 */
+               padding: 0 5px;
+               /* 增加一点点击区域 */
+           }

@@ -1,0 +1,819 @@
+                  const contentType = response.headers.get('content-type');
+                  console.log('Content-Type:', contentType);
+
+
+                  let zipBlob;
+                  let imageDataUrl;
+                  if (contentType && contentType.includes('text/event-stream')) {
+                    console.log('检测到 SSE 流式响应，开始解析...');
+
+
+                    const text = await response.text();
+                    console.log('收到 SSE 数据，大小:', text.length);
+
+
+                    const lines = text.trim().split('\n');
+                    let base64Data = null;
+
+                    for (let i = lines.length - 1; i >= 0; i--) {
+                      const line = lines[i].trim();
+                      if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+                        const dataContent = line.substring(6);
+
+
+                        try {
+                          const jsonData = JSON.parse(dataContent);
+
+
+                          if (jsonData.event_type === 'final' && jsonData.image) {
+                            base64Data = jsonData.image;
+                            console.log('✅ 找到 final 事件的图片数据');
+                            break;
+                          }
+
+
+                          if (jsonData.data) {
+                            base64Data = jsonData.data;
+                            console.log('从 JSON.data 中提取图片数据');
+                            break;
+                          }
+                          if (jsonData.image) {
+                            base64Data = jsonData.image;
+                            console.log('从 JSON.image 中提取图片数据');
+                            break;
+                          }
+                        } catch (e) {
+
+                          base64Data = dataContent;
+                          console.log('直接使用 base64 数据');
+                          break;
+                        }
+                      }
+                    }
+
+                    if (!base64Data) {
+                      throw new Error('无法从 SSE 响应中提取图片数据');
+                    }
+
+
+                    const isPNG = base64Data.startsWith('iVBORw0KGgo');
+                    const isJPEG = base64Data.startsWith('/9j/');
+
+                    if (isPNG || isJPEG) {
+                      console.log('✅ 检测到直接的图片 base64 数据 (PNG/JPEG)');
+
+                      const binaryString = atob(base64Data);
+                      const bytes = new Uint8Array(binaryString.length);
+                      for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                      }
+                      const imageBlob = new Blob([bytes], {
+                        type: isPNG ? 'image/png' : 'image/jpeg'
+                      });
+                      console.log('图片 Blob 创建成功，大小:', imageBlob.size);
+
+
+                      const reader = new FileReader();
+                      imageDataUrl = await new Promise((resolve, reject) => {
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(imageBlob);
+                      });
+                      console.log('✅ 图片转换成功！🎨');
+                    } else {
+
+                      console.log('当作 ZIP 文件处理...');
+                      const binaryString = atob(base64Data);
+                      const bytes = new Uint8Array(binaryString.length);
+                      for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                      }
+                      zipBlob = new Blob([bytes]);
+                      console.log('ZIP Blob 大小:', zipBlob.size);
+                    }
+                  } else {
+
+                    zipBlob = await response.blob();
+                    console.log('收到数据，类型:', zipBlob.type, '大小:', zipBlob.size);
+                  }
+
+
+                  if (!imageDataUrl && zipBlob) {
+
+                    try {
+
+                      if (typeof JSZip === 'undefined') {
+                        throw new Error('JSZip库未加载，请刷新页面重试');
+                      }
+
+
+                      const zip = await JSZip.loadAsync(zipBlob);
+                      console.log('ZIP文件内容:', Object.keys(zip.files));
+
+
+                      let imageFile = null;
+                      for (let filename in zip.files) {
+                        if (filename.match(/\.(png|jpg|jpeg|webp)$/i)) {
+                          imageFile = zip.files[filename];
+                          console.log('找到图片文件:', filename);
+                          break;
+                        }
+                      }
+
+                      if (!imageFile) {
+                        throw new Error('ZIP文件中未找到图片');
+                      }
+
+
+                      const imageBlob = await imageFile.async('blob');
+                      console.log('提取的图片大小:', imageBlob.size);
+
+
+                      const reader = new FileReader();
+                      imageDataUrl = await new Promise((resolve, reject) => {
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(imageBlob);
+                      });
+                      console.log('✅ 图片解压成功！');
+                    } catch (zipError) {
+                      console.error('ZIP解压失败:', zipError);
+                      throw new Error('图片解压失败: ' + zipError.message);
+                    }
+                  }
+
+                  console.log(`✅ NAI图片${i + 1}生成成功！`);
+                  generatedImageUrls.push(imageDataUrl);
+                }
+
+
+                newPost.imageUrls = generatedImageUrls;
+
+                if (generatedImageUrls.length === 1) {
+                  newPost.imageUrl = generatedImageUrls[0];
+                }
+
+                newPost.prompt = msgData.prompt;
+                newPost.imageCount = generatedImageUrls.length;
+                console.log(`✅ 动态NovelAI图片全部生成完成: ${generatedImageUrls.length}张`);
+              } catch (error) {
+                console.error('❌ 动态NAI图片生成失败:', error);
+
+                newPost.content = (newPost.content || newPost.publicText || '') + `\n[图片生成失败: ${error.message}]`;
+              }
+            }
+
+            // Google Imagen 动态图片生成
+            if (msgData.postType === 'googleimag' && msgData.prompt) {
+              try {
+                const googlePrompt = msgData.prompt || 'a beautiful scene';
+                console.log(`📸 动态Google Imagen图片生成开始，prompt:`, googlePrompt);
+
+                const googleResult = await generateGoogleImagenFromPrompt(googlePrompt);
+                newPost.imageUrls = [googleResult.imageUrl];
+                newPost.imageUrl = googleResult.imageUrl;
+                newPost.prompt = googlePrompt;
+                newPost.imageCount = 1;
+                console.log(`✅ 动态Google Imagen图片生成完成`);
+              } catch (error) {
+                console.error('❌ 动态Google Imagen图片生成失败:', error);
+                newPost.content = (newPost.content || newPost.publicText || '') + `\n[Google Imagen图片生成失败: ${error.message}]`;
+              }
+            }
+
+            // GPT 动态图片生成
+            if (msgData.postType === 'openaiimag' && msgData.prompt) {
+              try {
+                const openAIPrompt = msgData.prompt || 'A beautiful scene';
+                const openAIResult = await generateOpenAIImageFromPrompt(openAIPrompt);
+                newPost.imageUrls = [openAIResult.imageUrl];
+                newPost.imageUrl = openAIResult.imageUrl;
+                newPost.prompt = openAIPrompt;
+                newPost.fullPrompt = openAIResult.fullPrompt;
+                newPost.model = openAIResult.model;
+                newPost.mimeType = openAIResult.mimeType;
+                newPost.requestId = openAIResult.requestId;
+                newPost.imageCount = 1;
+              } catch (error) {
+                console.error('❌ 动态 GPT 图片生成失败:', error);
+                newPost.content = (newPost.content || newPost.publicText || '') + `\n[GPT 图片生成失败: ${error.message}]`;
+              }
+            }
+
+            await db.qzonePosts.add(newPost);
+            updateUnreadIndicator(unreadPostsCount + 1);
+            if (isViewingThisChat && document.getElementById('qzone-screen').classList.contains('active')) {
+              await renderQzonePosts();
+            }
+            continue;
+
+          case 'qzone_comment': {
+            const postToComment = await db.qzonePosts.get(parseInt(msgData.postId));
+            if (postToComment) {
+              if (!postToComment.comments) postToComment.comments = [];
+
+              // 防御：如果模型错误地填了用户的名字，强制纠正为角色本名
+              const userNickname = state.qzoneSettings?.nickname;
+              let commenterName = msgData.name || chat.originalName;
+              if (userNickname && commenterName === userNickname) {
+                console.warn(`[动态防御] 角色 "${chat.originalName}" 试图用用户名字 "${userNickname}" 评论，已纠正`);
+                commenterName = chat.originalName;
+              }
+              const createCommentObject = (text, meaning = null, replyTo = null) => ({
+                commenterName,
+                text: processMentions(text, chat),
+                meaning,
+                replyTo,
+                timestamp: Date.now()
+              });
+
+              if (msgData.stickerMeaning) {
+                const sticker = state.userStickers.find(s => s.name === msgData.stickerMeaning);
+                if (sticker) {
+                  postToComment.comments.push(createCommentObject(sticker.url, sticker.name, msgData.replyTo || null));
+                } else {
+                  console.warn(`AI 尝试评论一个不存在的表情: "${msgData.stickerMeaning}"`);
+                  postToComment.comments.push(createCommentObject(`[表情: ${msgData.stickerMeaning}]`, null, msgData.replyTo || null));
+                }
+              } else if (Array.isArray(msgData.comments)) {
+                msgData.comments.forEach(commentText => {
+                  if (typeof commentText === 'string' && commentText.trim()) {
+                    postToComment.comments.push(createCommentObject(commentText, null, msgData.replyTo || null));
+                  }
+                });
+              } else if (typeof msgData.commentText === 'string' && msgData.commentText.trim()) {
+                postToComment.comments.push(createCommentObject(msgData.commentText, null, msgData.replyTo || null));
+              }
+
+              await db.qzonePosts.update(postToComment.id, {
+                comments: postToComment.comments
+              });
+              updateUnreadIndicator(unreadPostsCount + 1);
+              console.log(`后台活动: 角色 "${chat.name}" 评论了动态 #${msgData.postId}`);
+
+              if (!chat.commentCooldowns) chat.commentCooldowns = {};
+              chat.commentCooldowns[msgData.postId] = Date.now();
+            }
+            continue;
+          }
+          case 'qzone_like':
+            const postToLike = await db.qzonePosts.get(parseInt(msgData.postId));
+            if (postToLike) {
+              if (!postToLike.likes) postToLike.likes = [];
+              if (!postToLike.likes.includes(chat.name)) {
+                postToLike.likes.push(chat.name);
+                await db.qzonePosts.update(postToLike.id, {
+                  likes: postToLike.likes
+                });
+                updateUnreadIndicator(unreadPostsCount + 1);
+                if (isViewingThisChat && document.getElementById('qzone-screen').classList.contains('active')) {
+                  await renderQzonePosts();
+                }
+              }
+            }
+            continue;
+          case 'repost': {
+            const originalPost = await db.qzonePosts.get(parseInt(msgData.postId));
+            if (originalPost) {
+              const newPost = {
+                type: 'repost',
+                timestamp: Date.now(),
+                authorId: chatId,
+                authorGroupId: chat.groupId,
+                repostComment: msgData.comment || '',
+                originalPost: originalPost,
+                visibleGroupIds: null
+              };
+              await db.qzonePosts.add(newPost);
+              updateUnreadIndicator(unreadPostsCount + 1);
+              console.log(`后台活动: 角色 "${chat.name}" 转发了动态 #${msgData.postId}`);
+            }
+            continue;
+          }
+          case 'video_call_request':
+            if (!videoCallState.isActive && !videoCallState.isAwaitingResponse) {
+              state.activeChatId = chatId;
+              videoCallState.activeChatId = chatId;
+              videoCallState.isAwaitingResponse = true;
+              videoCallState.isGroupCall = chat.isGroup;
+              videoCallState.callRequester = msgData.name || chat.name;
+              showIncomingCallModal('video', chat);
+            }
+            continue;
+          case 'voice_call_request':
+            if (!voiceCallState.isActive && !voiceCallState.isAwaitingResponse) {
+              state.activeChatId = chatId;
+              voiceCallState.activeChatId = chatId;
+              voiceCallState.isAwaitingResponse = true;
+              voiceCallState.isGroupCall = chat.isGroup;
+              voiceCallState.callRequester = msgData.name || chat.name;
+              showIncomingCallModal('voice', chat);
+            }
+            continue;
+          case 'group_call_request':
+            if (!videoCallState.isActive && !videoCallState.isAwaitingResponse) {
+              state.activeChatId = chatId;
+              videoCallState.isAwaitingResponse = true;
+              videoCallState.isGroupCall = true;
+              videoCallState.initiator = 'ai';
+              videoCallState.callRequester = msgData.name;
+              showIncomingCallModal('video', chat);
+            }
+            continue;
+          case 'group_voice_request':
+            if (!voiceCallState.isActive && !voiceCallState.isAwaitingResponse) {
+              state.activeChatId = chatId;
+              voiceCallState.isAwaitingResponse = true;
+              voiceCallState.isGroupCall = true;
+              voiceCallState.initiator = 'ai';
+              voiceCallState.callRequester = msgData.name;
+              showIncomingCallModal('voice', chat);
+            }
+            continue;
+          case 'pat_user':
+            let patterName;
+            if (chat.isGroup) {
+              const member = chat.members.find(m => m.originalName === msgData.name);
+              patterName = member ? member.groupNickname : msgData.name;
+            } else {
+              patterName = chat.name;
+            }
+            const suffix = msgData.suffix ? ` ${msgData.suffix.trim()}` : '';
+            const patText = `${patterName} 拍了拍我${suffix}`;
+
+            const patMessage = {
+              role: 'system',
+              type: 'pat_message',
+              content: patText,
+              timestamp: Date.now()
+            };
+            chat.history.push(patMessage);
+            if (isViewingThisChat) {
+              const phoneScreen = document.getElementById('phone-screen');
+              phoneScreen.classList.remove('pat-animation');
+              void phoneScreen.offsetWidth;
+              phoneScreen.classList.add('pat-animation');
+              setTimeout(() => phoneScreen.classList.remove('pat-animation'), 500);
+              appendMessage(patMessage, chat);
+            } else {
+              showNotification(chatId, patText);
+            }
+            continue;
+          case 'update_status':
+            chat.status.text = msgData.status_text;
+            chat.status.isBusy = msgData.is_busy || false;
+            chat.status.lastUpdate = Date.now();
+            const statusUpdateMessage = {
+              role: 'system',
+              type: 'pat_message',
+              content: `[${chat.name}的状态已更新为: ${msgData.status_text}]`,
+              timestamp: Date.now()
+            };
+            chat.history.push(statusUpdateMessage);
+            if (isViewingThisChat) {
+              appendMessage(statusUpdateMessage, chat);
+            }
+            renderChatList();
+            continue;
+          case 'location_share':
+            aiMessage = {
+              ...baseMessage,
+              type: 'location_share',
+              content: msgData.content
+            };
+            break;
+          case 'change_music':
+            if (musicState.isActive && musicState.activeChatId === chatId) {
+              const songNameFromAI = msgData.song_name || msgData.song || msgData.name;
+
+              if (typeof songNameFromAI === 'string' && songNameFromAI.trim()) {
+                const songNameToFind = songNameFromAI.replace(/^\[?\d+\]?[\s.-]*/, '').trim();
+                const targetSongIndex = musicState.playlist.findIndex(track => track.name.toLowerCase() === songNameToFind.toLowerCase());
+
+                if (targetSongIndex > -1) {
+                  playSong(targetSongIndex);
+                  const track = musicState.playlist[targetSongIndex];
+
+                  let changerName;
+                  if (chat.isGroup) {
+                    const member = chat.members.find(m => m.originalName === msgData.name);
+                    changerName = member ? member.groupNickname : msgData.name;
+                  } else {
+                    changerName = chat.name;
+                  }
+
+                  const musicChangeMessage = {
+                    role: 'system',
+                    type: 'pat_message',
+                    content: `[♪ ${changerName} 为你切歌: 《${track.name}》 - ${track.artist}]`,
+                    timestamp: Date.now()
+                  };
+                  chat.history.push(musicChangeMessage);
+                  if (isViewingThisChat) {
+                    appendMessage(musicChangeMessage, chat);
+                  }
+                } else {
+                  console.warn(`歌曲查找失败: AI请求的歌曲名"${songNameFromAI}"(处理后为"${songNameToFind}") 在播放列表中未找到。`);
+                }
+              } else {
+                console.error("AI返回的change_music指令中，歌曲名无效或缺失:", msgData);
+              }
+            }
+            continue;
+          case 'create_memory':
+            const newMemory = {
+              chatId: chatId,
+              authorId: chatId,
+              description: msgData.description,
+              timestamp: Date.now(),
+              type: 'ai_generated'
+            };
+            await db.memories.add(newMemory);
+            console.log(`AI "${chat.name}" 记录了一条新回忆:`, msgData.description);
+            continue;
+          case 'create_countdown':
+            const targetDate = new Date(msgData.date);
+            if (!isNaN(targetDate) && targetDate > new Date()) {
+              const newCountdown = {
+                chatId: chatId,
+                authorId: chatId,
+                description: msgData.title,
+                timestamp: Date.now(),
+                type: 'countdown',
+                targetDate: targetDate.getTime()
+              };
+              await db.memories.add(newCountdown);
+              console.log(`AI "${chat.name}" 创建了一个新约定:`, msgData.title);
+            }
+            continue;
+          case 'block_user':
+            if (!chat.isGroup) {
+              chat.relationship.status = 'blocked_by_ai';
+              const hiddenMessage = {
+                role: 'system',
+                content: `[系统提示：你刚刚主动拉黑了用户。]`,
+                timestamp: Date.now(),
+                isHidden: true
+              };
+              chat.history.push(hiddenMessage);
+              await db.chats.put(chat);
+              if (isViewingThisChat) {
+                renderChatInterface(chatId);
+              }
+              renderChatList();
+              break;
+            }
+            continue;
+          case 'friend_request_response':
+            if (!chat.isGroup && chat.relationship?.status === 'pending_ai_approval') {
+              if (msgData.decision === 'accept') {
+                chat.relationship.status = 'friend';
+                aiMessage = {
+                  ...baseMessage,
+                  content: "我通过了你的好友申请，我们现在是好友啦！"
+                };
+              } else {
+                chat.relationship.status = 'blocked_by_ai';
+                aiMessage = {
+                  ...baseMessage,
+                  content: "抱歉，我拒绝了你的好友申请。"
+                };
+              }
+              chat.relationship.applicationReason = '';
+            }
+            break;
+          case 'poll':
+            const pollOptions = typeof msgData.options === 'string' ?
+              msgData.options.split('\n').filter(opt => opt.trim()) :
+              (Array.isArray(msgData.options) ? msgData.options : []);
+            if (pollOptions.length < 2) continue;
+            aiMessage = {
+              ...baseMessage,
+              type: 'poll',
+              question: msgData.question,
+              options: pollOptions,
+              votes: {},
+              isClosed: false,
+            };
+            break;
+          case 'gift': {
+            const {
+              itemName,
+              itemPrice,
+              image_prompt
+            } = msgData;
+
+            if (itemName && !isNaN(parseFloat(itemPrice)) && image_prompt) {
+
+              const imageUrl = getPollinationsImageUrl(image_prompt);
+
+              aiMessage = {
+                ...baseMessage,
+                type: 'gift',
+                items: [{
+                  name: itemName,
+                  price: parseFloat(itemPrice),
+                  imageUrl: imageUrl,
+                  quantity: 1
+                }],
+                total: parseFloat(itemPrice),
+                recipients: msgData.recipients || null
+              };
+            } else {
+              console.warn(`AI 尝试赠送一个格式不正确的随机礼物:`, msgData);
+            }
+            break;
+          }
+          case 'vote':
+            const pollToVote = chat.history.find(m => m.timestamp === msgData.poll_timestamp);
+            if (pollToVote && !pollToVote.isClosed) {
+              Object.keys(pollToVote.votes).forEach(option => {
+                const voterIndex = pollToVote.votes[option].indexOf(msgData.name);
+                if (voterIndex > -1) {
+                  pollToVote.votes[option].splice(voterIndex, 1);
+                }
+              });
+              if (!pollToVote.votes[msgData.choice]) {
+                pollToVote.votes[msgData.choice] = [];
+              }
+              if (!pollToVote.votes[msgData.choice].includes(msgData.name)) {
+                pollToVote.votes[msgData.choice].push(msgData.name);
+              }
+              if (isViewingThisChat) {
+                renderChatInterface(chatId);
+              }
+            }
+            continue;
+          case 'red_packet':
+            aiMessage = {
+              ...baseMessage,
+              ...msgData,
+              totalAmount: msgData.amount,
+              claimedBy: {},
+              isFullyClaimed: false
+            };
+
+
+            if (aiMessage.packetType === 'lucky') {
+              const allocatedAmounts = generateRandomPacketAmounts(aiMessage.amount, aiMessage.count);
+              aiMessage.allocatedAmounts = allocatedAmounts;
+              aiMessage.unclaimedAmounts = [...allocatedAmounts];
+            }
+
+
+            if (msgData.receiver) {
+              aiMessage.receiverName = msgData.receiver;
+              delete aiMessage.receiver;
+            }
+            break;
+          case 'open_red_packet':
+            const packetToOpen = chat.history.find(m => m.timestamp === msgData.packet_timestamp);
+
+            const claimerOriginalName = msgData.name;
+            const isMember = chat.members.some(member => member.originalName === claimerOriginalName);
+
+
+            if (!isMember) {
+              console.warn(`AI 角色 "${claimerOriginalName}" 尝试领取不属于自己的群聊红包。操作已被拦截。`);
+              continue;
+            }
+
+            if (packetToOpen && packetToOpen.packetType === 'direct') {
+              if (packetToOpen.receiverName !== msgData.name) {
+                console.warn(`AI 角色 "${msgData.name}" 尝试领取不属于自己的专属红包 (接收人: ${packetToOpen.receiverName})。操作已被拦截。`);
+                continue;
+              }
+            }
+
+            if (packetToOpen && !packetToOpen.isFullyClaimed && !(packetToOpen.claimedBy && packetToOpen.claimedBy[msgData.name])) {
+              let claimedAmountAI = 0;
+              const remainingAmount = packetToOpen.totalAmount - Object.values(packetToOpen.claimedBy || {}).reduce((sum, val) => sum + val, 0);
+              const remainingCount = packetToOpen.count - Object.keys(packetToOpen.claimedBy || {}).length;
+              if (remainingCount > 0) {
+                if (packetToOpen.packetType === 'direct') {
+                  claimedAmountAI = packetToOpen.totalAmount;
+                }
+
+                else if (packetToOpen.unclaimedAmounts && packetToOpen.unclaimedAmounts.length > 0) {
+
+                  claimedAmountAI = packetToOpen.unclaimedAmounts.pop();
+                }
+
+                else {
+                  console.warn("检测到旧版红包，回退到旧的（不公平）随机算法 (triggerAiResponse)");
+                  const remainingAmount = packetToOpen.totalAmount - Object.values(packetToOpen.claimedBy || {}).reduce((sum, val) => sum + val, 0);
+                  if (remainingCount === 1) {
+                    claimedAmountAI = remainingAmount;
+                  } else {
+                    const min = 0.01;
+                    const max = remainingAmount - (remainingCount - 1) * min;
+                    claimedAmountAI = Math.random() * (max - min) + min;
+                  }
+                }
+
+                claimedAmountAI = parseFloat(claimedAmountAI.toFixed(2));
+                if (!packetToOpen.claimedBy) packetToOpen.claimedBy = {};
+                packetToOpen.claimedBy[msgData.name] = claimedAmountAI;
+
+
+                const claimerMember = chat.members.find(m => m.originalName === msgData.name);
+                const claimerDisplayName = claimerMember ? claimerMember.groupNickname : msgData.name;
+
+
+                const senderDisplayName = getDisplayNameInGroup(chat, packetToOpen.senderName);
+
+                const aiClaimedMessage = {
+                  role: 'system',
+                  type: 'pat_message',
+                  content: `${claimerDisplayName} 领取了 ${senderDisplayName} 的红包`,
+                  timestamp: messageTimestamp++
+                };
+                chat.history.push(aiClaimedMessage);
+
+                let hiddenContentForAI = `[系统提示：你 (${claimerDisplayName}) 成功抢到了 ${claimedAmountAI.toFixed(2)} 元。`;
+                if ((packetToOpen.unclaimedAmounts && packetToOpen.unclaimedAmounts.length === 0) || (Object.keys(packetToOpen.claimedBy).length >= packetToOpen.count)) {
+                  packetToOpen.isFullyClaimed = true;
+                  const finishedMessage = {
+                    role: 'system',
+                    type: 'pat_message',
+                    content: `${senderDisplayName} 的红包已被领完`,
+                    timestamp: messageTimestamp++
+                  };
+                  chat.history.push(finishedMessage);
+                  let luckyKing = {
+                    name: '',
+                    amount: -1
+                  };
+                  if (packetToOpen.packetType === 'lucky' && packetToOpen.count > 1) {
+                    Object.entries(packetToOpen.claimedBy).forEach(([name, amount]) => {
+                      if (amount > luckyKing.amount) {
+                        luckyKing = {
+                          name,
+                          amount
+                        };
+                      }
+                    });
+                  }
+                  if (luckyKing.name) {
+                    const luckyKingMember = chat.members.find(m => m.originalName === luckyKing.name);
+                    const luckyKingDisplayName = luckyKingMember ? luckyKingMember.groupNickname : luckyKing.name;
+                    hiddenContentForAI += ` 红包已被领完，手气王是 ${luckyKingDisplayName}！`;
+                  } else {
+                    hiddenContentForAI += ` 红包已被领完。`;
+                  }
+                }
+                hiddenContentForAI += ' 请根据这个结果发表你的评论。]';
+                const hiddenMessageForAI = {
+                  role: 'system',
+                  content: hiddenContentForAI,
+                  timestamp: messageTimestamp++,
+                  isHidden: true
+                };
+                chat.history.push(hiddenMessageForAI);
+              }
+              if (isViewingThisChat) {
+                renderChatInterface(chatId);
+                renderChatList();
+              }
+            }
+            continue;
+
+          case 'accept_transfer': {
+            const originalTransferMsgIndex = chat.history.findIndex(m => m.timestamp === msgData.for_timestamp);
+            if (originalTransferMsgIndex > -1) {
+              const originalMsg = chat.history[originalTransferMsgIndex];
+
+              // 防止重复接收
+              if (originalMsg.status && originalMsg.status !== 'pending') continue;
+
+              originalMsg.status = 'accepted';
+
+              // ★★★ 新增：构造 AI 的“已收款”消息 ★★★
+              aiMessage = {
+                role: 'assistant',
+                senderName: msgData.name || chat.name,
+                type: 'transfer',
+                isReceived: true,  // 标记为收款
+                amount: originalMsg.amount,
+                currency: originalMsg.currency || 'CNY',
+                note: '已收款',
+                timestamp: messageTimestamp++
+              };
+              
+              if (isViewingThisChat) {
+                const bubble = document.querySelector(`.message-bubble[data-timestamp="${msgData.for_timestamp}"]`);
+                if (bubble) {
+                  const noteEl = bubble.querySelector('.transfer-note');
+                  if (noteEl) noteEl.textContent = '对方已收款';
+                }
+              }
+              // 去掉 continue，让它流转到下方的统一推送逻辑(if aiMessage...)
+              break;
+            }
+            continue;
+          }
+
+          case 'decline_transfer': {
+            const originalTransferMsgIndex = chat.history.findIndex(m => m.timestamp === msgData.for_timestamp);
+            if (originalTransferMsgIndex > -1) {
+              const originalMsg = chat.history[originalTransferMsgIndex];
+
+              // --- 修复：如果已经处理过，直接忽略 ---
+              if (originalMsg.status && originalMsg.status !== 'pending') {
+                console.warn(`AI试图重复拒收一笔已处理的转账 (状态: ${originalMsg.status})，已拦截。`);
+                continue;
+              }
+
+              originalMsg.status = 'declined';
+              await processTransaction(originalMsg.amount, 'income', `转账退款-${chat.name}`);
+              const refundMessage = {
+                role: 'assistant',
+                senderName: chat.name,
+                type: 'transfer',
+                isRefund: true, // 确保标记为退款
+                amount: originalMsg.amount,
+                currency: originalMsg.currency || 'CNY',
+                note: '转账已被拒收',
+                receiverName: '我', // 明确接收人
+                timestamp: messageTimestamp++
+              };
+              chat.history.push(refundMessage);
+              if (isViewingThisChat) {
+                const bubble = document.querySelector(`.message-bubble[data-timestamp="${msgData.for_timestamp}"]`);
+                if (bubble) {
+                  const noteEl = bubble.querySelector('.transfer-note');
+                  if (noteEl) noteEl.textContent = '对方已拒收';
+                }
+                appendMessage(refundMessage, chat);
+              }
+            }
+            continue;
+          }
+          case 'change_group_name':
+            if (chat.isGroup && msgData.new_name) {
+              const newName = msgData.new_name.trim();
+              const memberNames = chat.members.map(m => m.originalName);
+
+              if (memberNames.includes(newName)) {
+                console.warn(`AI (${msgData.name}) 试图将群名更改为成员名 ("${newName}")。操作已被程序阻止。`);
+                continue;
+              }
+
+              chat.name = newName;
+
+              const changerMember = chat.members.find(m => m.originalName === msgData.name);
+              const changerDisplayName = changerMember ? changerMember.groupNickname : msgData.name;
+
+              const systemMessage = {
+                role: 'system',
+                type: 'pat_message',
+                content: `${changerDisplayName} 将群名修改为 “${chat.name}”`,
+                timestamp: messageTimestamp++
+              };
+              chat.history.push(systemMessage);
+
+              if (isViewingThisChat) {
+                appendMessage(systemMessage, chat);
+                document.getElementById('chat-header-title').textContent = chat.name;
+              }
+            }
+            continue;
+          case 'change_remark_name':
+            if (!chat.isGroup && msgData.new_name) {
+              const oldName = chat.name;
+              const newName = msgData.new_name.trim();
+
+              if (newName && newName !== oldName) {
+                if (!chat.nameHistory) {
+                  chat.nameHistory = [];
+                }
+                if (!chat.nameHistory.includes(oldName)) {
+                  chat.nameHistory.push(oldName);
+                }
+
+                chat.name = newName;
+
+                const systemMessage = {
+                  role: 'system',
+                  type: 'pat_message',
+                  content: `“${chat.originalName}” 将备注修改为 “${newName}”`,
+                  timestamp: messageTimestamp++
+                };
+                chat.history.push(systemMessage);
+
+                const hiddenMemoryMessage = {
+                  role: 'system',
+                  content: `[系统提示：你刚刚成功将自己的备注名修改为了“${newName}”。请自然地接受这个新名字，不要对此感到惊讶。]`,
+                  timestamp: messageTimestamp++,
+                  isHidden: true
+                };
+                chat.history.push(hiddenMemoryMessage);
+
+                if (isViewingThisChat) {
+                  appendMessage(systemMessage, chat);
+                  document.getElementById('chat-header-title').textContent = newName;
+                }
+
+                await syncCharacterNameInGroups(chat);
+              }
+            }

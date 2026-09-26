@@ -1,0 +1,426 @@
+           /* --- 渲染规则绑定范围美化 --- */
+
+           /* 1. 容器美化：纯白清爽分组卡片 */
+           #rule-scope-checkboxes {
+               max-height: 250px;
+               overflow-y: auto;
+               background-color: #ffffff !important;
+               /* 适配纯白风格 */
+               border: 1px solid rgba(0, 0, 0, 0.08) !important;
+               border-radius: 12px;
+               padding: 6px;
+               margin-top: 5px;
+               display: flex;
+               flex-direction: column;
+               gap: 4px;
+           }
+
+           /* 2. 单行列表项美化 */
+           .rule-scope-item {
+               display: flex;
+               align-items: center;
+               padding: 8px 10px;
+               border-radius: 8px;
+               cursor: pointer;
+               background-color: #ffffff;
+               border: 1px solid rgba(0, 0, 0, 0.04);
+               transition: all 0.2s ease;
+               user-select: none;
+           }
+
+           /* 悬停和点击效果 */
+           .rule-scope-item:hover {
+               background-color: #f8fafc;
+               border-color: rgba(0, 122, 255, 0.2);
+           }
+
+           .rule-scope-item:active {
+               background-color: #f1f5f9;
+           }
+
+           /* 3. 复选框美化：变大一点，并增加右边距 */
+           .rule-scope-item input[type="checkbox"] {
+               appearance: none;
+               /* 移除默认样式 */
+               -webkit-appearance: none;
+               width: 22px;
+               height: 22px;
+               border: 2px solid #c7c7cc;
+               border-radius: 50%;
+               /* 圆形复选框，像选择列表 */
+               margin-right: 12px;
+               position: relative;
+               transition: all 0.2s;
+               flex-shrink: 0;
+           }
+
+           /* 选中状态 */
+           .rule-scope-item input[type="checkbox"]:checked {
+               background-color: var(--accent-color);
+               border-color: var(--accent-color);
+           }
+
+           /* 选中时的对勾 */
+           .rule-scope-item input[type="checkbox"]:checked::after {
+               content: '✔';
+               font-size: 14px;
+               color: white;
+               position: absolute;
+               top: 50%;
+               left: 50%;
+               transform: translate(-50%, -50%);
+               font-weight: bold;
+           }
+
+           /* 4. 头像样式 */
+           .rule-scope-avatar {
+               width: 36px;
+               height: 36px;
+               border-radius: 50%;
+               object-fit: cover;
+               margin-right: 12px;
+               border: 1px solid rgba(0, 0, 0, 0.1);
+               flex-shrink: 0;
+           }
+
+           /* 公用图标的特殊样式 */
+           .rule-scope-icon-box {
+               width: 36px;
+               height: 36px;
+               border-radius: 50%;
+               background-color: #007aff;
+               /* 蓝色背景 */
+               color: white;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               margin-right: 12px;
+               font-size: 18px;
+               flex-shrink: 0;
+           }
+
+           /* 5. 文字排版 */
+           .rule-scope-info {
+               display: flex;
+               flex-direction: column;
+               flex-grow: 1;
+               overflow: hidden;
+           }
+
+           .rule-scope-name {
+               font-size: 15px;
+               font-weight: 500;
+               color: var(--text-primary);
+               white-space: nowrap;
+               overflow: hidden;
+               text-overflow: ellipsis;
+           }
+
+           .rule-scope-desc {
+               font-size: 12px;
+               color: var(--text-secondary);
+           }
+
+           /* 暗黑模式适配 */
+           #phone-screen.dark-mode #rule-scope-checkboxes {
+               background-color: #1c1c1e;
+               border-color: #38383a;
+           }
+
+           #phone-screen.dark-mode .rule-scope-item:hover {
+               background-color: rgba(255, 255, 255, 0.1);
+           }
+
+           /* --- 渲染规则顶栏与下拉菜单美化 --- */
+           #rendering-rules-screen .header {
+               position: relative;
+               display: flex;
+               align-items: center;
+               justify-content: space-between;
+           }
+
+           #rendering-rules-screen .header > span[data-lang-key="homeAppRenderer"],
+           #rendering-rules-screen .header > span:nth-child(2) {
+               position: absolute;
+               left: 50%;
+               transform: translateX(-50%);
+               max-width: calc(100% - 160px);
+               white-space: nowrap;
+               overflow: hidden;
+               text-overflow: ellipsis;
+               pointer-events: none;
+               font-weight: 600;
+           }
+
+           #rendering-rules-screen .header-actions {
+               display: flex;
+               align-items: center;
+               gap: 8px;
+               z-index: 2;
+           }
+
+           .rules-more-wrapper {
+               position: relative;
+               display: inline-flex;
+           }
+
+           .rules-dropdown-menu {
+               position: absolute;
+               top: calc(100% + 8px);
+               right: 0;
+               min-width: 150px;
+               background: rgba(255, 255, 255, 0.95);
+               backdrop-filter: blur(20px);
+               -webkit-backdrop-filter: blur(20px);
+               border: 1px solid rgba(0, 0, 0, 0.08);
+               box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
+               border-radius: 12px;
+               padding: 6px;
+               z-index: 100;
+               display: flex;
+               flex-direction: column;
+               gap: 2px;
+               transform-origin: top right;
+               animation: rulesMenuFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+           }
+
+           @keyframes rulesMenuFadeIn {
+               from {
+                   opacity: 0;
+                   transform: scale(0.92) translateY(-4px);
+               }
+               to {
+                   opacity: 1;
+                   transform: scale(1) translateY(0);
+               }
+           }
+
+           .rules-dropdown-item {
+               display: flex;
+               align-items: center;
+               gap: 10px;
+               width: 100%;
+               padding: 9px 12px;
+               border: none;
+               background: transparent;
+               border-radius: 8px;
+               font-size: 14px;
+               font-weight: 500;
+               color: var(--text-primary, #1c1c1e);
+               cursor: pointer;
+               text-align: left;
+               transition: background-color 0.15s ease, color 0.15s ease;
+               box-sizing: border-box;
+               user-select: none;
+           }
+
+           .rules-dropdown-item svg {
+               flex-shrink: 0;
+               color: var(--text-secondary, #666);
+               transition: color 0.15s ease;
+           }
+
+           .rules-dropdown-item:hover {
+               background-color: rgba(0, 122, 255, 0.08);
+               color: var(--accent-color, #007aff);
+           }
+
+           .rules-dropdown-item:hover svg {
+               color: var(--accent-color, #007aff);
+           }
+
+           .rules-dropdown-item:active {
+               background-color: rgba(0, 122, 255, 0.15);
+           }
+
+           /* 暗黑模式适配 */
+           #phone-screen.dark-mode .rules-dropdown-menu {
+               background: rgba(36, 36, 38, 0.95);
+               border-color: rgba(255, 255, 255, 0.12);
+               box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+           }
+
+           #phone-screen.dark-mode .rules-dropdown-item {
+               color: #f2f2f7;
+           }
+
+           #phone-screen.dark-mode .rules-dropdown-item svg {
+               color: #a1a1a6;
+           }
+
+           #phone-screen.dark-mode .rules-dropdown-item:hover {
+               background-color: rgba(255, 255, 255, 0.1);
+               color: #fff;
+           }
+
+           #phone-screen.dark-mode .rules-dropdown-item:hover svg {
+               color: #fff;
+           }
+
+           /* --- 渲染规则管理模式样式 --- */
+
+           /* 1. 规则卡片容器调整 */
+           .rule-card {
+               position: relative;
+               /* 为复选框定位 */
+               transition: transform 0.2s ease, border-color 0.2s;
+           }
+
+           /* 2. 隐藏的复选框 */
+           .rule-select-checkbox {
+               position: absolute;
+               top: 15px;
+               right: 15px;
+               width: 22px;
+               height: 22px;
+               border: 2px solid #c7c7cc;
+               border-radius: 50%;
+               appearance: none;
+               -webkit-appearance: none;
+               background-color: transparent;
+               display: none;
+               /* 默认隐藏 */
+               z-index: 5;
+               transition: all 0.2s;
+           }
+
+           /* 3. 选中状态 */
+           .rule-select-checkbox:checked {
+               background-color: var(--accent-color);
+               border-color: var(--accent-color);
+           }
+
+           .rule-select-checkbox:checked::after {
+               content: '✔';
+               color: white;
+               font-size: 14px;
+               position: absolute;
+               top: 50%;
+               left: 50%;
+               transform: translate(-50%, -50%);
+               font-weight: bold;
+           }
+
+           /* 4. 管理模式激活时 */
+           #rules-content-container.management-mode {
+               padding-bottom: 80px;
+               /* 为底部栏留空 */
+           }
+
+           #rules-content-container.management-mode .rule-select-checkbox {
+               display: block;
+               /* 显示复选框 */
+           }
+
+           #rules-content-container.management-mode .rule-card {
+               border-right: 30px solid transparent;
+               /* 稍微挤压一点内容 */
+           }
+
+           #rules-content-container.management-mode .rule-card.selected {
+               background-color: #ffffff !important;
+               border-color: var(--accent-color) !important;
+               box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.2) !important;
+           }
+
+           /* 暗黑模式适配 */
+           #phone-screen.dark-mode #rules-action-bar {
+               background-color: rgba(28, 28, 30, 0.95);
+               border-top-color: #38383a;
+               color: #fff;
+           }
+
+           /* --- START: 聊天图片缩略图与放大样式 --- */
+
+           /* 1. 强制缩小聊天记录中的图片尺寸 */
+           .message-bubble .chat-image {
+               max-width: 140px !important;
+               /* 缩略图最大宽度 */
+               max-height: 180px !important;
+               /* 缩略图最大高度 */
+               width: auto !important;
+               height: auto !important;
+               border-radius: 8px !important;
+               cursor: zoom-in !important;
+               /* 鼠标移上去显示放大图标 */
+               object-fit: cover !important;
+               display: block;
+           }
+
+           /* 2. 简单的全屏放大遮罩层 (不依赖相册组件) */
+           #simple-image-zoom-overlay {
+               position: fixed;
+               top: 0;
+               left: 0;
+               width: 100%;
+               height: 100%;
+               background-color: rgba(0, 0, 0, 0.85);
+               /* 深色半透明背景 */
+               z-index: 99999;
+               /* 保证在最上层 */
+               display: none;
+               /* 默认隐藏 */
+               justify-content: center;
+               align-items: center;
+               opacity: 0;
+               transition: opacity 0.25s ease;
+               /* 渐变动画 */
+               backdrop-filter: blur(5px);
+           }
+
+           #simple-image-zoom-overlay.visible {
+               display: flex;
+               opacity: 1;
+           }
+
+           /* 放大后的图片本体 */
+           #simple-image-zoom-overlay img {
+               max-width: 95%;
+               max-height: 90%;
+               border-radius: 4px;
+               box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+               transform: scale(0.9);
+               transition: transform 0.25s ease;
+               object-fit: contain;
+           }
+
+           #simple-image-zoom-overlay.visible img {
+               transform: scale(1);
+           }
+
+           /* --- END: 聊天图片缩略图与放大样式 --- */
+           /* 通用按钮样式 */
+           .nai-regenerate-btn,
+           .nai-upload-imgbb-btn,
+           .nai-save-local-btn {
+               width: 32px;
+               height: 32px;
+               background-color: rgba(0, 0, 0, 0.6);
+               backdrop-filter: blur(4px);
+               -webkit-backdrop-filter: blur(4px);
+               border: 1px solid rgba(255, 255, 255, 0.3);
+               border-radius: 50%;
+               color: white;
+               cursor: pointer;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               padding: 0;
+               opacity: 0;
+               transition: all 0.2s ease-in-out;
+           }
+
+           /* 悬停显示 */
+           .nai-image-wrapper:hover .nai-regenerate-btn,
+           .nai-image-wrapper:hover .nai-upload-imgbb-btn,
+           .nai-image-wrapper:hover .nai-save-local-btn {
+               opacity: 1;
+           }
+
+           /* 按钮高亮 */
+           .nai-regenerate-btn:hover,
+           .nai-upload-imgbb-btn:hover,
+           .nai-save-local-btn:hover {
+               background-color: rgba(0, 0, 0, 0.85);
+               transform: scale(1.1);
+           }

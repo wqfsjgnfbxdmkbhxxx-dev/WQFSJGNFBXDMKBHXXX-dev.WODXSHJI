@@ -1,0 +1,933 @@
+
+              if (msg.quote) {
+
+                const quotedContent = String(msg.quote.content || '').substring(0, 50);
+
+                contentStr += `(回复 ${msg.quote.senderName} 的消息: "${quotedContent}..."): ${msg.content}`;
+              } else {
+
+                contentStr += msg.content;
+              }
+              if (msg.type === 'user_photo') return {
+                role: 'user',
+                content: `${prefix}[你发送了一张需要AI识别的图片，图片内容是：'${msg.content}']`
+              };
+              if (msg.type === 'voice_message') return {
+                role: 'user',
+                content: `${prefix}[你发送了一条语音消息，内容是：'${msg.content}']`
+              };
+              if (msg.type === 'reddit_share') {
+                const rData = msg.redditData;
+                return {
+                  role: 'user',
+                  content: `${prefix}[分享了一个Reddit帖子]\n标题: ${rData.title}\n来自: ${rData.subreddit}\n内容摘要: ${rData.selftext || '[链接/图片]'}`
+                };
+              }
+              if (msg.type === 'transfer') return {
+                role: 'user',
+                content: `${prefix}[系统提示：你于时间戳 ${msg.timestamp} 向对方发起了转账: ${msg.amount}元, 备注: ${msg.note}。等待对方处理。]`
+              };
+              if (msg.type === 'couple_invite') {
+                const ciStatus = msg.status === 'accepted' ? '对方已接受' : msg.status === 'rejected' ? '对方已拒绝' : '等待对方确认';
+                return {
+                  role: 'user',
+                  content: `${prefix}[系统提示：你向对方发送了情侣空间邀请。状态：${ciStatus}]`
+                };
+              }
+              if (msg.type === 'couple_invite_response') return null;
+              if (msg.type === 'waimai_request') return {
+                role: 'user',
+                content: `${prefix}[系统提示：你于时间戳 ${msg.timestamp} 发起了外卖代付请求，商品是“${msg.productInfo}”，金额是 ${msg.amount} 元。]`
+              };
+              else if (msg.type === 'gift') {
+                const itemsSummary = msg.items.map(item => `${item.name} x${item.quantity}`).join('、 ');
+                let recipientSummary = chat.isGroup ? `送给了 ${msg.recipients.map(name => getDisplayNameInGroup(chat, name)).join('、 ')}` : `送给了 ${chat.name}`;
+                return {
+                  role: 'user',
+                  content: `${prefix}[系统提示：你 ${recipientSummary}，礼物是：${itemsSummary}]`
+                };
+              }
+              if (msg.type === 'couple_invite_response') return null;
+              if (msg.meaning) return {
+                role: 'user',
+                content: `${prefix}[你发送了一个表情，意思是：'${msg.meaning}']`
+              };
+              return {
+                role: msg.role,
+                content: prefix + contentStr
+              };
+            } else if (msg.role === 'assistant') {
+              // 情侣空间响应卡片不需要发给AI
+              if (msg.type === 'couple_invite_response') return null;
+              let assistantMsgObject = {
+                type: msg.type || 'text'
+              };
+              if (msg.actorType === 'pet') {
+                assistantMsgObject.speakerType = 'pet';
+                assistantMsgObject.name = msg.senderName || chat.sharedPet?.name || '小精灵';
+              }
+              if (msg.type === 'sticker') {
+
+                assistantMsgObject.meaning = msg.meaning;
+              } else if (msg.type === 'transfer') {
+                assistantMsgObject.amount = msg.amount;
+                assistantMsgObject.note = msg.note;
+              } else if (msg.type === 'waimai_request') {
+                assistantMsgObject.productInfo = msg.productInfo;
+                assistantMsgObject.amount = msg.amount;
+              } else {
+                if (msg.quote) {
+                  assistantMsgObject.quote_reply = {
+                    target_sender: msg.quote.senderName,
+                    target_content: msg.quote.content,
+                    reply_content: msg.content
+                  };
+                } else {
+                  assistantMsgObject.content = msg.content;
+                }
+              }
+              const assistantContent = JSON.stringify([assistantMsgObject]);
+              return {
+                role: 'assistant',
+                content: `(Timestamp: ${msg.timestamp}) ${assistantContent}`
+              };
+            }
+            return null;
+          }).filter(Boolean);
+
+
+          if (!chat.isGroup && chat.relationship?.status === 'pending_ai_approval') {
+            const contextSummaryForApproval = chat.history
+              .filter(m => !m.isHidden)
+              .slice(-10)
+              .map(msg => {
+                const sender = msg.role === 'user' ? '用户' : chat.name;
+                return `${sender}: ${String(msg.content).substring(0, 50)}...`;
+              })
+              .join('\n');
+            const friendRequestInstruction = {
+              role: 'user',
+              content: `
+        [系统重要指令]
+        用户向你发送了好友申请，理由是：“${chat.relationship.applicationReason}”。
+        作为参考，这是你们之前的最后一段聊天记录：
+        ---
+        ${contextSummaryForApproval}
+        ---
+        请你根据以上所有信息，以及你的人设，使用 friend_request_response 指令，并设置 decision 为 'accept' 或 'reject' 来决定是否通过。
+        `
+            };
+            messagesPayload.push(friendRequestInstruction);
+          }
+        }
+      }
+
+      // ========== 识图API预处理 ==========
+      // 如果配置了独立的识图API，先用识图API识别图片，再把描述文本替代图片发给主API
+      const hasVisionApi = state.apiConfig.visionProxyUrl && state.apiConfig.visionApiKey && state.apiConfig.visionModel;
+      if (hasVisionApi) {
+        for (let i = 0; i < messagesPayload.length; i++) {
+          const msg = messagesPayload[i];
+          if (Array.isArray(msg.content) && msg.content.some(p => p.type === 'image_url')) {
+            try {
+              const imageUrl = msg.content.find(p => p.type === 'image_url')?.image_url?.url;
+              const textParts = msg.content.filter(p => p.type === 'text').map(p => p.text).join(' ');
+              if (imageUrl) {
+                const visionProxyUrl = state.apiConfig.visionProxyUrl;
+                const visionApiKey = state.apiConfig.visionApiKey;
+                const visionModel = state.apiConfig.visionModel;
+                const visionPrompt = '请详细描述这张图片的内容，包括画面中的人物、场景、物体、文字、情绪等信息。';
+                let description = '';
+                const isVisionGemini = visionProxyUrl.includes('generativelanguage');
+                if (isVisionGemini) {
+                  const base64Data = imageUrl.split(',')[1];
+                  const mimeTypeMatch = imageUrl.match(/^data:(.*);base64/);
+                  if (mimeTypeMatch && base64Data) {
+                    const vPayload = { contents: [{ parts: [{ text: visionPrompt }, { inline_data: { mime_type: mimeTypeMatch[1], data: base64Data } }] }] };
+                    const vResp = await fetch(`${visionProxyUrl}/${visionModel}:generateContent?key=${visionApiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(vPayload) });
+                    if (vResp.ok) {
+                      const vData = await vResp.json();
+                      description = getGeminiResponseText(vData) || '';
+                    }
+                  }
+                } else {
+                  const vPayload = { model: visionModel, messages: [{ role: 'user', content: [{ type: 'text', text: visionPrompt }, { type: 'image_url', image_url: { url: imageUrl } }] }], max_tokens: 500 };
+                  const vResp = await fetch(`${visionProxyUrl}/v1/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${visionApiKey}` }, body: JSON.stringify(vPayload) });
+                  if (vResp.ok) {
+                    const vData = await vResp.json();
+                    description = vData.choices?.[0]?.message?.content || '';
+                  }
+                }
+                if (description) {
+                  messagesPayload[i] = { role: msg.role, content: `${textParts} [用户发送了一张图片，图片内容：${description.trim()}]` };
+                  console.log('[识图API] 图片已预处理为文字描述');
+                }
+              }
+            } catch (e) {
+              console.warn('[识图API] 预处理失败，保留原始图片消息:', e);
+            }
+          }
+        }
+      }
+
+      // 按用户在思维链 APP 中配置的位置、深度、顺序和预填开关注入。
+      if (typeof ThoughtChainManager !== 'undefined' && ThoughtChainManager.enabled) {
+          messagesPayload = ThoughtChainManager.injectIntoMessages(messagesPayload);
+      }
+
+      let isGemini = proxyUrl === GEMINI_API_URL;
+      let geminiConfig = toGeminiRequestData(model, apiKey, systemPrompt, messagesPayload)
+
+      // 创建新的 AbortController
+      currentApiController = new AbortController();
+
+      // 显示暂停调用按钮
+      if (stopBtn) {
+        stopBtn.style.display = 'flex';
+        stopBtn.classList.add('active');
+      }
+      const latestMcpUserMessage = [...(chat.history || [])].reverse().find(message =>
+        message && message.role === 'user' && !message.isHidden
+      );
+      const availableMcpTools = window.McpChatOrchestrator
+        ? window.McpChatOrchestrator.createCatalog(chat, latestMcpUserMessage)
+        : [];
+      // 工具调用包含结构化增量；当前聊天流解析器只处理文本，所以 MCP 回合使用非流式请求。
+      const useStream = !isGemini && !!state.globalSettings.enableApiStream && availableMcpTools.length === 0;
+
+      // 记录API请求数据
+      const requestData = {
+        schemaVersion: 2,
+        timestamp: Date.now(),
+        chatId: chatId,
+        chatName: chat.name,
+        model: model,
+        requestSource: 'chat',
+        provider: isGemini ? 'gemini' : 'openai-compatible',
+        systemPrompt: systemPrompt,
+        messages: isGemini ? messagesPayload : [{
+          role: 'system',
+          content: systemPrompt
+        }, ...messagesPayload],
+        temperature: state.globalSettings.apiTemperature || 0.8,
+        ...(state.globalSettings.apiTopPEnabled && state.globalSettings.apiTopP !== undefined ? { top_p: state.globalSettings.apiTopP } : {}),
+        ...(state.globalSettings.apiMaxTokensEnabled && state.globalSettings.apiMaxTokens !== undefined ? { max_tokens: state.globalSettings.apiMaxTokens } : {}),
+        ...(state.globalSettings.apiPresencePenaltyEnabled && state.globalSettings.apiPresencePenalty !== undefined ? { presence_penalty: state.globalSettings.apiPresencePenalty } : {}),
+        ...(state.globalSettings.apiFrequencyPenaltyEnabled && state.globalSettings.apiFrequencyPenalty !== undefined ? { frequency_penalty: state.globalSettings.apiFrequencyPenalty } : {}),
+        stream: useStream,
+        isGemini: isGemini,
+        apiUrl: (() => {
+          const rawUrl = isGemini ? geminiConfig.url : `${proxyUrl}/v1/chat/completions`;
+          try {
+            const safeUrl = new URL(rawUrl, window.location.href);
+            ['key', 'api_key', 'apikey', 'token', 'access_token', 'authorization'].forEach(name => {
+              if (safeUrl.searchParams.has(name)) safeUrl.searchParams.set(name, '[REDACTED]');
+            });
+            return safeUrl.toString();
+          } catch (_) {
+            return String(rawUrl).replace(/([?&](?:key|api_key|apikey|token|access_token|authorization)=)[^&#]*/gi, '$1[REDACTED]');
+          }
+        })()
+      };
+
+      // 回复守护只保存恢复所需元数据，不保存 API Key 或完整提示词。
+      if (window.ReplyTaskStore && (!window.ReplyGuardian || window.ReplyGuardian.settings().enabled)) {
+        try {
+          const latestUserMessage = [...(chat.history || [])].reverse().find(message =>
+            message && message.role === 'user' && !message.isHidden
+          );
+          replyGuardianTaskId = await window.ReplyTaskStore.begin({
+            chatId,
+            chatName: chat.name,
+            model,
+            provider: isGemini ? 'Gemini' : proxyUrl,
+            stream: useStream,
+            userMessageTimestamp: latestUserMessage && latestUserMessage.timestamp,
+            userMessagePreview: latestUserMessage && typeof latestUserMessage.content === 'string'
+              ? latestUserMessage.content
+              : ''
+          });
+        } catch (guardianError) {
+          console.warn('[回复守护] 创建任务记录失败，不影响本次回复:', guardianError);
+        }
+      }
+
+      let response;
+      let aiResponseContent = '';
+      let responsePayload = null;
+      let temporaryStreamMessage = null;
+      let lastStreamRenderAt = 0;
+      let streamRenderPending = false;
+      let streamRenderQueued = false;
+
+      function scheduleStreamRender(force = false) {
+        if (!isViewingThisChat) return;
+
+        const now = Date.now();
+        if (!force && now - lastStreamRenderAt < 120) {
+          return;
+        }
+        if (streamRenderPending) {
+          streamRenderQueued = true;
+          return;
+        }
+
+        lastStreamRenderAt = now;
+        streamRenderPending = true;
+        Promise.resolve(renderChatInterface(chatId))
+          .catch(error => console.warn('流式渲染更新失败:', error))
+          .finally(() => {
+            streamRenderPending = false;
+            if (streamRenderQueued) {
+              streamRenderQueued = false;
+              scheduleStreamRender(true);
+            }
+          });
+      }
+
+      function updateTemporaryStreamMessage(content) {
+        // 关闭视觉上的流式逐字渲染，防止将 JSON 暴露给用户
+        // 仅保留底层的流式 API 调用兼容
+        // 如果以后需要开启，可以配合 JSON 内容提取器一起使用
+        return;
+      }
+
+      async function throwApiError(apiResponse) {
+        let errorMsg = `API 返回错误: ${apiResponse.status} ${apiResponse.statusText}`;
+        try {
+          const errorData = await apiResponse.json();
+          errorMsg += ` - ${errorData?.error?.message || errorData?.message || JSON.stringify(errorData)}`;
+        } catch (jsonError) {
+          errorMsg += ` - 响应内容: ${await apiResponse.text()}`;
+        }
+        throw new Error(errorMsg);
+      }
+
+      async function sendToolAwareRequest(input) {
+        let apiResponse;
+        try {
+          if (isGemini) {
+            const request = toGeminiRequestData(model, apiKey, systemPrompt, input.messages, {
+              tools: input.tools,
+              forceFinal: input.forceFinal
+            });
+            apiResponse = await fetch(request.url, {
+              ...request.data,
+              signal: input.signal
+            });
+          } else {
+            const reqBody = {
+              model,
+              messages: [{ role: 'system', content: systemPrompt }, ...input.messages],
+              temperature: state.globalSettings.apiTemperature || 0.8,
+              stream: false,
+              ...(input.tools.length ? { tools: input.tools, tool_choice: input.forceFinal ? 'none' : 'auto' } : {}),
+              ...(state.globalSettings.apiTopPEnabled && state.globalSettings.apiTopP !== undefined ? { top_p: state.globalSettings.apiTopP } : {}),
+              ...(state.globalSettings.apiMaxTokensEnabled && state.globalSettings.apiMaxTokens !== undefined ? { max_tokens: state.globalSettings.apiMaxTokens } : {}),
+              ...(state.globalSettings.apiPresencePenaltyEnabled && state.globalSettings.apiPresencePenalty !== undefined ? { presence_penalty: state.globalSettings.apiPresencePenalty } : {}),
+              ...(state.globalSettings.apiFrequencyPenaltyEnabled && state.globalSettings.apiFrequencyPenalty !== undefined ? { frequency_penalty: state.globalSettings.apiFrequencyPenalty } : {})
+            };
+            apiResponse = await fetch(`${proxyUrl}/v1/chat/completions`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+              },
+              body: JSON.stringify(reqBody),
+              signal: input.signal
+            });
+          }
+        } catch (networkError) {
+          if (networkError.name === 'AbortError') throw networkError;
+          throw new Error(`网络请求失败: ${networkError.message}`);
+        }
+        response = apiResponse;
+        if (!apiResponse.ok) await throwApiError(apiResponse);
+        const data = await apiResponse.json();
+        responsePayload = data;
+
+        if (isGemini) {
+          const parts = data?.candidates?.[0]?.content?.parts || [];
+          const toolCalls = parts
+            .filter(part => part && part.functionCall)
+            .map((part, index) => ({
+              id: `gemini_call_${Date.now()}_${index}`,
+              name: part.functionCall.name,
+              arguments: part.functionCall.args || {}
+            }));
+          return {
+            text: parts.map(part => part && part.text || '').join(''),
+            toolCalls
+          };
+        }
+
+        const message = data?.choices?.[0]?.message || {};
+        return {
+          text: typeof message.content === 'string' ? message.content : '',
+          assistantMessage: message,
+          toolCalls: (message.tool_calls || []).map(call => ({
+            id: call.id,
+            name: call.function && call.function.name,
+            arguments: call.function && call.function.arguments
+          }))
+        };
+      }
+
+      if (availableMcpTools.length && window.McpChatOrchestrator) {
+        aiResponseContent = await window.McpChatOrchestrator.run({
+          chat,
+          messages: messagesPayload,
+          signal: currentApiController.signal,
+          send: sendToolAwareRequest
+        });
+      } else {
+        try {
+          let reqBody = {
+              model: model,
+              messages: [{
+                  role: 'system',
+                  content: systemPrompt
+              }, ...messagesPayload],
+              temperature: state.globalSettings.apiTemperature || 0.8,
+              stream: useStream,
+              ...(state.globalSettings.apiTopPEnabled && state.globalSettings.apiTopP !== undefined ? { top_p: state.globalSettings.apiTopP } : {}),
+              ...(state.globalSettings.apiMaxTokensEnabled && state.globalSettings.apiMaxTokens !== undefined ? { max_tokens: state.globalSettings.apiMaxTokens } : {}),
+              ...(state.globalSettings.apiPresencePenaltyEnabled && state.globalSettings.apiPresencePenalty !== undefined ? { presence_penalty: state.globalSettings.apiPresencePenalty } : {}),
+              ...(state.globalSettings.apiFrequencyPenaltyEnabled && state.globalSettings.apiFrequencyPenalty !== undefined ? { frequency_penalty: state.globalSettings.apiFrequencyPenalty } : {})
+          };
+          response = isGemini ?
+            await fetch(geminiConfig.url, {
+              ...geminiConfig.data,
+              signal: currentApiController.signal
+            }) :
+            await fetch(`${proxyUrl}/v1/chat/completions`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+              },
+              body: JSON.stringify(reqBody),
+              signal: currentApiController.signal
+            });
+        } catch (networkError) {
+          if (networkError.name === 'AbortError') throw networkError;
+          throw new Error(`网络请求失败: ${networkError.message}`);
+        }
+        if (!response.ok) await throwApiError(response);
+        if (useStream) {
+          aiResponseContent = await readOpenAiStreamResponse(response, streamedText => {
+            updateTemporaryStreamMessage(streamedText);
+          });
+          responsePayload = { stream: true, content: aiResponseContent };
+        } else {
+          const data = await response.json();
+          aiResponseContent = getGeminiResponseText(data);
+          responsePayload = data;
+        }
+      }
+
+      if (replyGuardianTaskId && window.ReplyTaskStore) {
+        window.ReplyTaskStore.setStage(replyGuardianTaskId, 'receiving', '正在接收回复').catch(() => {});
+      }
+
+      if (replyGuardianTaskId && window.ReplyTaskStore) {
+        await safelyUpdateReplyGuardian(() => window.ReplyTaskStore.saveResponse(replyGuardianTaskId, aiResponseContent));
+      }
+
+      // 记录API响应数据
+      const responseData = {
+        ...requestData,
+        responseTimestamp: Date.now(),
+        responseData: responsePayload,
+        aiResponseContent: aiResponseContent,
+        responseStatus: response.status,
+        responseStatusText: response.statusText
+      };
+      responseData.durationMs = responseData.responseTimestamp - responseData.timestamp;
+
+      // 方案4：只有在全局设置中启用API历史记录时才保存
+      if (state.globalSettings.enableApiHistory) {
+        // 保存到聊天的API历史中
+        if (!chat.apiHistory) {
+          chat.apiHistory = [];
+        }
+        chat.apiHistory.push(responseData);
+
+        // 限制历史记录数量，只保留最近50条
+        if (chat.apiHistory.length > 50) {
+          chat.apiHistory = chat.apiHistory.slice(-50);
+        }
+      }
+
+      // 保存到数据库
+      await db.chats.put(chat);
+
+      lastRawAiResponse = aiResponseContent;
+      lastResponseTimestamps = [];
+      chat.history = chat.history.filter(msg => !msg.isTemporary);
+      const messagesArray = parseAiResponse(aiResponseContent);
+      if (replyGuardianTaskId && window.ReplyTaskStore) {
+        window.ReplyTaskStore.setStage(replyGuardianTaskId, 'applying', '正在写入聊天').catch(() => {});
+      }
+
+      let consolidatedMessages = [];
+      if (chat.settings.isOfflineMode && !messagesArray.some(message => message?.speakerType === 'pet')) {
+
+        let offlineBuffer = {
+          content: [],
+          dialogue: [],
+          description: []
+        };
+
+        for (const msgData of messagesArray) {
+          if (msgData.type === 'offline_text') {
+
+            if (msgData.content) {
+              offlineBuffer.content.push(msgData.content);
+            } else {
+              if (msgData.dialogue) offlineBuffer.dialogue.push(msgData.dialogue);
+              if (msgData.description) offlineBuffer.description.push(msgData.description);
+            }
+          } else {
+
+            if (offlineBuffer.content.length > 0 || offlineBuffer.dialogue.length > 0 || offlineBuffer.description.length > 0) {
+              if (offlineBuffer.content.length > 0) {
+                consolidatedMessages.push({
+                  type: 'offline_text',
+                  content: offlineBuffer.content.join('\n')
+                });
+              }
+              if (offlineBuffer.dialogue.length > 0 || offlineBuffer.description.length > 0) {
+                consolidatedMessages.push({
+                  type: 'offline_text',
+                  dialogue: offlineBuffer.dialogue.join('\n'),
+                  description: offlineBuffer.description.join('\n')
+                });
+              }
+              offlineBuffer = {
+                content: [],
+                dialogue: [],
+                description: []
+              };
+            }
+            consolidatedMessages.push(msgData);
+          }
+        }
+
+
+        if (offlineBuffer.content.length > 0) {
+          consolidatedMessages.push({
+            type: 'offline_text',
+            content: offlineBuffer.content.join('\n')
+          });
+        }
+        if (offlineBuffer.dialogue.length > 0 || offlineBuffer.description.length > 0) {
+          consolidatedMessages.push({
+            type: 'offline_text',
+            dialogue: offlineBuffer.dialogue.join('\n'),
+            description: offlineBuffer.description.join('\n')
+          });
+        }
+
+      } else {
+        consolidatedMessages = messagesArray;
+      }
+
+
+
+
+      const lastUserMessage = chat.history.filter(m => m.role === 'user' && !m.isHidden).pop();
+      if (lastUserMessage &&
+        Array.isArray(lastUserMessage.content) &&
+        lastUserMessage.content[0]?.type === 'image_url' &&
+        !lastUserMessage.imageProcessed) {
+
+        const firstTextResponse = messagesArray.find(msg => msg.type === 'text');
+        let description;
+        if (firstTextResponse && (firstTextResponse.content || firstTextResponse.message)) {
+          description = String(firstTextResponse.content || firstTextResponse.message).trim();
+        } else {
+          description = "AI已接收并理解了该图片的内容。";
+        }
+
+        const imageMessageIndex = chat.history.findIndex(m => m.timestamp === lastUserMessage.timestamp);
+
+        if (imageMessageIndex > -1) {
+          console.log(`识图优化：正在将时间戳为 ${lastUserMessage.timestamp} 的图片消息替换为文字描述...`);
+
+          const replacementText = `[系统提示：用户之前发送了一张图片，AI对图片的首次回应（摘要）是：“${description}”]`;
+
+          // =========== 修改开始 (注释掉下面这两行) ===========
+
+          // chat.history[imageMessageIndex].content = replacementText; // <--- 注释掉这行，不要替换原本的图片内容
+
+          chat.history[imageMessageIndex].imageProcessed = true; // 保留这行，标记已处理，防止重复识别
+          chat.history[imageMessageIndex].imageDescription = description; // 保存AI对图片的描述，用于Token优化
+
+          // chat.history[imageMessageIndex].type = 'text'; // <--- 注释掉这行，不要改变消息类型
+
+          // =========== 修改结束 ===========
+        }
+      }
+
+      isViewingThisChat = document.getElementById('chat-interface-screen').classList.contains('active') && state.activeChatId === chatId;
+      let callHasBeenHandled = false;
+      let messageTimestamp = Date.now();
+      let newMessagesToRender = [];
+      let notificationShown = false;
+      /** 用于兜底：从本轮的 thought_chain 中取第一个出现的群成员本名，缺 name 时优先用其补全 */
+      let lastThoughtChainName = null;
+
+      for (const msgData of consolidatedMessages) {
+        if (msgData.type === 'thought_chain') {
+          if (chat.isGroup && msgData.character_thoughts && typeof msgData.character_thoughts === 'object') {
+            const firstKey = Object.keys(msgData.character_thoughts)[0];
+            if (firstKey && chat.members && chat.members.some(m => m.originalName === firstKey)) lastThoughtChainName = firstKey;
+          }
+          continue; // 直接跳过，不执行任何保存操作
+        }
+        if (chat.settings.enableTts !== false && msgData.type === 'text' && typeof msgData.content === 'string' && msgData.content.trim().startsWith('[V]')) {
+          msgData.type = 'voice_message';
+          msgData.content = msgData.content.replace('[V]', '').trim();
+        }
+        if (chat.isGroup && msgData.name && msgData.name === chat.name) {
+          console.error(`AI幻觉已被拦截！试图使用群名 ("${chat.name}") 作为角色名。消息内容:`, msgData);
+          continue;
+        }
+        if (!msgData || typeof msgData !== 'object') {
+          console.warn("收到了格式不规范的AI指令，已跳过:", msgData);
+          continue;
+        }
+        if (!msgData.type) {
+          if (chat.isGroup && msgData.name && msgData.message) {
+            msgData.type = 'text';
+          } else if (msgData.content) {
+            msgData.type = 'text';
+          } else {
+            console.warn("收到了格式不规范的AI指令（缺少type和content），已跳过:", msgData);
+            continue;
+          }
+        }
+
+        if (window.CharacterBond && !window.CharacterBond.isAllowedPetMessage(msgData, chat)) {
+          console.warn('已拦截共同宠物无权执行的指令:', msgData.type);
+          continue;
+        }
+
+        if (msgData.type === 'video_call_response') {
+          videoCallState.isAwaitingResponse = false;
+          if (msgData.decision === 'accept') {
+            startVideoCall();
+          } else {
+            const aiMessage = {
+              role: 'assistant',
+              content: '对方拒绝了你的视频通话请求。',
+              timestamp: Date.now()
+            };
+            chat.history.push(aiMessage);
+            await db.chats.put(chat);
+            showScreen('chat-interface-screen');
+            renderChatInterface(chatId);
+          }
+          callHasBeenHandled = true;
+          break;
+        }
+
+        if (msgData.type === 'voice_call_response') {
+          voiceCallState.isAwaitingResponse = false;
+          if (msgData.decision === 'accept') {
+            startVoiceCall();
+          } else {
+            const aiMessage = {
+              role: 'assistant',
+              content: '对方拒绝了你的语音通话请求。',
+              timestamp: Date.now()
+            };
+            chat.history.push(aiMessage);
+            await db.chats.put(chat);
+            showScreen('chat-interface-screen');
+            renderChatInterface(chatId);
+          }
+          callHasBeenHandled = true;
+          break;
+        }
+
+        if (msgData.type === 'group_call_response') {
+          if (msgData.decision === 'join') {
+            const member = chat.members.find(m => m.originalName === msgData.name);
+            if (member && !videoCallState.participants.some(p => p.id === member.id)) {
+              videoCallState.participants.push(member);
+            }
+          }
+          callHasBeenHandled = true;
+          continue;
+        }
+
+        if (chat.isGroup && msgData.name && msgData.name === chat.name) {
+          console.error(`AI幻觉已被拦截！试图使用群名 ("${chat.name}") 作为角色名。消息内容:`, msgData);
+          continue;
+        }
+
+        if (chat.isGroup && !msgData.name && msgData.type !== 'narration') {
+          if (chat.members && chat.members.length > 0) {
+            const fallbackName = lastThoughtChainName && chat.members.some(m => m.originalName === lastThoughtChainName) ? lastThoughtChainName : chat.members[0].originalName;
+            msgData.name = fallbackName;
+            console.warn(`[群聊兜底] 消息缺少 name，已自动补全为: ${fallbackName}`, msgData);
+          } else {
+            console.error(`AI幻觉已被拦截！试图在群聊中发送一条没有“name”的消息。消息内容:`, msgData);
+            continue;
+          }
+        }
+
+        // 纠正AI可能返回群昵称而非本名的问题
+        if (chat.isGroup && msgData.name) {
+          const exactMember = chat.members.find(m => m.originalName === msgData.name);
+          if (!exactMember) {
+            const nicknameMember = chat.members.find(m => m.groupNickname === msgData.name);
+            if (nicknameMember) {
+              msgData.name = nicknameMember.originalName;
+            }
+          }
+        }
+
+        let aiMessage = null;
+        const currentMessageTimestamp = messageTimestamp++;
+        let baseMessage = {
+          role: 'assistant',
+          senderName: msgData.name || chat.name,
+          timestamp: currentMessageTimestamp
+        };
+        if (window.CharacterBond && !chat.isGroup) {
+          baseMessage = window.CharacterBond.decorateAssistantBase(baseMessage, msgData, chat);
+        }
+
+        lastResponseTimestamps.push(currentMessageTimestamp);
+
+        if (msgData.type === 'ai_image') {
+          if (localStorage.getItem('novelai-enabled') === 'true') {
+            msgData.type = 'naiimag';
+            msgData.prompt = msgData.image_prompt || msgData.description || 'a beautiful scene';
+          } else if (localStorage.getItem('google-imagen-enabled') === 'true') {
+            msgData.type = 'googleimag';
+            msgData.prompt = msgData.image_prompt || msgData.description || 'a beautiful scene';
+          } else if (localStorage.getItem('openai-image-enabled') === 'true') {
+            msgData.type = 'openaiimag';
+            msgData.prompt = msgData.image_prompt || msgData.description || 'A beautiful scene';
+          }
+        }
+
+        switch (msgData.type) {
+          case 'add_todo': {
+            if (!chat.settings.enableTodoList) continue;
+
+            const todoContent = msgData.content;
+            const todoDate = msgData.date || new Date().toISOString().split('T')[0];
+            const todoTime = msgData.time || '';
+            const todoType = msgData.task_type || '日常';
+
+
+            const todoStatus = (msgData.status === 'completed') ? 'completed' : 'pending';
+
+            if (todoContent) {
+              if (!chat.todoList) chat.todoList = [];
+
+              const newTodo = {
+                id: Date.now() + Math.random(),
+                content: todoContent,
+                date: todoDate,
+                time: todoTime,
+                type: todoType,
+
+                status: todoStatus, // <--- 这里使用变量
+
+                creator: 'char',
+                timestamp: Date.now()
+              };
+
+              chat.todoList.push(newTodo);
+
+              // (可选) 如果是已完成的任务，系统提示也可以稍微变一下
+              const actionText = todoStatus === 'completed' ? '记录了一条已完成事项' : '为你添加了待办';
+              visibleSystemMessage = {
+                content: `[${chat.name} ${actionText}: "${todoContent}"]`
+              };
+
+              console.log(`AI 添加事项: ${todoContent}, 状态: ${todoStatus}`);
+            }
+            break;
+          }
+          case 'narration':
+            aiMessage = {
+              role: 'system', // 强制设为 system 角色以便居中显示
+              type: 'narration',
+              content: msgData.content,
+              senderName: '旁白',
+              timestamp: messageTimestamp++ // 【修复】这里必须用 messageTimestamp
+            };
+            break;
+          case 'synth_music':
+
+            if (!chat.settings.enableSynthMusic) {
+              continue;
+            }
+
+
+            aiMessage = {
+              ...baseMessage, // 继承基础属性 (role, timestamp等)
+              type: 'synth_music',
+              // 确保群聊时名字正确 (优先用AI返回的名字)
+              senderName: msgData.name || chat.originalName,
+              title: msgData.title || '即兴旋律',
+              reason: msgData.reason || '',
+              instrument: msgData.instrument || 'piano',
+              notes: msgData.notes || []
+            };
+
+
+            break;
+          case 'buy_item': {
+            const itemName = msgData.item_name;
+            const price = parseFloat(msgData.price);
+            const reason = msgData.reason || '想买';
+
+            if (!itemName || isNaN(price) || price <= 0) continue; // 数据无效跳过
+
+            // 1. 重新获取钱包数据（确保实时性）
+            const currentWallet = await db.userWallet.get('main');
+            const cardIndex = currentWallet?.kinshipCards?.findIndex(c => c.chatId === chat.id);
+
+            if (cardIndex > -1) {
+              const card = currentWallet.kinshipCards[cardIndex];
+              const remaining = card.limit - (card.spent || 0);
+
+              if (remaining >= price) {
+                // 2. 执行扣款
+                currentWallet.kinshipCards[cardIndex].spent = (card.spent || 0) + price;
+                await db.userWallet.put(currentWallet);
+
+                // 3. 记录账单
+                await db.userTransactions.add({
+                  timestamp: Date.now(),
+                  type: 'expense',
+                  amount: price,
+                  description: `亲属卡消费-${chat.name}-${itemName}`
+                });
+
+                // 4. 生成系统通知消息 (AI发送的)
+                const successMsg = {
+                  role: 'assistant', // 或者是 'system'，看你喜好
+                  senderName: chat.name, // 加上这个确保群聊显示正常
+                  type: 'text', // 或者用 'pat_message' 样式
+                  content: `[支付宝通知] 我使用亲属卡消费了 ¥${price.toFixed(2)} 购买了“${itemName}”。\n💭 ${reason}`,
+                  timestamp: messageTimestamp++
+                };
+
+                chat.history.push(successMsg);
+
+                // 如果是当前查看的聊天，直接上屏
+                if (isViewingThisChat) {
+                  appendMessage(successMsg, chat);
+                } else {
+                  // 如果在后台，发送通知
+                  showNotification(chat.id, `${chat.name} 使用亲属卡消费了 ¥${price}`);
+                }
+
+                // 5. (可选) 将购买记录写入角色的模拟淘宝历史，增加真实感
+                if (!chat.simulatedTaobaoHistory) chat.simulatedTaobaoHistory = { totalBalance: 0, purchases: [] };
+                if (!chat.simulatedTaobaoHistory.purchases) chat.simulatedTaobaoHistory.purchases = [];
+
+                chat.simulatedTaobaoHistory.purchases.unshift({
+                  itemName: itemName,
+                  price: price,
+                  status: '已签收',
+                  reason: reason,
+                  image_prompt: `${itemName}, product photography` // 简单生成个prompt
+                });
+
+                hasPerformedMajorAction = true; // 标记为已执行重要操作（用于后台活动）
+              } else {
+                console.log(`AI 想要购买 ${itemName} (¥${price}) 但亲属卡余额不足 (剩 ¥${remaining})`);
+                // 可选：让 AI 发一条消息抱怨没钱了
+                const failMsg = {
+                  role: 'assistant',
+                  senderName: chat.name,
+                  content: `本来想买“${itemName}”的，但是亲属卡额度好像不够了... (¥${price})`,
+                  timestamp: messageTimestamp++
+                };
+                chat.history.push(failMsg);
+                if (isViewingThisChat) appendMessage(failMsg, chat);
+              }
+            }
+            continue;
+          }
+          case 'kinship_response': {
+            // 1. 找到最近的一条 pending 请求
+            const requestMsg = chat.history.findLast(m => m.type === 'kinship_request' && m.status === 'pending');
+
+            if (requestMsg) {
+              requestMsg.status = (msgData.decision === 'accept') ? 'accepted' : 'rejected';
+              const isGrant = requestMsg.requestType === 'grant' || !requestMsg.requestType; // 兼容旧数据
+
+              if (msgData.decision === 'accept') {
+                // --- 同意逻辑 ---
+
+                // 只有当是 'grant' (用户送钱) 时，才写入本地钱包额度
+                // 如果是 'request' (AI 出钱)，本地钱包其实不需要记录 limit，
+                // 因为目前的钱包系统只记录 "用户给别人花的钱"。
+                // 但为了显示好看，也可以存进去，但在扣款逻辑里要区分。
+                // 这里简单起见，我们都存，但在 UI 上区分显示。
+
+                const wallet = await db.userWallet.get('main');
+                if (!wallet.kinshipCards) wallet.kinshipCards = [];
+
+                const existingIndex = wallet.kinshipCards.findIndex(c => c.chatId === chat.id);
+                if (existingIndex > -1) {
+                  wallet.kinshipCards[existingIndex].limit = requestMsg.limit;
+                  wallet.kinshipCards[existingIndex].type = isGrant ? 'out' : 'in'; // 标记方向
+                } else {
+                  wallet.kinshipCards.push({
+                    chatId: chat.id,
+                    limit: requestMsg.limit,
+                    spent: 0,
+                    type: isGrant ? 'out' : 'in' // out=用户出钱, in=AI出钱
+                  });
+                }
+                await db.userWallet.put(wallet);
+
+                // --- 构造 AI 回复 ---
+                let defaultReason = "";
+                if (isGrant) {
+                  defaultReason = "那我就不客气收下啦，谢谢你的礼物~"; // AI 接受馈赠
+                } else {
+                  defaultReason = "没问题，以后想买什么就买，我养你。"; // AI 同意包养用户
+                }
+
+                aiMessage = {
+                  ...baseMessage,
+                  type: 'text',
+                  content: msgData.reason || defaultReason
+                };
+              } else {
+                // --- 拒绝逻辑 ---
+                let defaultReason = "";
+                if (isGrant) {
+                  defaultReason = "不用啦，我自己有钱花，心意领了。"; // AI 拒绝馈赠
+                } else {
+                  defaultReason = "这...最近手头有点紧，下次吧。"; // AI 拒绝包养
+                }
+
+                aiMessage = {
+                  ...baseMessage,
+                  type: 'text',
+                  content: msgData.reason || defaultReason
+                };
+              }
+
+              await db.chats.put(chat);
+              renderChatInterface(chatId);
+            }
+            break;
+          }
+          case 'couple_invite_request': {
+            if (!chat.settings.enableCoupleSpacePrompt) break;
+            

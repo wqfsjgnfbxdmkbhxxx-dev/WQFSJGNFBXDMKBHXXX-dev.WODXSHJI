@@ -1,0 +1,948 @@
+    // 初始化 qzoneStickerPanelState 并暴露到 window，供 qzone.js 等模块访问
+    if (!window.qzoneStickerPanelState) {
+      window.qzoneStickerPanelState = {
+        isOpen: false,
+        activePostId: null,
+        panelEl: null,
+        gridEl: null
+      };
+    }
+    const qzoneStickerPanelState = window.qzoneStickerPanelState;
+    qzoneStickerPanelState.panelEl = document.getElementById('qzone-sticker-panel');
+    qzoneStickerPanelState.gridEl = document.getElementById('qzone-sticker-grid');
+
+    const savedTheme = localStorage.getItem('ephone-theme') || 'light';
+    applyTheme(savedTheme);
+
+
+
+    const customBubbleStyleTag = document.createElement('style');
+    customBubbleStyleTag.id = 'custom-bubble-style';
+    document.head.appendChild(customBubbleStyleTag);
+
+
+
+    const previewBubbleStyleTag = document.createElement('style');
+    previewBubbleStyleTag.id = 'preview-bubble-style';
+    document.head.appendChild(previewBubbleStyleTag);
+
+
+
+
+    applyScopedCss('', '#chat-messages', 'custom-bubble-style');
+    applyScopedCss('', '#settings-preview-area', 'preview-bubble-style');
+
+    window.openRenderingRulesScreen = openRenderingRulesScreen;
+    window.showScreen = showScreen;
+    window.renderChatListProxy = renderChatList;
+    window.renderApiSettingsProxy = renderApiSettings;
+    window.renderWallpaperScreenProxy = renderWallpaperScreen;
+    window.renderWorldBookScreenProxy = renderWorldBookScreen;
+
+    await loadAllDataFromDB();
+    // 在常规数据加载完成后再恢复异常中断的通话，避免启动阶段读取到半初始化状态。
+    if (typeof window.recoverInterruptedVoiceCalls === 'function') {
+      await window.recoverInterruptedVoiceCalls();
+    }
+    await initFunds();
+
+    // 初始化提示词管理器
+    if (typeof initPromptManagerUI === 'function') {
+      initPromptManagerUI();
+    }
+
+    applyStatusBarVisibility();
+    applyPhoneFrame(state.globalSettings.showPhoneFrame);
+    applyDetachStatusBarMode(state.globalSettings.detachStatusBar);
+    applyMinimalChatUI(state.globalSettings.enableMinimalChatUI);
+    if (typeof applyApiStyleBeautify === 'function') applyApiStyleBeautify();
+    await migrateOldRedPacketData();
+
+
+    applyGlobalCss(state.globalSettings.globalCss);
+
+
+
+    const storedCount = parseInt(localStorage.getItem('unreadPostsCount')) || 0;
+    updateUnreadIndicator(storedCount);
+
+
+
+    if (state.globalSettings && (state.globalSettings.fontUrl || (state.globalSettings.globalFontSize && state.globalSettings.globalFontSize !== 16))) {
+      applyCustomFont(state.globalSettings.fontUrl || '');
+    }
+
+    updateClock();
+    if (window._clockTimer) clearInterval(window._clockTimer);
+    window._clockTimer = setInterval(updateClock, 1000 * 30);
+    applyGlobalWallpaper();
+    initBatteryManager();
+
+    applyAppIcons();
+    applyWidgetData();
+
+
+
+
+
+    document.getElementById('rules-tabs').addEventListener('click', (e) => {
+      if (e.target.classList.contains('rules-tab')) {
+        switchRuleCategory(e.target.dataset.categoryId);
+      }
+    });
+
+
+
+    document.getElementById('add-new-rule-btn').addEventListener('click', () => openRuleEditor(null));
+    document.getElementById('cancel-rule-editor-btn').addEventListener('click', () => {
+      document.getElementById('rule-editor-modal').classList.remove('visible');
+    });
+    document.getElementById('save-rule-btn').addEventListener('click', saveRenderingRule);
+
+
+
+    document.getElementById('pat-btn').addEventListener('click', async () => {
+
+      if (state.activeChatId && !state.chats[state.activeChatId].isGroup) {
+        const chat = state.chats[state.activeChatId];
+
+        // 弹出选择框：拍自己还是拍对方
+        const choice = await showChoiceModal('拍一拍', [
+          { text: '拍对方', value: 'pat_other' },
+          { text: '拍自己', value: 'pat_self' }
+        ]);
+
+        if (choice === 'pat_other') {
+          handleUserPat(chat.id, chat.originalName);
+        } else if (choice === 'pat_self') {
+          handleUserPatSelf(chat.id);
+        }
+      }
+    });
+
+
+    let activeAnnouncementId = null;
+
+
+    function showAnnouncementActions(annoId) {
+      activeAnnouncementId = annoId;
+      const chat = state.chats[state.activeChatId];
+      const announcement = chat.announcements.find(a => a.id === annoId);
+      if (!announcement) return;
+
+      const pinButton = document.getElementById('announcement-action-pin');
+
+      pinButton.textContent = announcement.isPinned ? '取消置顶' : '置顶公告';
+
+      document.getElementById('announcement-actions-modal').classList.add('visible');
+    }
+
+
+    async function handlePinAnnouncement() {
+      if (!activeAnnouncementId) return;
+      const chat = state.chats[state.activeChatId];
+      const announcement = chat.announcements.find(a => a.id === activeAnnouncementId);
+      if (announcement) {
+        announcement.isPinned = !announcement.isPinned;
+        await db.chats.put(chat);
+        showAnnouncementBoard();
+      }
+      document.getElementById('announcement-actions-modal').classList.remove('visible');
+    }
+
+
+    async function handleDeleteAnnouncement() {
+      if (!activeAnnouncementId) return;
+
+      const confirmed = await showCustomConfirm("确认删除", "确定要删除这条公告吗？此操作不可恢复。", {
+        confirmButtonClass: 'btn-danger'
+      });
+
+      if (confirmed) {
+        const chat = state.chats[state.activeChatId];
+
+        chat.announcements = chat.announcements.filter(a => a.id !== activeAnnouncementId);
+        await db.chats.put(chat);
+        showAnnouncementBoard();
+      }
+      document.getElementById('announcement-actions-modal').classList.remove('visible');
+    }
+
+    document.getElementById('custom-modal-cancel').addEventListener('click', hideCustomModal);
+    document.getElementById('custom-modal-overlay').addEventListener('click', (e) => {
+      if (e.target === document.getElementById('custom-modal-overlay')) hideCustomModal();
+    });
+    // 查看数据分布按钮
+    document.getElementById('view-data-distribution-btn').addEventListener('click', viewDataDistribution);
+    
+    // 数据分析统计界面按钮
+    document.getElementById('data-distribution-back-btn').addEventListener('click', () => {
+      showScreen('api-settings-screen');
+    });
+    
+    document.getElementById('refresh-distribution-btn').addEventListener('click', async () => {
+      const container = document.getElementById('data-distribution-container');
+      await renderDistributionData(container);
+      showToast('数据已刷新', 'success');
+    });
+
+    document.getElementById('export-data-btn').addEventListener('click', async () => {
+
+      const choice = await showChoiceModal('选择导出方式', [{
+        text: '分片导出 (推荐，打包为ZIP，解压每个切片选择增量导入)',
+        value: 'slice'
+      },
+      {
+        text: '智能导出 (单个大文件，太大可能会导致导入不了)',
+        value: 'stream'
+      },
+      {
+        text: '传统导出 (兼容旧版或内存小的浏览器)',
+        value: 'blob'
+      }
+      ]);
+
+
+      if (choice === 'slice') {
+        exportDataAsSlicedZip();
+      } else if (choice === 'stream') {
+        exportDataAsStream();
+      } else if (choice === 'blob') {
+        exportDataAsBlob();
+      }
+
+    });
+
+    // 高级导出导入功能
+    document.getElementById('advanced-export-btn').addEventListener('click', async () => {
+      await showAdvancedExportImportModal();
+    });
+
+    document.getElementById('advanced-import-btn')?.addEventListener('click', () => {
+      document.getElementById('advanced-import-input').click();
+    });
+
+    // 高级导入文件选择
+    document.getElementById('advanced-import-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        await handleAdvancedImport(file);
+        e.target.value = ''; // 清空文件选择
+      }
+    });
+
+    document.getElementById('cleanup-data-btn').addEventListener('click', cleanupRedundantData);
+
+    document.getElementById('offline-mode-toggle').addEventListener('change', (e) => {
+
+      document.getElementById('offline-mode-options').style.display = e.target.checked ? 'block' : 'none';
+    });
+    
+    // 连续回复开关事件（回复条数范围）
+    document.getElementById('enable-reply-count-range-toggle').addEventListener('change', (e) => {
+      document.getElementById('reply-count-range-config').style.display = e.target.checked ? 'block' : 'none';
+    });
+    
+    document.getElementById('import-btn').addEventListener('click', () => document.getElementById('import-data-input').click());
+    document.getElementById('time-perception-toggle').addEventListener('change', (e) => {
+      document.getElementById('time-zone-group').style.display = e.target.checked ? 'block' : 'none';
+    });
+    
+    // 双语模式开关事件
+    document.getElementById('bilingual-mode-toggle').addEventListener('change', (e) => {
+      document.getElementById('bilingual-display-mode-group').style.display = e.target.checked ? 'flex' : 'none';
+      document.getElementById('language-policy-settings').style.display = e.target.checked ? 'block' : 'none';
+      if (state.activeChatId && state.chats[state.activeChatId] && state.chats[state.activeChatId].isGroup) {
+        document.getElementById('bilingual-characters-group').style.display = e.target.checked ? 'block' : 'none';
+      }
+    });
+    if (window.languagePolicy) window.languagePolicy.bindSettingsUi();
+    
+    // 自动记忆开关实时生效
+    document.getElementById('auto-memory-toggle').addEventListener('change', (e) => {
+      const chat = state.chats[state.activeChatId];
+      if (chat) {
+        chat.settings.enableAutoMemory = e.target.checked;
+        db.chats.put(chat); // 立即保存到数据库
+      }
+    });
+    
+    // 记忆模式选择器事件绑定
+    document.querySelectorAll('#memory-mode-selector .memory-mode-option').forEach(option => {
+      option.addEventListener('click', async () => {
+        const chat = state.chats[state.activeChatId];
+        if (!chat) return;
+        const mode = option.dataset.mode;
+        
+        // 更新UI
+        document.querySelectorAll('#memory-mode-selector .memory-mode-option').forEach(o => o.classList.remove('active'));
+        option.classList.add('active');
+        
+        // 更新设置
+        chat.settings.memoryMode = mode;
+        // 同步兼容性开关
+        chat.settings.enableStructuredMemory = (mode === 'structured');
+        chat.settings.enableDiaryMode = (mode === 'diary');
+        document.getElementById('structured-memory-toggle').checked = (mode === 'structured');
+        document.getElementById('diary-mode-toggle').checked = (mode === 'diary');
+        
+        // 显示/隐藏日记模式子选项
+        const diaryOptions = document.getElementById('diary-mode-options');
+        if (diaryOptions) diaryOptions.style.display = (mode === 'diary') ? 'flex' : 'none';
+        
+        await db.chats.put(chat);
+        
+        // 如果切换到结构化模式且有长期记忆，提示转换
+        if (mode === 'structured' && chat.longTermMemory && chat.longTermMemory.length > 0 && window.structuredMemoryManager) {
+          const confirmed = await showCustomConfirm(
+            '转换长期记忆',
+            `检测到你有 ${chat.longTermMemory.length} 条长期记忆。是否将它们自动转换为结构化记忆？`,
+            { confirmButtonText: '立即转换', cancelButtonText: '暂不转换' }
+          );
+          if (confirmed) {
+            showToast('正在转换长期记忆...', 'info');
+            await convertLongTermMemoryToStructured(state.activeChatId);
+          }
+        } else if (mode === 'vector' && window.vectorMemoryManager) {
+          // 检查是否有长期记忆或结构化记忆数据
+          const hasLongTerm = chat.longTermMemory && chat.longTermMemory.length > 0;
+          let hasStructured = false;
+          if (chat.structuredMemory) {
+             const stats = window.structuredMemoryManager.getStats(chat);
+             hasStructured = stats.factsCount > 0 || stats.eventsTotal > 0 || stats.decisionsCount > 0 || stats.plansCount > 0 || stats.emotionsCount > 0 || Object.values(stats.customStats).some(c => c > 0);
+          }
+          
+          if (hasLongTerm || hasStructured) {
+             await convertLongTermMemoryToVector(state.activeChatId);
+          }
+        }
+      });
+    });
+
+    // 日记模式开关实时生效
+    document.getElementById('diary-mode-toggle').addEventListener('change', (e) => {
+      const chat = state.chats[state.activeChatId];
+      if (chat) {
+        chat.settings.enableDiaryMode = e.target.checked;
+        db.chats.put(chat); // 立即保存到数据库
+      }
+    });
+    
+    // 结构化记忆开关实时生效（兼容旧逻辑，现在由模式选择器控制）
+    document.getElementById('structured-memory-toggle').addEventListener('change', async (e) => {
+      const chat = state.chats[state.activeChatId];
+      if (chat) {
+        const wasEnabled = chat.settings.enableStructuredMemory;
+        const isNowEnabled = e.target.checked;
+        chat.settings.enableStructuredMemory = isNowEnabled;
+        await db.chats.put(chat); // 立即保存到数据库
+        
+        // 如果从关闭变为开启，且有长期记忆，则自动转换
+        if (!wasEnabled && isNowEnabled && chat.longTermMemory && chat.longTermMemory.length > 0) {
+          const confirmed = await showCustomConfirm(
+            '转换长期记忆', 
+            `检测到你有 ${chat.longTermMemory.length} 条长期记忆。是否将它们自动转换为结构化记忆？\n\n这将调用API进行转换，会消耗一定额度。`,
+            { confirmButtonText: '立即转换', cancelButtonText: '暂不转换' }
+          );
+          
+          if (confirmed) {
+            showToast('正在转换长期记忆...', 'info');
+            await convertLongTermMemoryToStructured(state.activeChatId);
+          }
+        }
+      }
+    });
+    
+    // 限制长期记忆开关实时生效
+    document.getElementById('limit-memory-toggle').addEventListener('change', async (e) => {
+      const chat = state.chats[state.activeChatId];
+      if (chat) {
+        chat.settings.limitLongTermMemory = e.target.checked;
+        await db.chats.put(chat);
+        
+        // 显示/隐藏输入框
+        document.getElementById('memory-limit-input-group').style.display = 
+          e.target.checked ? 'block' : 'none';
+        updateTokenCountDisplay();
+      }
+    });
+    
+    // 限制数量输入框实时保存
+    document.getElementById('memory-limit-count').addEventListener('change', async (e) => {
+      const chat = state.chats[state.activeChatId];
+      if (chat) {
+        const value = parseInt(e.target.value) || 50;
+        // 确保值在合理范围内
+        const clampedValue = Math.max(1, Math.min(1000, value));
+        e.target.value = clampedValue;
+        chat.settings.longTermMemoryLimit = clampedValue;
+        await db.chats.put(chat);
+        updateTokenCountDisplay();
+      }
+    });
+    
+    // 显示隐藏消息开关实时生效
+    document.getElementById('show-hidden-msg-toggle').addEventListener('change', (e) => {
+      const chat = state.chats[state.activeChatId];
+      if (chat) {
+        chat.settings.showHiddenMessages = e.target.checked;
+        db.chats.put(chat); // 立即保存到数据库
+        renderChatInterface(state.activeChatId); // 立即刷新聊天区域显示
+      }
+    });
+
+    document.getElementById('import-data-input').addEventListener('change', e => handleSmartImport(e.target.files[0]));
+    document.getElementById('import-card-input').addEventListener('change', handleCardImport);
+
+    // 批量导入模态框事件监听
+    document.getElementById('select-all-import-cards')?.addEventListener('change', (e) => {
+      const checkboxes = document.querySelectorAll('.batch-import-card-checkbox');
+      checkboxes.forEach(cb => {
+        cb.checked = e.target.checked;
+        const cardId = cb.dataset.cardId;
+        const card = pendingImportCards.find(c => c.id === cardId);
+        if (card) card.selected = e.target.checked;
+      });
+    });
+
+    document.getElementById('confirm-batch-import-btn')?.addEventListener('click', confirmBatchImport);
+    document.getElementById('cancel-batch-import-btn')?.addEventListener('click', cancelBatchImport);
+
+    // ============================================================
+    // ▼▼▼ 全局安全返回与变量清理系统 (防炸群/防串台) ▼▼▼
+    // ============================================================
+
+    // 1. 定义通用清理函数 (所有“退出/返回”操作都应该调用它)
+    function forceGlobalCleanup() {
+      console.log("执行全局变量清理...");
+
+      // A. 清理回复/引用状态
+      if (typeof cancelReplyMode === 'function') cancelReplyMode();
+      currentReplyContext = null;
+
+      // B. 清理多选/编辑模式
+      if (typeof exitSelectionMode === 'function') exitSelectionMode();
+
+      // C. 清理定时器 (防止外卖/游戏倒计时在后台报错)
+      if (typeof cleanupWaimaiTimers === 'function') cleanupWaimaiTimers();
+      if (typeof stopAutoBackupTimer === 'function') stopAutoBackupTimer(); // 如果有自动备份
+
+      // D. 强制关闭悬浮层/面板
+      const gomokuOverlay = document.getElementById('gomoku-overlay');
+      if (gomokuOverlay) {
+        gomokuOverlay.classList.remove('visible');
+        // 重置五子棋状态，防止下次打开卡死
+        if (state.activeChatId && gomokuState[state.activeChatId]) {
+          gomokuState[state.activeChatId].isActive = false;
+        }
+      }
+
+      const stickerPanel = document.getElementById('sticker-panel');
+      if (stickerPanel) stickerPanel.classList.remove('visible');
+
+      const musicPanel = document.getElementById('music-playlist-panel');
+      if (musicPanel) musicPanel.classList.remove('visible');
+
+      // E. 清理全局临时变量 (最重要的一步！)
+      ruleCache = {};
+      window.invalidateRenderingRuleCache?.();
+      activeMessageTimestamp = null;
+      activeTransferTimestamp = null;
+      //lastRawAiResponse = ''; 
+      //lastResponseTimestamps = [];
+
+      // F. 重置 UI 样式
+      applyScopedCss('', '#chat-messages', 'custom-bubble-style');
+      applyScopedCss('', '#settings-preview-area', 'preview-bubble-style');
+
+      const typingIndicator = document.getElementById('typing-indicator');
+      if (typingIndicator) typingIndicator.style.display = 'none';
+
+      // G. 核心：解除当前聊天绑定
+      state.activeChatId = null;
+    }
+
+    // 2. 绑定：聊天界面 -> 返回列表
+    document.getElementById('back-to-list-btn').addEventListener('click', () => {
+      forceGlobalCleanup(); // 执行清理
+      showScreen('chat-list-screen'); // 切换画面
+    });
+
+    // 历史模式返回最新
+    const returnToLatestBtn = document.getElementById('return-to-latest-btn');
+    if (returnToLatestBtn) {
+      returnToLatestBtn.addEventListener('click', () => {
+        if (state.activeChatId) {
+          renderChatInterface(state.activeChatId);
+        }
+      });
+    }
+
+    // 3. 绑定：狼人杀 -> 退出游戏
+    document.getElementById('exit-werewolf-game-btn').addEventListener('click', async () => {
+      const confirmed = await showCustomConfirm('退出游戏', '确定要退出当前这局狼人杀吗？游戏进度将不会被保存。', {
+        confirmButtonClass: 'btn-danger'
+      });
+      if (confirmed) {
+        werewolfGameState.isActive = false;
+
+        // 如果是群聊模式，返回聊天界面（不清理activeChatId，因为还在群里）
+        if (werewolfGameState.chatId) {
+          showScreen('chat-interface-screen');
+        } else {
+          // 如果是全局模式，返回主页（执行清理！）
+          forceGlobalCleanup();
+          showScreen('home-screen');
+        }
+      }
+    });
+
+    // 4. 绑定：绿江/支付宝/设置 -> 返回主页 (自动查找并绑定)
+    // 因为这些按钮在HTML里没有ID，我们用选择器批量绑定“安全锁”
+    const safeBackSelectors = [
+      '#green-river-screen .gr-icon-btn', // 绿江返回
+      '#alipay-screen .back-btn',         // 支付宝返回
+      '#api-settings-screen .back-btn',   // API设置返回
+      '#wallpaper-screen .back-btn',      // 外观设置返回
+      '#font-settings-screen .back-btn',  // 字体设置返回
+      '#tutorial-screen .back-btn'        // 教程返回
+    ];
+
+    safeBackSelectors.forEach(selector => {
+      const btn = document.querySelector(selector);
+      if (btn) {
+        // 移除旧的 inline onclick (如果有冲突的话)，或者直接追加
+        // 这里我们追加一个清理操作，它会在 onclick 跳转之前或同时执行
+        btn.addEventListener('click', () => {
+          forceGlobalCleanup();
+          // 注意：原本的 showScreen('home-screen') 写在 HTML onclick 里，依然会执行
+          // 这里只是额外加了一道保险
+        });
+      }
+    });
+
+    // ============================================================
+
+
+    document.getElementById('add-chat-btn').addEventListener('click', async () => {
+
+      const choice = await showChoiceModal('创建新聊天', [{
+        text: '手动创建角色',
+        value: 'manual'
+      },
+      {
+        text: '从角色卡导入 (.json/.png)',
+        value: 'import_card'
+      },
+      {
+        text: '导入文件（仅TXT、DOCX、ZIP，ZIP也只解析TXT和DOCX）',
+        value: 'import_file'
+      }
+      ]);
+
+      if (choice === 'manual') {
+
+        const remarkName = await showCustomPrompt('创建新聊天 (第1/2步)', '请输入你想为Ta设置的【备注名】');
+        if (!remarkName || !remarkName.trim()) return;
+
+        const originalName = await showCustomPrompt('创建新聊天 (第2/2步)', '请输入Ta的【本名】');
+        if (!originalName || !originalName.trim()) return;
+
+
+        const newChatId = 'chat_' + Date.now();
+        const newChat = {
+          id: newChatId,
+          name: remarkName.trim(),
+          originalName: originalName.trim(),
+          isGroup: false,
+          isPinned: false,
+          unreadCount: 0,
+          relationship: {
+            status: 'friend',
+            blockedTimestamp: null,
+            applicationReason: ''
+          },
+          status: {
+            text: '在线',
+            lastUpdate: Date.now(),
+            isBusy: false
+          },
+          settings: {
+            aiPersona: '这是一个通过手动创建的角色。',
+            myPersona: '我是谁呀。',
+            myNickname: '我',
+            maxMemory: 10,
+            aiAvatar: defaultAvatar,
+            myAvatar: defaultAvatar,
+            background: '',
+            theme: 'default',
+            fontSize: 13,
+            customCss: '',
+            linkedWorldBookIds: [],
+            aiAvatarLibrary: [],
+            myAvatarLibrary: [],
+            enableBackgroundActivity: true,
+            actionCooldownMinutes: 15,
+            enableTimePerception: true,
+            isOfflineMode: false,
+            offlineMinLength: 100,
+            offlineMaxLength: 300,
+            offlinePresetId: null,
+            offlineContinuousLayout: false,
+            timeZone: 'Asia/Shanghai',
+            myPhoneLockScreenEnabled: false,
+            myPhoneLockScreenPassword: '',
+            userStatus: {
+              text: '在线',
+              lastUpdate: Date.now(),
+              isBusy: false
+            }
+          },
+          history: [],
+          musicData: {
+            totalTime: 0
+          },
+          longTermMemory: [],
+          thoughtsHistory: []
+        };
+        state.chats[newChatId] = newChat;
+        await db.chats.put(newChat);
+        renderChatList();
+
+      } else if (choice === 'import_card') {
+
+        try {
+
+          await requirePinActivation();
+
+
+          document.getElementById('import-card-input').click();
+
+        } catch (error) {
+
+          console.warn("角色卡导入被取消:", error.message);
+        }
+
+      } else if (choice === 'import_file') {
+        // 导入文件（非酒馆）
+        await handleCharacterFileImport();
+      }
+    });
+
+
+
+    document.getElementById('add-group-chat-btn').addEventListener('click', window.openContactPickerForGroupCreate);
+
+    document.getElementById('transfer-cancel-btn').addEventListener('click', () => document.getElementById('transfer-modal').classList.remove('visible'));
+    document.getElementById('transfer-confirm-btn').addEventListener('click', sendUserTransfer);
+
+    document.getElementById('listen-together-btn').addEventListener('click', handleListenTogetherClick);
+    document.getElementById('music-exit-btn').addEventListener('click', () => endListenTogetherSession(true));
+    document.getElementById('music-return-btn').addEventListener('click', returnToChat);
+    document.getElementById('music-play-pause-btn').addEventListener('click', togglePlayPause);
+    document.getElementById('music-next-btn').addEventListener('click', playNext);
+    document.getElementById('music-prev-btn').addEventListener('click', playPrev);
+    document.getElementById('music-mode-btn').addEventListener('click', changePlayMode);
+    document.getElementById('music-playlist-btn').addEventListener('click', () => {
+      updatePlaylistUI();
+      document.getElementById('music-playlist-panel').classList.add('visible');
+    });
+    document.getElementById('close-playlist-btn').addEventListener('click', () => document.getElementById('music-playlist-panel').classList.remove('visible'));
+    document.getElementById('manage-playlist-btn')?.addEventListener('click', togglePlaylistManagementMode);
+    document.getElementById('select-all-playlist-checkbox').addEventListener('change', handleSelectAllPlaylistItems);
+    document.getElementById('delete-selected-songs-btn').addEventListener('click', executeDeleteSelectedSongs);
+    document.getElementById('upload-selected-to-catbox-btn').addEventListener('click', executeBatchUploadToCatbox);
+    
+    // 播放列表“更多”操作聚合菜单（无任何 Emoji）
+    document.getElementById('playlist-more-actions-btn')?.addEventListener('click', async () => {
+      const choice = await showChoiceModal('播放列表选项', [
+        { text: '上传/添加歌曲', value: 'upload' },
+        { text: '批量管理', value: 'manage' },
+        { text: '歌单管理', value: 'playlist_mgr' },
+        { text: '音乐账号', value: 'account' },
+        { text: '清理失效歌曲', value: 'cleanup' }
+      ]);
+
+      if (!choice) return;
+
+      if (choice === 'upload') {
+        const uploadChoice = await showChoiceModal('选择添加方式', [
+          { text: '本地音频文件', value: 'local' },
+          { text: '网络音频链接 (URL)', value: 'url' }
+        ]);
+        if (uploadChoice === 'local') {
+          document.getElementById('local-song-upload-input').click();
+        } else if (uploadChoice === 'url') {
+          addSongFromURL();
+        }
+      } else if (choice === 'manage') {
+        togglePlaylistManagementMode();
+      } else if (choice === 'playlist_mgr') {
+        if (typeof openPlaylistManager === 'function') openPlaylistManager();
+      } else if (choice === 'account') {
+        if (typeof openMusicAccountCenter === 'function') openMusicAccountCenter();
+      } else if (choice === 'cleanup') {
+        if (typeof cleanupInvalidSongs === 'function') cleanupInvalidSongs();
+      }
+    });
+
+    // 兼容历史上传按钮引用（无 Emoji）
+    document.getElementById('add-song-upload-btn')?.addEventListener('click', async () => {
+      const choice = await showChoiceModal('选择添加方式', [
+        { text: '本地音频文件', value: 'local' },
+        { text: '网络音频链接 (URL)', value: 'url' }
+      ]);
+      if (choice === 'local') {
+        document.getElementById('local-song-upload-input').click();
+      } else if (choice === 'url') {
+        addSongFromURL();
+      }
+    });
+    
+    document.getElementById('local-song-upload-input').addEventListener('change', addSongFromLocal);
+
+    document.getElementById('playlist-body').addEventListener('click', (e) => {
+      const target = e.target;
+      const trackIndex = parseInt(target.dataset.index);
+
+      if (isNaN(trackIndex)) return;
+
+      if (target.classList.contains('album-art-btn')) {
+        handleChangeAlbumArt(trackIndex);
+      } else if (target.classList.contains('lyrics-btn')) {
+        handleManualLrcImport(trackIndex);
+      } else if (target.classList.contains('bg-btn')) {
+        handleChangeBackground(trackIndex);
+      } else if (target.classList.contains('delete-track-btn')) {
+        deleteTrack(trackIndex);
+      }
+    });
+
+    audioPlayer.addEventListener('ended', async () => { // 1. 在这里添加 async
+      document.getElementById('vinyl-view').classList.remove('spinning');
+
+      // 2. 保持 playNext(true) 不变，这样它就不会发送“用户切歌”的错误提示
+      playNext(true);
+
+      // 3. 等待 playNext 执行完毕，确保 musicState.currentIndex 已经更新
+      //    (注意：playNext 不是异步的，但 playSong 是。不过 playNext 会同步更新 currentIndex)
+      //    为了保险起见，我们稍微等待一下确保状态已更新。
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // 4. 手动添加一条“自动换歌”的系统提示
+      const track = musicState.playlist[musicState.currentIndex];
+      if (track && musicState.isActive && musicState.activeChatId) {
+        const chat = state.chats[musicState.activeChatId];
+        if (chat) {
+          const systemMessage = {
+            role: 'system',
+            content: `[系统提示：上一首歌曲播放完毕，已自动为你切换到《${track.name}》 - ${track.artist}]`,
+            timestamp: Date.now(),
+            isHidden: true // 这条消息用户看不见，但AI在下次回复时会读到
+          };
+          chat.history.push(systemMessage);
+          await db.chats.put(chat); // 异步保存到数据库
+        }
+      }
+    });
+
+
+
+
+
+    const chatInput = document.getElementById('chat-input');
+
+
+    document.getElementById('send-btn').addEventListener('click', () => {
+      playSilentAudio();
+      let content = chatInput.value.trim();
+      if (!content || !state.activeChatId) return;
+
+      const chat = state.chats[state.activeChatId];
+      if (window.CharacterBond && !chat.isGroup) {
+        content = window.CharacterBond.normalizePetMention(content, chat);
+      }
+      if (content.startsWith('/n ') || content.startsWith('/旁白 ')) {
+        const narrationText = content.replace(/^\/n\s+|^\/旁白\s+/, '');
+
+        const msg = {
+          role: 'system', // 设为 system 居中显示
+          type: 'narration',
+          content: narrationText,
+          timestamp: Date.now()
+        };
+
+        // 保存并渲染
+        chat.history.push(msg);
+        db.chats.put(chat);
+        appendMessage(msg, chat);
+
+        chatInput.value = '';
+        chatInput.style.height = 'auto';
+        chatInput.focus();
+        return; // 阻止发送普通消息
+      }
+      const msg = {
+        role: 'user',
+        content,
+        timestamp: Date.now()
+      };
+
+      if (currentReplyContext) {
+        msg.quote = currentReplyContext;
+      }
+
+
+      appendMessage(msg, chat);
+
+
+      (async () => {
+        chat.history.push(msg);
+        if (window.CharacterBond) window.CharacterBond.onMessageSaved(chat, msg);
+        await db.chats.put(chat);
+        renderChatList();
+
+      })();
+
+
+      chatInput.value = '';
+      chatInput.style.height = 'auto';
+      chatInput.focus();
+      cancelReplyMode();
+      document.body.classList.remove('chat-actions-expanded');
+    });
+    document.getElementById('wait-reply-btn').addEventListener('click', triggerAiResponse);
+    chatInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById('send-btn').click();
+      }
+    });
+
+    // ========================================
+    // 表情包智能匹配功能
+    // ========================================
+    let smartMatchDebounceTimer = null;
+    const smartMatchPanel = document.getElementById('smart-sticker-match-panel');
+    const smartMatchGrid = document.getElementById('smart-sticker-match-grid');
+
+    // 输入框输入事件监听
+    chatInput.addEventListener('input', () => {
+      // 清除之前的定时器
+      if (smartMatchDebounceTimer) {
+        clearTimeout(smartMatchDebounceTimer);
+      }
+
+      // 检查是否启用智能匹配
+      if (!state.activeChatId) return;
+      const chat = state.chats[state.activeChatId];
+      if (!chat || !chat.settings.enableStickerSmartMatch) {
+        smartMatchPanel.style.display = 'none';
+        return;
+      }
+
+      const inputText = chatInput.value.trim();
+      
+      // 如果输入为空，隐藏面板
+      if (!inputText) {
+        smartMatchPanel.style.display = 'none';
+        return;
+      }
+
+      // 防抖：延迟300ms后执行匹配
+      smartMatchDebounceTimer = setTimeout(() => {
+        performSmartStickerMatch(inputText, chat);
+      }, 300);
+    });
+
+    // 执行智能匹配
+    function performSmartStickerMatch(inputText, chat) {
+      // 获取当前聊天的表情包分类
+      const categoryId = chat.settings.stickerCategoryId;
+      let availableStickers = [];
+
+      if (categoryId) {
+        // 使用指定分类的表情包
+        const category = state.stickerCategories.find(c => c.id === categoryId);
+        if (category) {
+          availableStickers = state.userStickers.filter(s => s.categoryId === categoryId);
+        }
+      } else {
+        // 使用所有表情包
+        availableStickers = state.userStickers;
+      }
+
+      if (availableStickers.length === 0) {
+        smartMatchPanel.style.display = 'none';
+        return;
+      }
+
+      // 简单的关键词匹配算法
+      const matches = [];
+      const keywords = inputText.toLowerCase().split(/\s+/);
+
+      availableStickers.forEach(sticker => {
+        if (!sticker.name) return;
+        
+        const stickerName = sticker.name.toLowerCase();
+        let score = 0;
+
+        // 计算匹配分数
+        keywords.forEach(keyword => {
+          if (stickerName.includes(keyword)) {
+            score += keyword.length;
+          }
+        });
+
+        // 完全匹配加分
+        if (stickerName === inputText.toLowerCase()) {
+          score += 100;
+        }
+
+        // 包含完整输入文本加分
+        if (stickerName.includes(inputText.toLowerCase())) {
+          score += 50;
+        }
+
+        if (score > 0) {
+          matches.push({ sticker, score });
+        }
+      });
+
+      // 按分数排序，取前5个
+      matches.sort((a, b) => b.score - a.score);
+      const topMatches = matches.slice(0, 5);
+
+      if (topMatches.length === 0) {
+        smartMatchPanel.style.display = 'none';
+        return;
+      }
+
+      // 渲染匹配结果
+      smartMatchGrid.innerHTML = '';
+      topMatches.forEach(({ sticker }) => {
+        const stickerItem = document.createElement('div');
+        stickerItem.className = 'sticker-item';
+        stickerItem.innerHTML = `
+          <div class="sticker-image-container" style="background-image: url('${sticker.url}');"></div>
+          <div class="sticker-name">${escapeHTML(sticker.name)}</div>
+        `;
+        
+        // 点击表情包发送
+        stickerItem.addEventListener('click', () => {
+          sendSmartMatchedSticker(sticker, chat);
+        });
+
+        smartMatchGrid.appendChild(stickerItem);
+      });
+
+      smartMatchPanel.style.display = 'block';
+    }
+
+    // 发送智能匹配的表情包
+    function sendSmartMatchedSticker(sticker, chat) {
+      const msg = {
+        role: 'user',
+        type: 'sticker',
+        content: sticker.url,  // 使用content字段存储URL
+        meaning: sticker.name,  // 使用meaning字段存储名称

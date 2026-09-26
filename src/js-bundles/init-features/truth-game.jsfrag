@@ -1,0 +1,796 @@
+        return;
+      }
+
+      const msg = { role, content: cleanContent, timestamp: Date.now() };
+      if (opts.senderName) msg.senderName = opts.senderName;
+      if (opts.senderAvatar) msg.senderAvatar = opts.senderAvatar;
+      truthGameState.messages.push(msg);
+      renderTruthGameMessages();
+    }
+
+    function renderTruthGameMessages() {
+      const container = document.getElementById('truth-game-messages');
+      const chat = state.chats[state.activeChatId];
+      if (!chat) return;
+      const defaultAvatar = 'https://i.postimg.cc/y8xWzCqj/anime-boy.jpg';
+      const userAvatar = chat.settings?.myAvatar || defaultAvatar;
+
+      container.innerHTML = '';
+
+      truthGameState.messages.forEach(msg => {
+        if (msg.role === 'system') {
+          const systemDiv = document.createElement('div');
+          systemDiv.className = 'truth-game-system-notice';
+          systemDiv.textContent = msg.content;
+          container.appendChild(systemDiv);
+        } else {
+          const wrapper = document.createElement('div');
+          wrapper.className = msg.role === 'user' ? 'truth-msg-row truth-msg-row-user' : 'truth-msg-row truth-msg-row-assistant';
+
+          let aiAvatar = defaultAvatar;
+          let aiLabel = '';
+          if (msg.role === 'assistant') {
+            if (msg.senderName) {
+              aiLabel = chat.isGroup ? (getDisplayNameInGroup(chat, msg.senderName) || msg.senderName) : msg.senderName;
+              if (msg.senderAvatar) aiAvatar = msg.senderAvatar;
+              else if (chat.isGroup && chat.members) {
+                const m = chat.members.find(mem => mem.originalName === msg.senderName);
+                if (m && state.chats[m.id]) aiAvatar = state.chats[m.id].settings?.aiAvatar || defaultAvatar;
+              } else if (!chat.isGroup) aiAvatar = chat.settings?.aiAvatar || defaultAvatar;
+            } else if (truthGameState.isGroupMode && truthGameState.currentAiMember) {
+              aiLabel = getDisplayNameInGroup(chat, truthGameState.currentAiMember.originalName) || truthGameState.currentAiMember.originalName;
+              const mc = state.chats[truthGameState.currentAiMember.id];
+              aiAvatar = mc && mc.settings?.aiAvatar ? mc.settings.aiAvatar : defaultAvatar;
+            } else {
+              aiLabel = chat.name;
+              aiAvatar = chat.settings?.aiAvatar || defaultAvatar;
+            }
+          }
+
+          const bubble = document.createElement('div');
+          bubble.className = msg.role === 'user' ? 'truth-msg-bubble truth-msg-bubble-user' : 'truth-msg-bubble truth-msg-bubble-ai';
+
+          const escapedContent = escapeHTML(msg.content);
+          bubble.innerHTML = escapedContent.replace(/\n/g, '<br>');
+
+          bubble.dataset.timestamp = msg.timestamp;
+          bubble.dataset.role = msg.role;
+          bubble.dataset.content = msg.content;
+
+          const avatar = document.createElement('img');
+          avatar.src = msg.role === 'user' ? userAvatar : aiAvatar;
+          avatar.className = 'truth-msg-avatar';
+          avatar.alt = msg.role === 'user' ? '用户头像' : '角色头像';
+
+          if (msg.role === 'user') {
+            wrapper.appendChild(bubble);
+            wrapper.appendChild(avatar);
+          } else {
+            if (aiLabel) {
+              const labelDiv = document.createElement('div');
+              labelDiv.className = 'truth-msg-label';
+              labelDiv.textContent = aiLabel;
+              const leftCol = document.createElement('div');
+              leftCol.className = 'truth-msg-col';
+              leftCol.appendChild(labelDiv);
+              leftCol.appendChild(bubble);
+              wrapper.appendChild(avatar);
+              wrapper.appendChild(leftCol);
+            } else {
+              wrapper.appendChild(avatar);
+              wrapper.appendChild(bubble);
+            }
+          }
+
+          addLongPressListener(bubble, () => showTruthGameMessageActions(msg.timestamp));
+
+          container.appendChild(wrapper);
+        }
+      });
+
+      container.scrollTop = container.scrollHeight;
+    }
+
+    async function generateAITruthQuestion() {
+      const chat = getTruthGameEffectiveChat();
+      if (!chat) return;
+      const { proxyUrl, apiKey, model } = state.apiConfig;
+      const aiOpts = truthGameState.isGroupMode && truthGameState.currentAiMember ? {
+        senderName: truthGameState.currentAiMember.originalName,
+        senderAvatar: (state.chats[truthGameState.currentAiMember.id] && state.chats[truthGameState.currentAiMember.id].settings?.aiAvatar) || undefined
+      } : {};
+
+      if (!proxyUrl || !apiKey || !model) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        addTruthGameMessage('assistant', '你最喜欢什么？', aiOpts);
+        updateTruthGameFloatIndicator();
+        document.getElementById('truth-input').placeholder = '输入你的回答...';
+        document.getElementById('truth-input').focus();
+        return;
+      }
+
+      const systemPrompt = buildTruthGamePrompt(chat, 'question');
+
+      // 创建AbortController用于中断请求
+      truthGameState.abortController = new AbortController();
+      const timeoutId = setTimeout(() => truthGameState.abortController.abort(), 60000); // 60秒超时
+
+      try {
+        const response = await fetch(`${proxyUrl}/v1/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: [{ role: 'user', content: systemPrompt }],
+            temperature: 0.8
+          }),
+          signal: truthGameState.abortController.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) throw new Error('API调用失败');
+
+        const data = await response.json();
+        const rawContent = data.choices[0].message.content.trim();
+
+        // 使用成熟的parseAiResponse函数解析（和单聊一样）
+        const messagesArray = parseAiResponse(rawContent);
+
+        // 提取text类型的内容
+        const messages = messagesArray
+          .filter(item => item && (item.type === 'text' || item.type === 'offline_text'))
+          .map(item => item.content)
+          .filter(text => text && text.trim().length > 0);
+
+        if (messages.length === 0) {
+          messages.push('你最喜欢什么？');
+        }
+
+        for (let i = 0; i < messages.length; i++) {
+          if (i > 0) {
+            await new Promise(resolve => setTimeout(resolve, 800));
+          }
+          addTruthGameMessage('assistant', messages[i], aiOpts);
+        }
+
+        updateTruthGameFloatIndicator();
+        document.getElementById('truth-input').placeholder = '输入你的回答...';
+        document.getElementById('truth-input').focus();
+      } catch (error) {
+        clearTimeout(timeoutId);
+
+        // 如果是用户主动取消，不显示错误
+        if (error.name === 'AbortError') {
+          console.log('真心话问题生成被用户中断');
+          return;
+        }
+
+        console.error('生成问题失败:', error);
+        addTruthGameMessage('assistant', '你最喜欢什么？', aiOpts);
+        updateTruthGameFloatIndicator();
+        alert('真心话生成问题失败：' + error.message + '\n\n已使用默认问题，请检查API配置。');
+        document.getElementById('truth-input').placeholder = '输入你的回答...';
+        document.getElementById('truth-input').focus();
+      } finally {
+        truthGameState.abortController = null;
+      }
+    }
+
+    async function generateAITruthAnswer(question) {
+      const chat = getTruthGameEffectiveChat();
+      if (!chat) return;
+      const { proxyUrl, apiKey, model } = state.apiConfig;
+      const groupChat = state.chats[state.activeChatId];
+      const hasSpectatorPhase = truthGameState.isGroupMode && groupChat && groupChat.members && groupChat.members.length > 1;
+      const aiOpts = truthGameState.isGroupMode && truthGameState.currentAiMember ? {
+        senderName: truthGameState.currentAiMember.originalName,
+        senderAvatar: (state.chats[truthGameState.currentAiMember.id] && state.chats[truthGameState.currentAiMember.id].settings?.aiAvatar) || undefined
+      } : {};
+
+      addTruthGameMessage('system', '对方正在思考答案...');
+      updateTruthGameFloatIndicator();
+
+      if (!proxyUrl || !apiKey || !model) {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        addTruthGameMessage('assistant', '我...我不知道该怎么回答。', aiOpts);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        if (hasSpectatorPhase) {
+          truthGameState.phase = 'spectator_comment';
+          truthGameState.winner = null;
+          addTruthGameMessage('system', '回答完毕！其他人可以围观评论，或点击「下一轮」继续。');
+          document.getElementById('truth-start-game-btn').textContent = '下一轮';
+        } else {
+          addTruthGameMessage('system', '回答完毕！准备下一轮...');
+          updateTruthGameFloatIndicator();
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          goToTruthGameNextRound();
+        }
+        return;
+      }
+
+      const systemPrompt = buildTruthGamePrompt(chat, 'answer', question);
+
+      // 创建AbortController用于中断请求
+      truthGameState.abortController = new AbortController();
+      const timeoutId = setTimeout(() => truthGameState.abortController.abort(), 60000); // 60秒超时
+
+      try {
+        const response = await fetch(`${proxyUrl}/v1/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: [{ role: 'user', content: systemPrompt }],
+            temperature: 0.8
+          }),
+          signal: truthGameState.abortController.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) throw new Error('API调用失败');
+
+        const data = await response.json();
+        const rawContent = data.choices[0].message.content.trim();
+
+        // 使用成熟的parseAiResponse函数解析（和单聊一样）
+        const messagesArray = parseAiResponse(rawContent);
+
+        // 提取text类型的内容
+        const messages = messagesArray
+          .filter(item => item && (item.type === 'text' || item.type === 'offline_text'))
+          .map(item => item.content)
+          .filter(text => text && text.trim().length > 0);
+
+        if (messages.length === 0) {
+          messages.push('我...我不知道该怎么回答。');
+        }
+
+        for (let i = 0; i < messages.length; i++) {
+          if (i > 0) {
+            await new Promise(resolve => setTimeout(resolve, 800));
+          }
+          addTruthGameMessage('assistant', messages[i], aiOpts);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        if (hasSpectatorPhase) {
+          truthGameState.phase = 'spectator_comment';
+          truthGameState.winner = null;
+          addTruthGameMessage('system', '回答完毕！其他人可以围观评论，或点击「下一轮」继续。');
+          document.getElementById('truth-start-game-btn').textContent = '下一轮';
+        } else {
+          addTruthGameMessage('system', '回答完毕！准备下一轮...');
+          updateTruthGameFloatIndicator();
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          goToTruthGameNextRound();
+        }
+      } catch (error) {
+        clearTimeout(timeoutId);
+
+        // 如果是用户主动取消，不显示错误
+        if (error.name === 'AbortError') {
+          console.log('真心话回答生成被用户中断');
+          return;
+        }
+
+        console.error('生成回答失败:', error);
+        addTruthGameMessage('assistant', '我...我不知道该怎么回答。', aiOpts);
+        alert('真心话生成回答失败：' + error.message + '\n\n已使用默认回答，请检查API配置。');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        if (hasSpectatorPhase) {
+          truthGameState.phase = 'spectator_comment';
+          truthGameState.winner = null;
+          addTruthGameMessage('system', '回答完毕！其他人可以围观评论，或点击「下一轮」继续。');
+          document.getElementById('truth-start-game-btn').textContent = '下一轮';
+        } else {
+          addTruthGameMessage('system', '回答完毕！准备下一轮...');
+          updateTruthGameFloatIndicator();
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          goToTruthGameNextRound();
+        }
+      } finally {
+        truthGameState.abortController = null;
+      }
+    }
+
+    function buildTruthGamePrompt(chat, type, question = '') {
+      let prompt = '';
+
+      const memoryText = getMemoryContextForPrompt(chat, { queryText: question });
+      const longTermMemoryContext = memoryText ? `\n\n# 长期记忆 (你和用户之间已经确立的事实)\n${memoryText}` : '';
+
+      const summary3Hours = generateSummaryForTimeframe(chat, 3, 'hours');
+      const summary6Hours = generateSummaryForTimeframe(chat, 6, 'hours');
+      const summaryToday = generateSummaryForTimeframe(chat, 1, 'days');
+      const summary3Days = generateSummaryForTimeframe(chat, 3, 'days');
+
+      let shortTermMemoryContext = '';
+      if (summary3Hours || summary6Hours || summaryToday || summary3Days) {
+        shortTermMemoryContext = '\n\n# 短期记忆 (最近的对话回顾)\n';
+        if (summary3Hours) shortTermMemoryContext += summary3Hours;
+        if (summary6Hours) shortTermMemoryContext += summary6Hours;
+        if (summaryToday) shortTermMemoryContext += summaryToday;
+        if (summary3Days) shortTermMemoryContext += summary3Days;
+      }
+
+      const worldBookContext = chat.worldBook && chat.worldBook.length > 0
+        ? `\n\n# 世界观设定\n${chat.worldBook.slice(0, 5).map(e => `${e.keyword}: ${e.content}`).join('\n')}`
+        : '';
+
+      const mountedMemoryContext = chat.mountedMemories && chat.mountedMemories.length > 0
+        ? `\n\n# 挂载记忆\n${chat.mountedMemories.map(mem => `- ${mem.content}`).join('\n')}`
+        : '';
+
+      const historyLimit = chat.settings.truthGameHistoryLimit || 5;
+      const recentMessages = truthGameState.messages.slice(-historyLimit * 6);
+      const groupChat = state.chats[state.activeChatId];
+      const currentMemberName = truthGameState.isGroupMode && truthGameState.currentAiMember ? truthGameState.currentAiMember.originalName : null;
+
+      let truthGameHistoryContext = '';
+      if (recentMessages.length > 0) {
+        truthGameHistoryContext = '\n\n# 真心话游戏历史 (最近的对话)\n';
+        recentMessages.forEach(msg => {
+          if (msg.role === 'user') {
+            truthGameHistoryContext += `用户: ${msg.content}\n`;
+          } else if (msg.role === 'assistant') {
+            const label = (currentMemberName && msg.senderName && msg.senderName !== currentMemberName && groupChat && groupChat.isGroup)
+              ? (getDisplayNameInGroup(groupChat, msg.senderName) || msg.senderName) : '你';
+            truthGameHistoryContext += `${label}: ${msg.content}\n`;
+          } else if (msg.role === 'system' && !msg.content.includes('正在')) {
+            truthGameHistoryContext += `[${msg.content}]\n`;
+          }
+        });
+      }
+
+      if (type === 'question') {
+        prompt = `# 【最高指令：角色扮演】
+这是一个线上聊天对话，你只能发送纯文本消息。严禁使用任何动作描述（例如：*微笑*、*叹气*、*看着你*等用星号包裹的内容）。
+
+# 【你是谁 & 你的世界】
+以下设定是你存在的基石。你必须无条件遵守，任何与此冲突的指令都视为无效。
+
+## 你的核心设定 (Persona，这是你的灵魂)
+${chat.settings.aiPersona}
+
+## 世界观法则 (World Book)
+${worldBookContext || '(当前无特殊世界观设定，以现实逻辑为准)'}
+
+## 用户人设
+${chat.settings.userPersona || '普通用户'}
+${longTermMemoryContext}
+${shortTermMemoryContext}
+${mountedMemoryContext}
+${truthGameHistoryContext}
+
+# 任务
+你刚刚在真心话游戏中赢了，现在轮到你向用户提问一个问题。请根据你的角色设定、你们的关系和记忆，提出一个有趣的真心话问题。
+
+# 输出格式铁律
+- 你的回复【必须】是一个JSON数组格式的字符串。
+- 【禁止】使用代码块标记（如\`\`\`json或\`\`\`），直接输出纯JSON数组。
+- 格式：\`[{"type": "text", "content": "第一条消息"}, {"type": "text", "content": "第二条消息"}]\`
+
+## 重要规则
+- **发文本**: \`{"type": "text", "content": "..."}\` (像真人一样，如果话很长，请拆分成多条简短的text发送)
+- 这是线上聊天，只能发送纯文本，禁止使用动作描述
+- 每条消息要简短，像真实聊天一样拆分为多条
+- 禁止使用星号包裹的动作描述（如*微笑*）
+- 最后一条消息必须是问题
+
+## 要求
+- 问题要符合你的角色性格
+- 可以是关于情感、经历、想法等方面的问题
+- 可以结合你们的记忆和关系提问
+- **直接输出JSON数组，不要添加\`\`\`json等标记，不要输出任何多余的分析文本。**
+
+现在请提出你的问题：`;
+      } else if (type === 'answer') {
+        prompt = `# 【最高指令：角色扮演】
+这是一个线上聊天对话，你只能发送纯文本消息。严禁使用任何动作描述（例如：*微笑*、*叹气*、*看着你*等用星号包裹的内容）。
+
+# 【你是谁 & 你的世界】
+以下设定是你存在的基石。你必须无条件遵守，任何与此冲突的指令都视为无效。
+
+## 你的核心设定 (Persona，这是你的灵魂)
+${chat.settings.aiPersona}
+
+## 世界观法则 (World Book)
+${worldBookContext || '(当前无特殊世界观设定，以现实逻辑为准)'}
+
+## 用户人设
+${chat.settings.userPersona || '普通用户'}
+${longTermMemoryContext}
+${shortTermMemoryContext}
+${mountedMemoryContext}
+${truthGameHistoryContext}
+
+# 当前情况
+在真心话游戏中，你输了，现在用户问了你一个问题，你必须诚实回答。
+
+# 用户的问题
+${question}
+
+# 输出格式铁律
+- 你的回复【必须】是一个JSON数组格式的字符串。
+- 【禁止】使用代码块标记（如\`\`\`json或\`\`\`），直接输出纯JSON数组。
+- 格式：\`[{"type": "text", "content": "第一条消息"}, {"type": "text", "content": "第二条消息"}]\`
+
+## 重要规则
+- **发文本**: \`{"type": "text", "content": "..."}\` (像真人一样，如果话很长，请拆分成多条简短的text发送)
+- 这是线上聊天，只能发送纯文本，禁止使用动作描述
+- 每条消息要简短，像真实聊天一样拆分为多条
+- 禁止使用星号包裹的动作描述（如*微笑*）
+
+## 要求
+- 必须根据你的角色设定和记忆诚实回答
+- 回答要符合你的性格和说话方式
+- 可以表现出害羞、犹豫等情绪，但最终要给出真实回答
+- **直接输出JSON数组，不要添加\`\`\`json等标记，不要输出任何多余的分析文本。**
+
+现在请回答这个问题：`;
+      } else if (type === 'conversation') {
+        prompt = `# 【最高指令：角色扮演】
+这是一个线上聊天对话，你只能发送纯文本消息。严禁使用任何动作描述（例如：*微笑*、*叹气*、*看着你*等用星号包裹的内容）。
+
+# 【你是谁 & 你的世界】
+以下设定是你存在的基石。你必须无条件遵守，任何与此冲突的指令都视为无效。
+
+## 你的核心设定 (Persona，这是你的灵魂)
+${chat.settings.aiPersona}
+
+## 世界观法则 (World Book)
+${worldBookContext || '(当前无特殊世界观设定，以现实逻辑为准)'}
+
+## 用户人设
+${chat.settings.userPersona || '普通用户'}
+${longTermMemoryContext}
+${shortTermMemoryContext}
+${mountedMemoryContext}
+${truthGameHistoryContext}
+
+# 当前情况
+你正在和用户玩真心话游戏，请根据对话历史和你的角色设定自然地回复。
+
+# 输出格式铁律
+- 你的回复【必须】是一个JSON数组格式的字符串。
+- 【禁止】使用代码块标记（如\`\`\`json或\`\`\`），直接输出纯JSON数组。
+- 格式：\`[{"type": "text", "content": "第一条消息"}, {"type": "text", "content": "第二条消息"}]\`
+
+## 重要规则
+- **发文本**: \`{"type": "text", "content": "..."}\` (像真人一样，如果话很长，请拆分成多条简短的text发送)
+- 这是线上聊天，只能发送纯文本，禁止使用动作描述
+- 每条消息要简短，像真实聊天一样拆分为多条
+- 禁止使用星号包裹的动作描述（如*微笑*）
+
+## 要求
+- 回答要符合你的角色性格和说话方式
+- 保持对话自然流畅
+- **直接输出JSON数组，不要添加\`\`\`json等标记，不要输出任何多余的分析文本。**`;
+      }
+
+      return prompt;
+    }
+
+    let activeTruthGameMessageTimestamp = null;
+
+    function showTruthGameMessageActions(timestamp) {
+      activeTruthGameMessageTimestamp = timestamp;
+      const message = truthGameState.messages.find(m => m.timestamp === timestamp);
+
+      document.getElementById('message-actions-modal').classList.add('visible');
+
+      // 显示需要的按钮
+      document.getElementById('edit-message-btn').style.display = 'block';
+      document.getElementById('edit-message-btn').textContent = '编辑';
+      document.getElementById('copy-message-btn').style.display = 'block';
+      document.getElementById('recall-message-btn').style.display = 'block';
+      document.getElementById('recall-message-btn').textContent = message.role === 'assistant' ? '重说' : '删除';
+
+      // 隐藏不需要的按钮
+      document.getElementById('copy-timestamp-btn').style.display = 'none';
+      document.getElementById('translate-message-btn').style.display = 'none';
+      document.getElementById('publish-to-announcement-btn').style.display = 'none';
+      document.getElementById('quote-message-btn').style.display = 'none';
+      document.getElementById('forward-message-btn').style.display = 'none';
+      document.getElementById('select-message-btn').style.display = 'none';
+    }
+
+    const truthGameOriginalHandlers = {
+      cancel: null,
+      copy: null,
+      copyTimestamp: null,
+      translate: null,
+      edit: null,
+      recall: null
+    };
+
+    function closeTruthGameMessageActions() {
+      document.getElementById('message-actions-modal').classList.remove('visible');
+      activeTruthGameMessageTimestamp = null;
+      document.getElementById('recall-message-btn').textContent = '撤回';
+    }
+
+    function restoreNormalMessageActions() {
+      // 恢复所有正常消息菜单按钮的显示状态
+      document.getElementById('edit-message-btn').style.display = 'block';
+      document.getElementById('copy-message-btn').style.display = 'block';
+      document.getElementById('copy-timestamp-btn').style.display = 'block';
+      document.getElementById('translate-message-btn').style.display = 'block';
+      document.getElementById('recall-message-btn').style.display = 'block';
+      document.getElementById('quote-message-btn').style.display = 'block';
+      document.getElementById('forward-message-btn').style.display = 'block';
+      document.getElementById('select-message-btn').style.display = 'block';
+      document.getElementById('recall-message-btn').textContent = '撤回';
+
+      // 重置activeTruthGameMessageTimestamp
+      activeTruthGameMessageTimestamp = null;
+    }
+
+    document.getElementById('cancel-message-action-btn')?.addEventListener('click', () => {
+      if (activeTruthGameMessageTimestamp) {
+        closeTruthGameMessageActions();
+      } else if (activeWatchTogetherMessageTimestamp) {
+        closeWatchTogetherMessageActions();
+      }
+    });
+
+    document.getElementById('copy-message-btn')?.addEventListener('click', () => {
+      if (activeTruthGameMessageTimestamp) {
+        const message = truthGameState.messages.find(m => m.timestamp === activeTruthGameMessageTimestamp);
+        if (message) {
+          navigator.clipboard.writeText(message.content);
+          closeTruthGameMessageActions();
+        }
+      } else if (activeWatchTogetherMessageTimestamp) {
+        const message = watchTogetherState.messages.find(m => m.timestamp === activeWatchTogetherMessageTimestamp);
+        if (message) {
+          navigator.clipboard.writeText(message.content);
+          closeWatchTogetherMessageActions();
+        }
+      }
+    });
+
+    document.getElementById('copy-timestamp-btn')?.addEventListener('click', () => {
+      if (activeTruthGameMessageTimestamp) {
+        const date = new Date(activeTruthGameMessageTimestamp);
+        const timeStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
+        navigator.clipboard.writeText(timeStr);
+        closeTruthGameMessageActions();
+      }
+    });
+
+    document.getElementById('translate-message-btn')?.addEventListener('click', async () => {
+      if (activeTruthGameMessageTimestamp) {
+        const message = truthGameState.messages.find(m => m.timestamp === activeTruthGameMessageTimestamp);
+        if (message && message.content) {
+          closeTruthGameMessageActions();
+
+          try {
+            await showCustomAlert('翻译中...', '正在调用翻译服务，请稍候...');
+            const textToSend = message.content.length > 500 ? message.content.substring(0, 500) + '...' : message.content;
+
+            const { proxyUrl, apiKey, model } = state.apiConfig;
+            if (!proxyUrl || !apiKey || !model) {
+              await showCustomAlert('翻译失败', '请先配置API设置。');
+              return;
+            }
+
+            const response = await fetch(`${proxyUrl}/v1/chat/completions`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+              },
+              body: JSON.stringify((() => {
+                let reqBody = {
+                  model: model,
+                  messages: [{
+                    role: 'user',
+                    content: `请将以下内容翻译成中文，只输出翻译结果，不要有任何解释：\n\n${textToSend}`
+                  }],
+                  temperature: 0.3
+                };
+                if (state.globalSettings.apiTopPEnabled && state.globalSettings.apiTopP !== undefined) reqBody.top_p = state.globalSettings.apiTopP;
+                if (state.globalSettings.apiMaxTokensEnabled && state.globalSettings.apiMaxTokens > 0) reqBody.max_tokens = state.globalSettings.apiMaxTokens;
+                if (state.globalSettings.apiPresencePenaltyEnabled && state.globalSettings.apiPresencePenalty !== undefined) reqBody.presence_penalty = state.globalSettings.apiPresencePenalty;
+                if (state.globalSettings.apiFrequencyPenaltyEnabled && state.globalSettings.apiFrequencyPenalty !== undefined) reqBody.frequency_penalty = state.globalSettings.apiFrequencyPenalty;
+                return reqBody;
+              })())
+            });
+
+            if (!response.ok) throw new Error('翻译失败');
+
+            const data = await response.json();
+            const translation = data.choices[0].message.content.trim();
+
+            await showCustomAlert('翻译结果', translation);
+          } catch (error) {
+            await showCustomAlert('翻译失败', '翻译服务出错，请稍后重试。');
+          }
+        }
+      }
+    });
+
+    document.getElementById('edit-message-btn')?.addEventListener('click', async () => {
+      if (activeTruthGameMessageTimestamp) {
+        const message = truthGameState.messages.find(m => m.timestamp === activeTruthGameMessageTimestamp);
+        if (message) {
+          closeTruthGameMessageActions();
+
+          const newContent = await showCustomPrompt('编辑消息内容', '', message.content, 'textarea');
+          if (newContent !== null && newContent.trim() !== '') {
+            message.content = newContent.trim();
+            renderTruthGameMessages();
+          }
+        }
+      } else if (activeWatchTogetherMessageTimestamp) {
+        const message = watchTogetherState.messages.find(m => m.timestamp === activeWatchTogetherMessageTimestamp);
+        if (message) {
+          closeWatchTogetherMessageActions();
+
+          const newContent = await showCustomPrompt('编辑消息内容', '', message.content, 'textarea');
+          if (newContent !== null && newContent.trim() !== '') {
+            message.content = newContent.trim();
+            renderWatchTogetherMessages();
+          }
+        }
+      }
+    });
+
+    document.getElementById('recall-message-btn')?.addEventListener('click', async () => {
+      if (activeTruthGameMessageTimestamp) {
+        const targetTimestamp = activeTruthGameMessageTimestamp;
+        const message = truthGameState.messages.find(m => m.timestamp === targetTimestamp);
+        if (!message) return;
+
+        closeTruthGameMessageActions();
+
+        if (message.role === 'assistant') {
+          const chat = state.chats[state.activeChatId];
+          const { proxyUrl, apiKey, model } = state.apiConfig;
+
+          if (!proxyUrl || !apiKey || !model) {
+            alert('请先配置API设置。');
+            return;
+          }
+
+          const messageIndex = truthGameState.messages.findIndex(m => m.timestamp === targetTimestamp);
+          if (messageIndex === -1) return;
+
+          const previousMessage = truthGameState.messages[messageIndex - 1];
+
+          truthGameState.waitingForAI = true;
+          addTruthGameMessage('system', '正在重新生成...');
+
+          let prompt = '';
+          if (previousMessage && previousMessage.role === 'user') {
+            if (truthGameState.winner === 'ai') {
+              prompt = buildTruthGamePrompt(chat, 'question');
+            } else if (truthGameState.winner === 'user') {
+              prompt = buildTruthGamePrompt(chat, 'answer', previousMessage.content);
+            } else {
+              prompt = buildTruthGamePrompt(chat, 'conversation');
+            }
+          } else {
+            prompt = buildTruthGamePrompt(chat, 'conversation');
+          }
+
+          // 创建AbortController用于中断请求
+          truthGameState.abortController = new AbortController();
+          const timeoutId = setTimeout(() => truthGameState.abortController.abort(), 60000); // 60秒超时
+
+          try {
+            const response = await fetch(`${proxyUrl}/v1/chat/completions`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+              },
+              body: JSON.stringify((() => {
+                let reqBody = {
+                  model: model,
+                  messages: [{ role: 'user', content: prompt }],
+                  temperature: 0.8
+                };
+                if (state.globalSettings.apiTopPEnabled && state.globalSettings.apiTopP !== undefined) reqBody.top_p = state.globalSettings.apiTopP;
+                if (state.globalSettings.apiMaxTokensEnabled && state.globalSettings.apiMaxTokens > 0) reqBody.max_tokens = state.globalSettings.apiMaxTokens;
+                if (state.globalSettings.apiPresencePenaltyEnabled && state.globalSettings.apiPresencePenalty !== undefined) reqBody.presence_penalty = state.globalSettings.apiPresencePenalty;
+                if (state.globalSettings.apiFrequencyPenaltyEnabled && state.globalSettings.apiFrequencyPenalty !== undefined) reqBody.frequency_penalty = state.globalSettings.apiFrequencyPenalty;
+                return reqBody;
+              })()),
+              signal: truthGameState.abortController.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) throw new Error('API调用失败');
+
+            const data = await response.json();
+            const rawContent = data.choices[0].message.content.trim();
+
+            // 使用成熟的parseAiResponse函数解析（和单聊一样）
+            const messagesArray = parseAiResponse(rawContent);
+
+            // 提取第一条有效的text内容作为新回复
+            const validMessages = messagesArray
+              .filter(item => item && (item.type === 'text' || item.type === 'offline_text'))
+              .map(item => item.content)
+              .filter(text => text && text.trim().length > 0);
+
+            const newReply = validMessages.length > 0 ? validMessages[0] : rawContent;
+
+            message.content = newReply;
+            truthGameState.messages = truthGameState.messages.filter(m => m.role !== 'system' || !m.content.includes('正在重新生成'));
+            renderTruthGameMessages();
+          } catch (error) {
+            clearTimeout(timeoutId);
+
+            // 如果是用户主动取消，不显示错误
+            if (error.name === 'AbortError') {
+              console.log('真心话重说被用户中断');
+            } else {
+              console.error('重说失败:', error);
+              alert('重新生成失败：' + error.message);
+            }
+
+            truthGameState.messages = truthGameState.messages.filter(m => m.role !== 'system' || !m.content.includes('正在重新生成'));
+            if (error.name !== 'AbortError') {
+              addTruthGameMessage('system', '重新生成失败，请稍后重试。');
+            }
+          } finally {
+            truthGameState.waitingForAI = false;
+            truthGameState.abortController = null;
+          }
+        } else {
+          const confirmed = await showCustomConfirm('删除消息', '确定要删除这条消息吗？', {
+            confirmButtonClass: 'btn-danger'
+          });
+          if (confirmed) {
+            truthGameState.messages = truthGameState.messages.filter(m => m.timestamp !== targetTimestamp);
+            renderTruthGameMessages();
+          }
+        }
+      } else if (activeWatchTogetherMessageTimestamp) {
+        // 观影消息的撤回/删除/重说
+        const targetTimestamp = activeWatchTogetherMessageTimestamp;
+        const message = watchTogetherState.messages.find(m => m.timestamp === targetTimestamp);
+        if (!message) return;
+
+        closeWatchTogetherMessageActions();
+
+        if (message.role === 'assistant') {
+          // AI消息：重说
+          const confirmed = await showCustomConfirm('重说', '确定要让AI重新生成这条消息吗？');
+          if (!confirmed) return;
+
+          // 调用API重新生成
+          const messageIndex = watchTogetherState.messages.findIndex(m => m.timestamp === targetTimestamp);
+          if (messageIndex === -1) return;
+
+          // 删除这条AI消息及其后的所有消息
+          watchTogetherState.messages = watchTogetherState.messages.slice(0, messageIndex);
+          renderWatchTogetherMessages();
+
+          // 调用API
+          callWatchTogetherAPI();
+        } else {
+          // 用户消息：删除
+          const confirmed = await showCustomConfirm('删除消息', '确定要删除这条消息吗？', {
+            confirmButtonClass: 'btn-danger'
+          });
+          if (confirmed) {
+            watchTogetherState.messages = watchTogetherState.messages.filter(m => m.timestamp !== targetTimestamp);
+            renderWatchTogetherMessages();
+          }
+        }
+      }
+    });
+    // ========== 真心话游戏结束 ==========

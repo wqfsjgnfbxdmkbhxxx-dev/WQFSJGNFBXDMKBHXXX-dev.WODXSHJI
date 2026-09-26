@@ -1,0 +1,328 @@
+/* ========== 整洁 API 设置：沿用原页面结构的 Tab 布局 ========== */
+
+#api-settings-screen.api-clean-layout {
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#api-settings-screen.api-clean-layout.active {
+  display: flex;
+}
+
+#api-settings-screen.api-clean-layout > .header {
+  flex: 0 0 auto;
+}
+
+#api-settings-screen .save-btn.is-saving {
+  pointer-events: none;
+  opacity: .62;
+}
+
+/* API 设置界面错误高亮 Shake 动画 */
+#api-settings-screen input.api-input-error,
+#api-settings-screen select.api-input-error {
+  border-color: #ff3b30 !important;
+  background-color: #fff2f2 !important;
+  box-shadow: 0 0 0 2px rgba(255, 59, 48, 0.16) !important;
+  animation: apiErrorShake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes apiErrorShake {
+  10%, 90% { transform: translate3d(-1px, 0, 0); }
+  20%, 80% { transform: translate3d(2px, 0, 0); }
+  30%, 50%, 70% { transform: translate3d(-3px, 0, 0); }
+  40%, 60% { transform: translate3d(3px, 0, 0); }
+}
+
+#api-settings-screen .cas-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  justify-content: flex-start;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid var(--border-color, #e5e5ea);
+  background: var(--primary-bg, #fff);
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+#api-settings-screen .cas-tabs[hidden] {
+  display: none !important;
+}
+
+#api-settings-screen .cas-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+#api-settings-screen .cas-tab {
+  appearance: none;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 14px 9px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary, #8e8e93);
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#api-settings-screen .cas-tab.active {
+  border-bottom-color: var(--accent-color, #007aff);
+  color: var(--accent-color, #007aff);
+  font-weight: 600;
+}
+
+#api-settings-screen .cas-tab:focus-visible {
+  outline: 2px solid var(--accent-color, #007aff);
+  outline-offset: -3px;
+}
+
+#api-settings-screen.api-clean-layout > .settings-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  padding-bottom: calc(40px + env(safe-area-inset-bottom));
+  overscroll-behavior: contain;
+}
+
+#api-settings-screen.api-clean-layout > .settings-container > [hidden] {
+  display: none !important;
+}
+
+#phone-screen.dark-mode #api-settings-screen .cas-tabs {
+  border-bottom-color: #38383a;
+  background: var(--primary-bg, #000);
+}
+
+/* ==========================================================================
+   API 设置：精致 iOS 胶囊小按钮美化
+   ========================================================================== */
+
+#api-settings-screen .settings-mini-btn,
+#api-settings-screen #open-console-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  min-height: 28px !important;
+  padding: 4px 12px !important;
+  border-radius: 14px !important;
+  border: 0.5px solid rgba(0, 122, 255, 0.2) !important;
+  background-color: rgba(0, 122, 255, 0.08) !important;
+  color: #007aff !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  outline: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+  box-shadow: 0 1px 2px rgba(0, 122, 255, 0.05) !important;
+  transition: all 0.16s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+#api-settings-screen .settings-mini-btn:hover,
+#api-settings-screen #open-console-btn:hover {
+  background-color: rgba(0, 122, 255, 0.14) !important;
+  border-color: rgba(0, 122, 255, 0.32) !important;
+  color: #0062cc !important;
+}
+
+#api-settings-screen .settings-mini-btn:active,
+#api-settings-screen #open-console-btn:active {
+  transform: scale(0.95) !important;
+  background-color: rgba(0, 122, 255, 0.22) !important;
+  border-color: rgba(0, 122, 255, 0.4) !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* 带有危险 / 删除 / 重置含义的小按钮 */
+#api-settings-screen #delete-api-preset-btn,
+#api-settings-screen #delete-secondary-api-preset-btn,
+#api-settings-screen #reset-api-temperature-btn,
+#api-settings-screen #reset-api-top-p-btn,
+#api-settings-screen #reset-api-max-tokens-btn,
+#api-settings-screen #reset-api-presence-penalty-btn,
+#api-settings-screen #reset-api-frequency-penalty-btn,
+#api-settings-screen #myphone-reset-lock-wallpaper-btn,
+#api-settings-screen .settings-mini-btn[id*="delete"],
+#api-settings-screen .settings-mini-btn[id*="reset"] {
+  border-color: rgba(255, 59, 48, 0.22) !important;
+  background-color: rgba(255, 59, 48, 0.08) !important;
+  color: #ff3b30 !important;
+  box-shadow: 0 1px 2px rgba(255, 59, 48, 0.05) !important;
+}
+
+#api-settings-screen #delete-api-preset-btn:hover,
+#api-settings-screen #delete-secondary-api-preset-btn:hover,
+#api-settings-screen #reset-api-temperature-btn:hover,
+#api-settings-screen #reset-api-top-p-btn:hover,
+#api-settings-screen #reset-api-max-tokens-btn:hover,
+#api-settings-screen #reset-api-presence-penalty-btn:hover,
+#api-settings-screen #reset-api-frequency-penalty-btn:hover,
+#api-settings-screen #myphone-reset-lock-wallpaper-btn:hover,
+#api-settings-screen .settings-mini-btn[id*="delete"]:hover,
+#api-settings-screen .settings-mini-btn[id*="reset"]:hover {
+  background-color: rgba(255, 59, 48, 0.15) !important;
+  border-color: rgba(255, 59, 48, 0.35) !important;
+  color: #e02d23 !important;
+}
+
+#api-settings-screen #delete-api-preset-btn:active,
+#api-settings-screen #delete-secondary-api-preset-btn:active,
+#api-settings-screen #reset-api-temperature-btn:active,
+#api-settings-screen #reset-api-top-p-btn:active,
+#api-settings-screen #reset-api-max-tokens-btn:active,
+#api-settings-screen #reset-api-presence-penalty-btn:active,
+#api-settings-screen #reset-api-frequency-penalty-btn:active,
+#api-settings-screen #myphone-reset-lock-wallpaper-btn:active,
+#api-settings-screen .settings-mini-btn[id*="delete"]:active,
+#api-settings-screen .settings-mini-btn[id*="reset"]:active {
+  transform: scale(0.95) !important;
+  background-color: rgba(255, 59, 48, 0.22) !important;
+  border-color: rgba(255, 59, 48, 0.45) !important;
+}
+
+/* 针对滑块重置类极窄内联按钮的微调 */
+#api-settings-screen #reset-api-temperature-btn,
+#api-settings-screen #reset-api-top-p-btn,
+#api-settings-screen #reset-api-max-tokens-btn,
+#api-settings-screen #reset-api-presence-penalty-btn,
+#api-settings-screen #reset-api-frequency-penalty-btn {
+  min-height: 24px !important;
+  padding: 2px 8px !important;
+  font-size: 12px !important;
+  border-radius: 12px !important;
+}
+
+/* 数据管理与媒体预览按钮中的其他小按钮 (例如水印预览、保活音频等) */
+#api-settings-screen #watermark-preview-btn,
+#api-settings-screen #keep-alive-audio-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 8px !important;
+  border: 0.5px solid rgba(0, 122, 255, 0.25) !important;
+  background-color: rgba(0, 122, 255, 0.08) !important;
+  color: #007aff !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all 0.16s ease !important;
+}
+
+#api-settings-screen #watermark-preview-btn:active,
+#api-settings-screen #keep-alive-audio-btn:active {
+  transform: scale(0.96) !important;
+  background-color: rgba(0, 122, 255, 0.18) !important;
+}
+
+/* 暗黑模式适配 */
+#phone-screen.dark-mode #api-settings-screen .settings-mini-btn,
+#phone-screen.dark-mode #api-settings-screen #open-console-btn {
+  background-color: rgba(10, 132, 255, 0.18) !important;
+  border-color: rgba(10, 132, 255, 0.3) !important;
+  color: #0a84ff !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
+#phone-screen.dark-mode #api-settings-screen .settings-mini-btn:hover,
+#phone-screen.dark-mode #api-settings-screen #open-console-btn:hover {
+  background-color: rgba(10, 132, 255, 0.26) !important;
+  border-color: rgba(10, 132, 255, 0.45) !important;
+  color: #409cff !important;
+}
+
+#phone-screen.dark-mode #api-settings-screen .settings-mini-btn:active,
+#phone-screen.dark-mode #api-settings-screen #open-console-btn:active {
+  background-color: rgba(10, 132, 255, 0.35) !important;
+  border-color: rgba(10, 132, 255, 0.55) !important;
+}
+
+#phone-screen.dark-mode #api-settings-screen #delete-api-preset-btn,
+#phone-screen.dark-mode #api-settings-screen #delete-secondary-api-preset-btn,
+#phone-screen.dark-mode #api-settings-screen #reset-api-temperature-btn,
+#phone-screen.dark-mode #api-settings-screen #reset-api-top-p-btn,
+#phone-screen.dark-mode #api-settings-screen #reset-api-max-tokens-btn,
+#phone-screen.dark-mode #api-settings-screen #reset-api-presence-penalty-btn,
+#phone-screen.dark-mode #api-settings-screen #reset-api-frequency-penalty-btn,
+#phone-screen.dark-mode #api-settings-screen #myphone-reset-lock-wallpaper-btn,
+#phone-screen.dark-mode #api-settings-screen .settings-mini-btn[id*="delete"],
+#phone-screen.dark-mode #api-settings-screen .settings-mini-btn[id*="reset"] {
+  background-color: rgba(255, 69, 58, 0.18) !important;
+  border-color: rgba(255, 69, 58, 0.32) !important;
+  color: #ff453a !important;
+}
+
+#phone-screen.dark-mode #api-settings-screen #delete-api-preset-btn:hover,
+#phone-screen.dark-mode #api-settings-screen #delete-secondary-api-preset-btn:hover,
+#phone-screen.dark-mode #api-settings-screen #reset-api-temperature-btn:hover,
+#phone-screen.dark-mode #api-settings-screen #reset-api-top-p-btn:hover,
+#phone-screen.dark-mode #api-settings-screen #reset-api-max-tokens-btn:hover,
+#phone-screen.dark-mode #api-settings-screen #reset-api-presence-penalty-btn:hover,
+#phone-screen.dark-mode #api-settings-screen #reset-api-frequency-penalty-btn:hover,
+#phone-screen.dark-mode #api-settings-screen #myphone-reset-lock-wallpaper-btn:hover,
+#phone-screen.dark-mode #api-settings-screen .settings-mini-btn[id*="delete"]:hover,
+#phone-screen.dark-mode #api-settings-screen .settings-mini-btn[id*="reset"]:hover {
+  background-color: rgba(255, 69, 58, 0.26) !important;
+  border-color: rgba(255, 69, 58, 0.45) !important;
+  color: #ff6961 !important;
+}
+
+#phone-screen.dark-mode #api-settings-screen #delete-api-preset-btn:active,
+#phone-screen.dark-mode #api-settings-screen #delete-secondary-api-preset-btn:active,
+#phone-screen.dark-mode #api-settings-screen #reset-api-temperature-btn:active,
+#phone-screen.dark-mode #api-settings-screen #reset-api-top-p-btn:active,
+#phone-screen.dark-mode #api-settings-screen #reset-api-max-tokens-btn:active,
+#phone-screen.dark-mode #api-settings-screen #reset-api-presence-penalty-btn:active,
+#phone-screen.dark-mode #api-settings-screen #reset-api-frequency-penalty-btn:active,
+#phone-screen.dark-mode #api-settings-screen #myphone-reset-lock-wallpaper-btn:active,
+#phone-screen.dark-mode #api-settings-screen .settings-mini-btn[id*="delete"]:active,
+#phone-screen.dark-mode #api-settings-screen .settings-mini-btn[id*="reset"]:active {
+  background-color: rgba(255, 69, 58, 0.35) !important;
+  border-color: rgba(255, 69, 58, 0.55) !important;
+}
+
+#phone-screen.dark-mode #api-settings-screen #watermark-preview-btn,
+#phone-screen.dark-mode #api-settings-screen #keep-alive-audio-btn {
+  background-color: rgba(10, 132, 255, 0.18) !important;
+  border-color: rgba(10, 132, 255, 0.3) !important;
+  color: #0a84ff !important;
+}
+
+@media (max-width: 390px) {
+  #api-settings-screen .cas-tab {
+    padding-right: 12px;
+    padding-left: 12px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 320px) {
+  #api-settings-screen .cas-tab {
+    padding-right: 10px;
+    padding-left: 10px;
+    font-size: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #api-settings-screen .cas-tab {
+    transition: none;
+  }
+}

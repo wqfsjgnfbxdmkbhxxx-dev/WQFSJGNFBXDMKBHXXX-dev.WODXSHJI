@@ -1,0 +1,1025 @@
+// ============================================================
+// reading-room.js
+// 来源：script.js 第 52560~53310 行（DOMContentLoaded 内部）
+// 功能：阅读室 —— openReadingRoom、initReadingSession、closeReadingRoom、
+//       renderReadingRoom、showNextPage、showPrevPage、importBook、
+//       decodeTextFile、handleBookFileUpload、handlePageJump、
+//       saveReadingProgress、openBookLibrary、renderBookLibrary、
+//       loadBookFromLibrary、addGreenRiverToShelf、removeGreenRiverFromShelf、
+//       deleteBookFromLibrary、processImportedText、makeDraggable、
+//       minimizeReadingRoom、restoreReadingRoom、debounce、
+//       formatReadingStateForAI、updateReadingContextOnScroll
+// ============================================================
+
+(function () {
+  // state 和 db 通过全局作用域访问（window.state/window.db，由 init-and-state.js 初始化）
+
+  // ========== 闭包变量 ==========
+
+  let readingState = {};
+
+  function getReadingDisplaySettings(chatFontSize) {
+    try {
+      return Object.assign({ fontSize: Number(chatFontSize) || 13, lineHeight: 1.8, theme: 'default' }, JSON.parse(localStorage.getItem('reading-display-settings') || '{}'));
+    } catch (_) {
+      return { fontSize: Number(chatFontSize) || 13, lineHeight: 1.8, theme: 'default' };
+    }
+  }
+
+  function applyReadingDisplaySettings(contentEl, settings) {
+    contentEl.style.fontSize = `${Math.min(24, Math.max(12, Number(settings.fontSize) || 13))}px`;
+    contentEl.style.lineHeight = String(Math.min(2.2, Math.max(1.4, Number(settings.lineHeight) || 1.8)));
+    contentEl.classList.remove('reading-theme-paper', 'reading-theme-white', 'reading-theme-dark');
+    if (settings.theme && settings.theme !== 'default') contentEl.classList.add(`reading-theme-${settings.theme}`);
+  }
+
+  // ========== 来源：script.js 第 52560~53310 行 ==========
+
+  function openReadingRoom() {
+    if (!state.activeChatId) return;
+    const chatId = state.activeChatId;
+    const overlay = document.getElementById('reading-overlay');
+    const windowEl = document.getElementById('reading-window');
+    const restoreBtn = document.getElementById('reading-restore-btn');
+
+    let session = readingState[chatId];
+
+
+    if (session && session.isActive) {
+      if (session.isMinimized) {
+        restoreReadingRoom();
+      }
+
+      overlay.style.display = 'flex';
+      return;
+    }
+
+
+    initReadingSession(chatId);
+    renderReadingRoom(chatId);
+
+
+    overlay.style.display = 'flex';
+    windowEl.classList.remove('minimized');
+    restoreBtn.style.display = 'none';
+
+
+
+
+    const phoneScreen = document.getElementById('phone-screen');
+    const windowRect = windowEl.getBoundingClientRect();
+
+
+    const top = (phoneScreen.clientHeight - windowRect.height) / 2;
+    const left = (phoneScreen.clientWidth - windowRect.width) / 2;
+
+
+    windowEl.style.top = `${top}px`;
+    windowEl.style.left = `${left}px`;
+    windowEl.style.transform = '';
+
+  }
+
+
+  function initReadingSession(chatId) {
+    readingState[chatId] = {
+      isActive: true,
+      isMinimized: false,
+      title: '未选择书籍',
+      contentLines: [],
+      currentPage: 0,
+      totalPages: 0,
+      linesPerPage: 15,
+      currentSnippet: '',
+      structuredPages: [],
+      isStructuredStory: false,
+      currentChapterTitle: ''
+    };
+  }
+
+  function buildStructuredReadingPages(chapters, targetChars = 1100) {
+    const pages = [];
+    (chapters || []).forEach((chapter, chapterIndex) => {
+      const normalized = window.GreenRiverStoryEngine
+        ? window.GreenRiverStoryEngine.ensureChapter(chapter, chapterIndex)
+        : chapter;
+      const commentMap = window.GreenRiverStoryEngine ? window.GreenRiverStoryEngine.paragraphCommentMap(normalized) : new Map();
+      const titleUnit = { type: 'title', chapterId: normalized.id, chapterTitle: normalized.title, text: normalized.title };
+      const units = (normalized.paragraphs || []).map(paragraph => ({
+        type: 'paragraph', chapterId: normalized.id, chapterTitle: normalized.title, paragraphId: paragraph.id, text: paragraph.text,
+        comments: commentMap.get(paragraph.id) || []
+      }));
+      let currentPage = [titleUnit];
+      let currentSize = 80;
+      units.forEach(unit => {
+        const unitSize = Math.max(20, unit.text.length);
+        if (currentPage.length > 1 && currentSize + unitSize > targetChars) {
+          pages.push(currentPage);
+          currentPage = [];
+          currentSize = 0;
+        }
+        currentPage.push(unit);
+        currentSize += unitSize;
+      });
+      if (currentPage.length) pages.push(currentPage);
+    });
+    return pages;
+  }
+
+
+  function closeReadingRoom() {
+    const chatId = state.activeChatId;
+    if (!chatId || !readingState[chatId] || !readingState[chatId].isActive) return;
+
+
+    document.getElementById('reading-overlay').style.display = 'none';
+    document.getElementById('reading-restore-btn').style.display = 'none';
+    document.getElementById('reading-window').classList.remove('minimized');
+
+
+    readingState[chatId].isActive = false;
+    console.log("读书会话已关闭。");
+  }
+
+
+
+
+
+  function renderReadingRoom(chatId) {
+    const session = readingState[chatId];
+    if (!session) return;
+
+    // --- 【新增/修改部分开始】 ---
+    // 1. 获取当前聊天的字体设置
+    const chat = state.chats[chatId];
+    // 默认 13px，如果有设置则使用设置值
+    const fontSize = (chat && chat.settings && chat.settings.fontSize) ? chat.settings.fontSize : 13;
+
+    const contentEl = document.getElementById('reading-content');
+
+    // 2. 将字体大小应用到读书容器
+    applyReadingDisplaySettings(contentEl, getReadingDisplaySettings(fontSize));
+    // --- 【新增/修改部分结束】 ---
+
+    const titleEl = document.getElementById('reading-title');
+    // const contentEl = document.getElementById('reading-content'); // 这行上面已经获取了，可以注释掉或删除
+    const pageIndicator = document.getElementById('page-indicator');
+    const prevBtn = document.getElementById('prev-page-btn');
+    const nextBtn = document.getElementById('next-page-btn');
+
+    titleEl.textContent = session.title;
+
+    if (session.isStructuredStory && session.structuredPages.length > 0) {
+      contentEl.innerHTML = '';
+      const page = session.structuredPages[session.currentPage] || [];
+      page.forEach(unit => {
+        const element = document.createElement(unit.type === 'title' ? 'h3' : 'p');
+        element.className = unit.type === 'title' ? 'reading-chapter-heading' : 'reading-structured-paragraph';
+        element.textContent = unit.text;
+        if (unit.paragraphId) element.dataset.paragraphId = unit.paragraphId;
+        if (unit.type === 'paragraph') element.dataset.readingText = unit.text;
+        element.dataset.chapterId = unit.chapterId || '';
+        if (unit.type === 'paragraph' && unit.comments?.length) {
+          const commentButton = document.createElement('button');
+          commentButton.className = 'reading-comment-button';
+          commentButton.textContent = `💬 ${unit.comments.length}`;
+          commentButton.title = '查看段评';
+          commentButton.onclick = () => showCustomAlert('段评', unit.comments.map(comment => `${comment.name || '读者'}：${comment.content || ''}`).join('\n\n'));
+          element.appendChild(commentButton);
+        }
+        contentEl.appendChild(element);
+      });
+      const firstParagraph = page.find(unit => unit.type === 'paragraph');
+      session.currentChapterTitle = firstParagraph?.chapterTitle || page.find(unit => unit.type === 'title')?.chapterTitle || '';
+      session.currentSnippet = page.filter(unit => unit.type === 'paragraph').slice(0, 3).map(unit => unit.text).join('\n');
+    } else if (session.contentLines.length === 0) {
+      contentEl.innerHTML = '<p style="text-align:center; padding-top:50px; color:#888;">点击"导入"按钮，<br>从本地.txt文件或网络URL加载书籍内容。</p>';
+      session.totalPages = 0;
+      session.currentPage = 0;
+    } else {
+      const startLine = session.currentPage * session.linesPerPage;
+      const endLine = startLine + session.linesPerPage;
+      contentEl.textContent = session.contentLines.slice(startLine, endLine).join('\n');
+    }
+
+    pageIndicator.textContent = session.totalPages > 0
+      ? `${session.currentPage + 1} / ${session.totalPages}${session.currentChapterTitle ? ` · ${session.currentChapterTitle}` : ''}`
+      : '0 / 0';
+    prevBtn.disabled = session.currentPage === 0;
+    nextBtn.disabled = session.currentPage >= session.totalPages - 1;
+  }
+
+  // showNextPage 旧版（同步版，无 notifyAiOfPageTurn）已删除
+  // 保留下方的 async 版本
+
+  async function showPrevPage() {
+    const session = readingState[state.activeChatId];
+    if (session && session.currentPage > 0) {
+      session.currentPage--;
+      renderReadingRoom(state.activeChatId);
+      document.getElementById('reading-content').scrollTop = 0;
+      await saveReadingProgress(session.activeBookId, session.currentPage);
+
+
+      if (typeof notifyAiOfPageTurn === 'function') await notifyAiOfPageTurn(state.activeChatId, session);
+    }
+  }
+
+
+  function importBook() {
+
+    document.getElementById('book-upload-input').click();
+  }
+
+  async function decodeTextFile(arrayBuffer) {
+    const uint8array = new Uint8Array(arrayBuffer);
+
+
+    if (uint8array.length >= 3 && uint8array[0] === 0xEF && uint8array[1] === 0xBB && uint8array[2] === 0xBF) {
+      console.log("检测到 UTF-8 BOM，使用 UTF-8 解码。");
+      return new TextDecoder('utf-8').decode(uint8array);
+    }
+    if (uint8array.length >= 2 && uint8array[0] === 0xFF && uint8array[1] === 0xFE) {
+      console.log("检测到 UTF-16 LE BOM，使用 UTF-16 LE 解码。");
+      return new TextDecoder('utf-16le').decode(uint8array);
+    }
+    if (uint8array.length >= 2 && uint8array[0] === 0xFE && uint8array[1] === 0xFF) {
+      console.log("检测到 UTF-16 BE BOM，使用 UTF-16 BE 解码。");
+      return new TextDecoder('utf-16be').decode(uint8array);
+    }
+
+
+    try {
+      console.log("未检测到BOM，尝试使用 UTF-8 解码...");
+
+      const decoded = new TextDecoder('utf-8', {
+        fatal: true
+      }).decode(uint8array);
+      console.log("UTF-8 解码成功。");
+      return decoded;
+    } catch (e) {
+      console.log("UTF-8 解码失败，将尝试 GBK (ANSI) 解码...");
+
+      try {
+        const decoded = new TextDecoder('gbk').decode(uint8array);
+        console.log("GBK 解码成功。");
+        return decoded;
+      } catch (err) {
+        console.error("所有解码尝试均失败:", err);
+
+        throw new Error("无法识别的文件编码。请尝试将文件转换为 UTF-8 格式后重新导入。");
+      }
+    }
+  }
+
+  function cleanImportedBookTitle(value) {
+    return String(value || '')
+      .replace(/^\uFEFF/, '')
+      .replace(/\.txt$/i, '')
+      .replace(/[\u0000-\u001F\u007F]/g, '')
+      .trim();
+  }
+
+  function isTemporaryBookFilename(title) {
+    const normalized = cleanImportedBookTitle(title)
+      .replace(/^[{(]|[})]$/g, '')
+      .replace(/\s*\(\d+\)$/, '');
+
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalized)
+      || /^[0-9a-f]{32}$/i.test(normalized);
+  }
+
+  function inferBookTitleFromText(textContent) {
+    const lines = String(textContent || '')
+      .replace(/^\uFEFF/, '')
+      .split(/\r\n?|\n/)
+      .slice(0, 20)
+      .map(line => line.trim())
+      .filter(Boolean);
+
+    for (const line of lines) {
+      const labeledTitle = line.match(/^(?:【\s*)?(?:书名|小说名|作品名|标题)(?:\s*】)?\s*[：:]\s*(.+)$/i);
+      if (labeledTitle) return cleanImportedBookTitle(labeledTitle[1]).replace(/^《|》$/g, '').trim();
+
+      const bracketedTitle = line.match(/^《([^》]{1,80})》(?:\s|$)/);
+      if (bracketedTitle) return cleanImportedBookTitle(bracketedTitle[1]);
+    }
+
+    const firstLine = lines[0] || '';
+    const looksLikeMetadata = /^(?:作者|简介|内容简介|文案|版权|来源|网址|URL)\s*[：:]/i.test(firstLine);
+    const looksLikeChapter = /^(?:第\s*[0-9一二三四五六七八九十百千万零〇两]+\s*[章节卷回部篇]|chapter\s+\d+)/i.test(firstLine);
+    const looksLikeSeparator = /^[-_=*#·]{3,}$/.test(firstLine);
+    const looksLikeUrl = /^(?:https?:\/\/|www\.)/i.test(firstLine);
+
+    if (firstLine.length <= 80 && !looksLikeMetadata && !looksLikeChapter && !looksLikeSeparator && !looksLikeUrl) {
+      return cleanImportedBookTitle(firstLine).replace(/^《|》$/g, '').trim();
+    }
+
+    return '';
+  }
+
+  async function resolveImportedBookTitle(fileName, textContent) {
+    const fileTitle = cleanImportedBookTitle(fileName);
+    if (fileTitle && !isTemporaryBookFilename(fileTitle)) return fileTitle;
+
+    const inferredTitle = inferBookTitleFromText(textContent);
+    if (inferredTitle) return inferredTitle;
+
+    const enteredTitle = await showCustomPrompt(
+      '填写书名',
+      '文件选择器没有提供原始书名，请输入这本书的名称。',
+      ''
+    );
+    if (enteredTitle === null) return null;
+
+    const cleanedTitle = cleanImportedBookTitle(enteredTitle);
+    if (!cleanedTitle) {
+      await showCustomAlert('无法导入', '书名不能为空。');
+      return null;
+    }
+    return cleanedTitle;
+  }
+
+  async function handleBookFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+
+      const arrayBuffer = await file.arrayBuffer();
+
+      const textContent = await decodeTextFile(arrayBuffer);
+
+      const title = await resolveImportedBookTitle(file.name, textContent);
+      if (!title) return;
+
+      const newBookId = await db.readingLibrary.add({
+        title: title,
+        content: textContent,
+        lastOpened: Date.now()
+      });
+
+      await loadBookFromLibrary(newBookId);
+      if (document.getElementById('reading-library-modal').classList.contains('visible')) {
+        renderBookLibrary();
+      }
+    } catch (error) {
+
+      console.error("导入书籍失败:", error);
+      await showCustomAlert("导入失败", error.message);
+    } finally {
+      event.target.value = null;
+    }
+  }
+  async function handlePageJump() {
+    const chatId = state.activeChatId;
+    if (!chatId) return;
+    const session = readingState[chatId];
+    if (!session || session.totalPages <= 1) return;
+
+    const targetPageStr = await showCustomPrompt(
+      '页面跳转',
+      `请输入想跳转的页码 (1 - ${session.totalPages})`,
+      session.currentPage + 1
+    );
+
+    if (targetPageStr === null) return;
+
+    const targetPage = parseInt(targetPageStr);
+
+    if (isNaN(targetPage) || targetPage < 1 || targetPage > session.totalPages) {
+      alert("请输入一个有效的页码！");
+      return;
+    }
+
+    session.currentPage = targetPage - 1;
+    renderReadingRoom(chatId);
+
+    saveReadingProgress(session.activeBookId, session.currentPage);
+  }
+
+
+  async function saveReadingProgress(bookId, pageNumber) {
+    if (!bookId) return;
+    try {
+      const book = await db.readingLibrary.get(bookId);
+      const currentPagesByChat = Object.assign({}, book?.currentPagesByChat || {});
+      if (state.activeChatId) currentPagesByChat[state.activeChatId] = pageNumber;
+      await db.readingLibrary.update(bookId, {
+        currentPage: pageNumber,
+        currentPagesByChat
+      });
+    } catch (error) {
+      console.error(`保存书籍(ID: ${bookId})的阅读进度失败:`, error);
+    }
+  }
+
+  async function showNextPage() {
+    const session = readingState[state.activeChatId];
+    if (session && session.currentPage < session.totalPages - 1) {
+      session.currentPage++;
+      renderReadingRoom(state.activeChatId);
+      document.getElementById('reading-content').scrollTop = 0;
+      await saveReadingProgress(session.activeBookId, session.currentPage);
+
+
+      if (typeof notifyAiOfPageTurn === 'function') await notifyAiOfPageTurn(state.activeChatId, session);
+    }
+  }
+
+
+
+
+
+  async function openBookLibrary() {
+
+    document.getElementById('reading-library-search-input').value = '';
+
+    await renderBookLibrary();
+    document.getElementById('reading-library-modal').classList.add('visible');
+  }
+
+
+  async function renderBookLibrary(searchTerm = '') {
+    const listEl = document.getElementById('reading-library-list');
+    let books = await db.readingLibrary.orderBy('lastOpened').reverse().toArray();
+    listEl.innerHTML = '';
+
+
+    if (searchTerm) {
+      books = books.filter(book =>
+        book.title.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+
+    if (books.length === 0) {
+      const message = searchTerm ?
+        '找不到匹配的书籍' :
+        '书库是空的，点击"导入新书"添加第一本吧！';
+      listEl.innerHTML = `<p style="text-align:center; color: var(--text-secondary); padding: 50px 0;">${message}</p>`;
+      return;
+    }
+
+    books.forEach(book => {
+      const item = document.createElement('div');
+      item.className = 'existing-group-item';
+      const name = document.createElement('span');
+      name.className = 'group-name';
+      name.style.cursor = 'pointer';
+      name.dataset.bookId = book.id;
+      name.textContent = book.title;
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'delete-group-btn';
+      deleteBtn.dataset.bookId = book.id;
+      deleteBtn.title = '删除书籍';
+      deleteBtn.textContent = '×';
+      item.appendChild(name);
+      item.appendChild(deleteBtn);
+      listEl.appendChild(item);
+    });
+  }
+
+
+  // 找到 loadBookFromLibrary 函数，替换整个函数
+  async function loadBookFromLibrary(bookId) {
+    const chatId = state.activeChatId;
+    if (!chatId) return;
+
+    let book = await db.readingLibrary.get(bookId);
+    if (!book) {
+      alert('找不到这本书！');
+      return;
+    }
+
+    // --- 【核心新增逻辑：同步绿江内容】 ---
+    if (book.linkedStoryId) {
+      try {
+        const grStory = await db.grStories.get(book.linkedStoryId);
+        if (grStory) {
+          if (window.GreenRiverStoryEngine) window.GreenRiverStoryEngine.normalizeStory(grStory);
+          console.log(`[同步] 正在从绿江同步《${grStory.title}》的最新章节...`);
+
+          // 拼接所有章节内容
+          // 格式：
+          // 第1章 标题
+          // 正文...
+          let fullContent = "";
+          grStory.chapters.forEach((ch, idx) => {
+            const title = ch.title || `第 ${idx + 1} 章`;
+            fullContent += `\n\n========== ${title} ==========\n\n`;
+            fullContent += ch.content;
+          });
+
+          // 更新内存里的临时对象
+          book.title = grStory.title; // 同步标题
+          book.content = fullContent; // 同步内容
+          book.structuredChapters = grStory.chapters.map(chapter => ({
+            id: chapter.id,
+            title: chapter.title,
+            summary: chapter.summary,
+            paragraphs: chapter.paragraphs.map(paragraph => ({ id: paragraph.id, text: paragraph.text })),
+            readerComments: chapter.readerComments
+          }));
+
+          // 同时更新数据库，保持缓存最新
+          await db.readingLibrary.update(bookId, {
+            title: grStory.title,
+            content: fullContent,
+            structuredChapters: book.structuredChapters,
+            lastOpened: Date.now()
+          });
+        } else {
+          console.warn("关联的绿江作品已被删除，保留最后一次缓存的内容。");
+        }
+      } catch (e) {
+        console.error("同步绿江内容失败:", e);
+      }
+    } else {
+      // 普通书籍只更新时间
+      await db.readingLibrary.update(bookId, {
+        lastOpened: Date.now()
+      });
+    }
+    // -------------------------------------
+
+    const session = readingState[chatId];
+    session.activeBookId = bookId;
+    session.title = book.title;
+    session.isStructuredStory = Boolean(book.linkedStoryId && Array.isArray(book.structuredChapters));
+    session.structuredPages = session.isStructuredStory ? buildStructuredReadingPages(book.structuredChapters) : [];
+    // 处理内容换行
+    session.contentLines = (book.content || "").split(/\r\n?|\n/).map(line => line.replace(/ +/g, ' '));
+    session.totalPages = session.isStructuredStory ? session.structuredPages.length : Math.ceil(session.contentLines.length / session.linesPerPage);
+
+    // 如果总页数为0，至少设为1
+    if (session.totalPages === 0) session.totalPages = 1;
+
+    session.currentPage = book.currentPagesByChat && Object.prototype.hasOwnProperty.call(book.currentPagesByChat, chatId)
+      ? Number(book.currentPagesByChat[chatId]) || 0
+      : Number(book.currentPage) || 0;
+
+    // 防止页码越界（比如同步后内容变短了，虽然一般是变长）
+    if (session.currentPage >= session.totalPages) {
+      session.currentPage = session.totalPages - 1;
+    }
+    if (session.currentPage < 0) session.currentPage = 0;
+
+    renderReadingRoom(chatId);
+
+    document.getElementById('reading-content').scrollTop = 0;
+    document.getElementById('reading-library-modal').classList.remove('visible');
+  }
+
+  async function addGreenRiverToShelf(storyId, btnElement) {
+    try {
+      const story = await db.grStories.get(storyId);
+      if (!story) return;
+      if (window.GreenRiverStoryEngine) window.GreenRiverStoryEngine.normalizeStory(story);
+
+      // 防止重复添加
+      const existing = await db.readingLibrary.where('linkedStoryId').equals(storyId).first();
+      if (existing) {
+        alert("该书籍已在书架中。");
+        return;
+      }
+
+      let fullContent = "";
+      story.chapters.forEach((ch, idx) => {
+        const title = ch.title || `第 ${idx + 1} 章`;
+        fullContent += `\n\n========== ${title} ==========\n\n`;
+        fullContent += ch.content;
+      });
+
+      if (!fullContent) fullContent = "(暂无内容，请作者赶快更新...)";
+
+      await db.readingLibrary.add({
+        title: story.title,
+        content: fullContent,
+        lastOpened: Date.now(),
+        currentPage: 0,
+        linkedStoryId: story.id,
+        structuredChapters: story.chapters.map(chapter => ({
+          id: chapter.id,
+          title: chapter.title,
+          summary: chapter.summary,
+          paragraphs: chapter.paragraphs.map(paragraph => ({ id: paragraph.id, text: paragraph.text })),
+          readerComments: chapter.readerComments
+        }))
+      });
+
+      // 【核心修改】更新按钮UI为"已添加"状态，并绑定移除事件
+      if (btnElement) {
+        btnElement.textContent = "✓ 已在书架";
+        btnElement.classList.add('added');
+        // 重新绑定 onclick 为移除函数
+        btnElement.onclick = (e) => {
+          e.stopPropagation();
+          removeGreenRiverFromShelf(storyId, btnElement);
+        };
+      }
+
+      await showCustomAlert("收藏成功", `《${story.title}》已加入书架，并开启同步更新。`);
+
+    } catch (e) {
+      console.error("加入书架失败:", e);
+      alert("加入失败: " + e.message);
+    }
+  }
+
+  // 记得把这个函数暴露给全局，否则 HTML onclick 找不到
+  window.addGreenRiverToShelf = addGreenRiverToShelf;
+  // 【新增】从"一起读"书架中移除绿江作品
+  async function removeGreenRiverFromShelf(storyId, btnElement) {
+    try {
+      // 查找对应的书架记录
+      const bookRecord = await db.readingLibrary.where('linkedStoryId').equals(storyId).first();
+
+      if (!bookRecord) {
+        // 数据库里可能已经被删了，直接更新UI
+        if (btnElement) resetBtnToAddState(storyId, btnElement);
+        return;
+      }
+
+      const confirmed = await showCustomConfirm(
+        "移出书架",
+        `确定要将《${bookRecord.title}》从"一起读"书架中移除吗？\n(绿江APP中的原稿不会被删除)`,
+        { confirmButtonClass: 'btn-danger', confirmText: '移出' }
+      );
+
+      if (confirmed) {
+        // 删除书架记录
+        await db.readingLibrary.delete(bookRecord.id);
+
+        // 更新 UI 为"未添加"状态
+        if (btnElement) {
+          resetBtnToAddState(storyId, btnElement);
+        }
+
+        await showCustomAlert("已移除", "书籍已从书架移出。");
+      }
+    } catch (e) {
+      console.error("移除失败:", e);
+    }
+  }
+
+  // 辅助函数：重置按钮为"加入"状态
+  function resetBtnToAddState(storyId, btn) {
+    btn.textContent = "+ 加入共读";
+    btn.classList.remove('added');
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      addGreenRiverToShelf(storyId, btn);
+    };
+  }
+
+  // 暴露给全局
+  window.removeGreenRiverFromShelf = removeGreenRiverFromShelf;
+  async function deleteBookFromLibrary(bookId) {
+    const book = await db.readingLibrary.get(bookId);
+    if (!book) return;
+
+    const confirmed = await showCustomConfirm('删除书籍', `确定要删除《${book.title}》吗？`, {
+      confirmButtonClass: 'btn-danger'
+    });
+    if (confirmed) {
+      await db.readingLibrary.delete(bookId);
+      await renderBookLibrary();
+    }
+  }
+
+  function processImportedText(title, textContent) {
+    const chatId = state.activeChatId;
+    if (!chatId) return;
+
+    const session = readingState[chatId];
+    session.title = title.replace(/\.txt$/i, '');
+    session.isStructuredStory = false;
+    session.structuredPages = [];
+    session.currentChapterTitle = '';
+    session.contentLines = textContent.split(/\r\n?|\n/);
+    session.totalPages = Math.ceil(session.contentLines.length / session.linesPerPage);
+    session.currentPage = 0;
+
+    renderReadingRoom(chatId);
+  }
+
+
+
+  function makeDraggable(windowEl, headerEl) {
+    let pos1 = 0,
+      pos2 = 0,
+      pos3 = 0,
+      pos4 = 0;
+    let isDragging = false;
+    let hasMoved = false;
+    const phoneScreen = document.getElementById('phone-screen');
+
+    const startDrag = (e) => {
+
+      if (windowEl !== headerEl && e.target.closest('button')) {
+        return;
+      }
+
+      isDragging = true;
+      hasMoved = false;
+
+      const event = e.type === 'touchstart' ? e.touches[0] : e;
+      pos3 = event.clientX;
+      pos4 = event.clientY;
+
+
+      windowEl.style.top = `${windowEl.offsetTop}px`;
+      windowEl.style.left = `${windowEl.offsetLeft}px`;
+      windowEl.style.transform = '';
+
+      document.addEventListener('mouseup', endDrag);
+      document.addEventListener('mousemove', elementDrag);
+      document.addEventListener('touchend', endDrag);
+
+      document.addEventListener('touchmove', elementDrag, {
+        passive: false
+      });
+    };
+
+    const elementDrag = (e) => {
+      if (!isDragging) return;
+
+      const event = e.type === 'touchmove' ? e.touches[0] : e;
+      const diffX = event.clientX - pos3;
+      const diffY = event.clientY - pos4;
+
+
+      if (!hasMoved && (Math.abs(diffX) > 5 || Math.abs(diffY) > 5)) {
+        hasMoved = true;
+      }
+
+
+      if (hasMoved && e.cancelable) {
+        e.preventDefault();
+      }
+
+      pos1 = pos3 - event.clientX;
+      pos2 = pos4 - event.clientY;
+      pos3 = event.clientX;
+      pos4 = event.clientY;
+
+      let newTop = windowEl.offsetTop - pos2;
+      let newLeft = windowEl.offsetLeft - pos1;
+
+      const maxTop = phoneScreen.clientHeight - windowEl.offsetHeight - 10;
+      const maxLeft = phoneScreen.clientWidth - windowEl.offsetWidth - 10;
+      newTop = Math.max(10, Math.min(newTop, maxTop));
+      newLeft = Math.max(10, Math.min(newLeft, maxLeft));
+
+      windowEl.style.top = newTop + "px";
+      windowEl.style.left = newLeft + "px";
+    };
+
+    const endDrag = () => {
+      document.removeEventListener('mouseup', endDrag);
+      document.removeEventListener('mousemove', elementDrag);
+      document.removeEventListener('touchend', endDrag);
+      document.removeEventListener('touchmove', elementDrag);
+
+      if (!isDragging) return;
+      isDragging = false;
+
+      // 保存观影对话框的位置
+      if (windowEl.id === 'watch-together-chat-float' && watchTogetherState.isActive && watchTogetherState.chatId) {
+        const chat = state.chats[watchTogetherState.chatId];
+        if (chat) {
+          if (!chat.watchTogetherSettings) {
+            chat.watchTogetherSettings = {};
+          }
+          chat.watchTogetherSettings.position = {
+            top: windowEl.style.top,
+            left: windowEl.style.left
+          };
+          saveChatsToIndexedDB();
+        }
+      }
+
+      if (!hasMoved) {
+
+        windowEl.click();
+      }
+    };
+
+    headerEl.addEventListener('mousedown', startDrag);
+
+    headerEl.addEventListener('touchstart', startDrag, {
+      passive: false
+    });
+  }
+
+
+
+  function minimizeReadingRoom() {
+    const session = readingState[state.activeChatId];
+    if (!session || !session.isActive) return;
+
+    document.getElementById('reading-window').classList.add('minimized');
+    document.getElementById('reading-restore-btn').style.display = 'flex';
+    session.isMinimized = true;
+  }
+
+
+  function restoreReadingRoom() {
+    const session = readingState[state.activeChatId];
+    if (!session || !session.isActive) return;
+
+    document.getElementById('reading-restore-btn').style.display = 'none';
+    document.getElementById('reading-window').classList.remove('minimized');
+    session.isMinimized = false;
+  }
+
+
+
+
+
+  function debounce(func, delay) {
+    let timeout;
+    return function (...args) {
+      const context = this;
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+  }
+
+
+
+  function formatReadingStateForAI(chatId) {
+    const session = readingState[chatId];
+
+
+    if (!session || !session.isActive) {
+      return "";
+    }
+
+    const title = session.title || '未知书籍';
+    let contentForAI = '';
+    let contextLabel = '';
+
+    const selection = window.getSelection ? window.getSelection() : null;
+    const readingContent = document.getElementById('reading-content');
+    const selectedText = selection && readingContent && selection.rangeCount > 0 && readingContent.contains(selection.anchorNode)
+      ? selection.toString().trim().slice(0, 2000)
+      : '';
+
+    if (selectedText) {
+      contentForAI = selectedText;
+      contextLabel = '用户刚刚选中的原文';
+    } else if (session.currentSnippet && session.currentSnippet.trim()) {
+      contentForAI = session.currentSnippet;
+      contextLabel = '你正在阅读的段落';
+    } else if (session.contentLines.length > 0) {
+      const startLine = session.currentPage * session.linesPerPage;
+      const endLine = startLine + session.linesPerPage;
+      contentForAI = session.contentLines.slice(startLine, endLine).join('\n').substring(0, 1200);
+      contextLabel = '当前页内容摘要';
+    } else {
+      contentForAI = '(无内容)';
+      contextLabel = '内容';
+    }
+    return `
+    - **书名**: 《${title}》
+    ${session.currentChapterTitle ? `- **当前章节**: ${session.currentChapterTitle}` : ''}
+    - **${contextLabel}**: "${contentForAI}${contentForAI.length >= 1200 ? '…' : ''}"
+    #一起读书模式 | 行为铁律
+    1.  **角色定位**: 你【不是】书中的任何角色，你是【你自己】(${state.chats[chatId]?.originalName || 'AI角色'})，正在和用户一起【阅读和讨论】这本书。
+    2.  **行为准则**: 你的回复【必须】是作为读者的【感想、评论、提问或联想】。你可以：
+        -   分享你对当前段落的看法。
+        -   对书中的角色或情节发表评论。
+        -   向用户提问，询问TA对内容的看法。
+        -   根据书本内容，联想到你自己的经历或记忆。
+    3.  **严禁**: 你的回复【绝对禁止】使用书中角色的口吻和人称！【绝对禁止】扮演书中的任何角色！【绝对禁止】续写或模仿书中的情节！你必须时刻记住，你只是一个读者。    
+`;
+  }
+
+
+
+  function updateReadingContextOnScroll() {
+    const chatId = state.activeChatId;
+    if (!chatId || !readingState[chatId]) return;
+
+    const session = readingState[chatId];
+    const container = document.getElementById('reading-content');
+
+    if (!container) return;
+
+    if (session.isStructuredStory) {
+      const containerRect = container.getBoundingClientRect();
+      const visible = Array.from(container.querySelectorAll('.reading-structured-paragraph')).filter(element => {
+        const rect = element.getBoundingClientRect();
+        return rect.bottom > containerRect.top && rect.top < containerRect.bottom;
+      });
+      if (visible.length) session.currentSnippet = visible.map(element => element.dataset.readingText || element.textContent).join('\n').slice(0, 1600);
+      return;
+    }
+
+
+    const chat = state.chats[chatId];
+
+    const fontSize = (chat && chat.settings && chat.settings.fontSize) ? chat.settings.fontSize : 13;
+
+    const approximateLineHeight = fontSize * 1.6;
+
+    const scrollTop = container.scrollTop;
+    const clientHeight = container.clientHeight;
+    const scrollBottom = scrollTop + clientHeight;
+
+
+    const firstVisibleLine = Math.floor(scrollTop / approximateLineHeight);
+    const lastVisibleLine = Math.ceil(scrollBottom / approximateLineHeight);
+
+
+    const absoluteStartIndex = (session.currentPage * session.linesPerPage) + firstVisibleLine;
+    const absoluteEndIndex = (session.currentPage * session.linesPerPage) + lastVisibleLine;
+
+    if (absoluteStartIndex < 0 || absoluteStartIndex >= session.contentLines.length) {
+      return;
+    }
+
+
+    const newSnippet = session.contentLines.slice(
+      Math.max(0, absoluteStartIndex),
+      Math.min(session.contentLines.length, absoluteEndIndex)
+    ).join('\n');
+
+    session.currentSnippet = newSnippet;
+
+    // 调试日志（可选，如果你想在控制台看效果）
+    // console.log(`[阅读视口更新] 字体:${fontSize}px, 行高:${approximateLineHeight}, 可见行:${firstVisibleLine}-${lastVisibleLine}`);
+  }
+
+  // ========== 全局暴露 ==========
+
+  window.readingState = readingState;
+  window.openReadingRoom = openReadingRoom;
+  window.initReadingSession = initReadingSession;
+  window.closeReadingRoom = closeReadingRoom;
+  window.renderReadingRoom = renderReadingRoom;
+  window.showNextPage = showNextPage;
+  window.showPrevPage = showPrevPage;
+  window.importBook = importBook;
+  window.decodeTextFile = decodeTextFile;
+  window.handleBookFileUpload = handleBookFileUpload;
+  window.handlePageJump = handlePageJump;
+  window.saveReadingProgress = saveReadingProgress;
+  window.openBookLibrary = openBookLibrary;
+  window.renderBookLibrary = renderBookLibrary;
+  window.loadBookFromLibrary = loadBookFromLibrary;
+  window.addGreenRiverToShelf = addGreenRiverToShelf;
+  window.removeGreenRiverFromShelf = removeGreenRiverFromShelf;
+  window.resetBtnToAddState = resetBtnToAddState;
+  window.deleteBookFromLibrary = deleteBookFromLibrary;
+  window.processImportedText = processImportedText;
+  window.makeDraggable = makeDraggable;
+  window.minimizeReadingRoom = minimizeReadingRoom;
+  window.restoreReadingRoom = restoreReadingRoom;
+  window.debounce = debounce;
+  window.formatReadingStateForAI = formatReadingStateForAI;
+  window.updateReadingContextOnScroll = updateReadingContextOnScroll;
+
+  function openReadingDisplaySettings() {
+    const chat = state.chats[state.activeChatId];
+    const settings = getReadingDisplaySettings(chat?.settings?.fontSize);
+    const modal = document.getElementById('reading-display-settings-modal');
+    const fontRange = document.getElementById('reading-font-size-range');
+    const lineRange = document.getElementById('reading-line-height-range');
+    const fontValue = document.getElementById('reading-font-size-value');
+    const lineValue = document.getElementById('reading-line-height-value');
+    const theme = document.getElementById('reading-theme-select');
+    fontRange.value = settings.fontSize;
+    lineRange.value = settings.lineHeight;
+    theme.value = settings.theme;
+    fontValue.textContent = `${fontRange.value}px`;
+    lineValue.textContent = lineRange.value;
+    fontRange.oninput = () => { fontValue.textContent = `${fontRange.value}px`; };
+    lineRange.oninput = () => { lineValue.textContent = lineRange.value; };
+    modal.classList.add('visible');
+    document.getElementById('cancel-reading-display-settings').onclick = () => modal.classList.remove('visible');
+    document.getElementById('save-reading-display-settings').onclick = () => {
+      localStorage.setItem('reading-display-settings', JSON.stringify({ fontSize: Number(fontRange.value), lineHeight: Number(lineRange.value), theme: theme.value }));
+      modal.classList.remove('visible');
+      if (state.activeChatId && readingState[state.activeChatId]) renderReadingRoom(state.activeChatId);
+    };
+  }
+  window.openReadingDisplaySettings = openReadingDisplaySettings;
+  const readingDisplaySettingsBtn = document.getElementById('reading-display-settings-btn');
+  if (readingDisplaySettingsBtn) readingDisplaySettingsBtn.onclick = openReadingDisplaySettings;
+
+  // ========== 从 script.js 迁移：toggleReadingFullscreen ==========
+  function toggleReadingFullscreen() {
+    const readingWindow = document.getElementById('reading-window');
+    const readingOverlay = document.getElementById('reading-overlay');
+
+    if (readingWindow && readingOverlay) {
+      readingWindow.classList.toggle('fullscreen');
+      readingOverlay.classList.toggle('fullscreen-active');
+    }
+  }
+  window.toggleReadingFullscreen = toggleReadingFullscreen;
+
+})();

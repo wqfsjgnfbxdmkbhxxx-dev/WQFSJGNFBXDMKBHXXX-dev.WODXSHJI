@@ -1,0 +1,444 @@
+           /* ========================================================= */
+           /* ▼▼▼ CPhone 布局微调补丁 V2 (气泡对齐 + 圆形下移) ▼▼▼ */
+           /* ========================================================= */
+
+           /* 1. 【圆形组件】位置下移修正 */
+           .cphone-circle-widget-wrapper {
+               /* 原来是靠顶对齐，现在往下推 30px，视觉上更平衡 */
+               margin-top: 30px !important;
+
+               /* 既然去掉了外框，确保它是透明的 */
+               background: transparent !important;
+               border: none !important;
+               backdrop-filter: none !important;
+               -webkit-backdrop-filter: none !important;
+               box-shadow: none !important;
+           }
+
+           /* 2. 【第一行气泡】容器调整 */
+           .cphone-staggered-group {
+               width: 100% !important;
+               /* 占满整行 */
+               max-width: 360px !important;
+               /* 限制最大宽 */
+               padding: 10px 5px !important;
+               /* 左右留点呼吸空间 */
+               box-sizing: border-box !important;
+               display: flex !important;
+               flex-direction: column !important;
+               /* 去掉 gap，完全靠 margin 控制位置 */
+               gap: 0 !important;
+           }
+
+           /* 3. 【上方气泡】严格左对齐 + 向左上倾斜 */
+           .cphone-bubble-pill.top {
+               /* 稍微缩短宽度，让“靠左”更明显 */
+               width: 275px !important;
+
+               /* 核心对齐代码 */
+               align-self: flex-start !important;
+               margin-right: auto !important;
+               /* 强制把右边空出来 */
+               margin-left: 5px !important;
+               /* 离左边缘一点点距离 */
+
+               /* 倾斜与重叠控制 */
+               transform: rotate(-3deg) !important;
+               margin-bottom: -10px !important;
+               /* 只是轻微重叠，不再是大面积重合 */
+               z-index: 2 !important;
+               /* 压在下面那个上面 */
+           }
+
+           /* 4. 【下方气泡】严格右对齐 + 向右下倾斜 */
+           .cphone-bubble-pill.bottom {
+               /* 宽度保持一致 */
+               width: 275px !important;
+
+               /* 核心对齐代码 */
+               align-self: flex-end !important;
+               margin-left: auto !important;
+               /* 强制把左边空出来 */
+               margin-right: 5px !important;
+               /* 离右边缘一点点距离 */
+
+               /* 倾斜与重叠控制 */
+               transform: rotate(2deg) !important;
+               margin-top: 0 !important;
+               z-index: 1 !important;
+           }
+
+           /* 5. 确保气泡内的文字能完整显示 */
+           .bubble-content {
+               /* 修复可能被压缩的问题 */
+               flex-shrink: 1 !important;
+               min-width: 0 !important;
+           }
+
+           /* ================================================================= */
+           /* ▼▼▼ Swiss Style 终极版式修正 (Steve Jobs Approved) ▼▼▼ */
+           /* ================================================================= */
+
+           /* --- 1. 全局布局容器：增加呼吸感 --- */
+           #cphone-layout-container {
+               display: flex;
+               flex-direction: column;
+               align-items: center;
+               width: 100%;
+               /* 增加垂直间距，这就是“数千美元”的高级感来源 */
+               gap: 35px !important;
+               padding-top: 10px;
+               /* 稍微往下压一点，不顶头 */
+           }
+
+           /* 统一所有行的宽度，确保视觉边缘垂直对齐 */
+           .cphone-staggered-group,
+           .cphone-fixed-row,
+           .cphone-dock {
+               width: 330px !important;
+               /* 黄金宽度，适配大部分手机屏 */
+               max-width: 100% !important;
+           }
+
+           /* --- 2. 错落气泡：精准对齐算法 --- */
+           .cphone-staggered-group {
+               padding: 5px 0 !important;
+               gap: 0 !important;
+               /* 重叠由 margin 控制 */
+               position: relative;
+               /* 确保容器本身不裁剪阴影 */
+               overflow: visible !important;
+           }
+
+           .cphone-bubble-pill {
+               /* 稍微缩短宽度，为旋转留出余量，防止视觉溢出 */
+               width: 285px !important;
+               height: 58px !important;
+               border-radius: 29px !important;
+
+               /* 玻璃质感增强：更通透 */
+               background: rgba(255, 255, 255, 0.2) !important;
+               backdrop-filter: blur(25px) !important;
+               -webkit-backdrop-filter: blur(25px) !important;
+               border: 1px solid rgba(255, 255, 255, 0.25) !important;
+               box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05) !important;
+           }
+
+           /* 上方气泡：左对齐 + 绕左侧旋转 */
+           .cphone-bubble-pill.top {
+               align-self: flex-start !important;
+               /* 物理靠左 */
+               margin-right: auto !important;
+
+               /* 核心：轴心设在左侧，旋转时左边不动，右边翘起 */
+               transform-origin: center left !important;
+               transform: rotate(-4deg) translateY(0px) !important;
+
+               margin-bottom: -18px !important;
+               /* 向下挤压，创造层叠感 */
+               margin-left: 2px !important;
+               /* 微调视觉边缘 */
+               z-index: 2;
+           }
+
+           /* 下方气泡：右对齐 + 绕右侧旋转 */
+           .cphone-bubble-pill.bottom {
+               align-self: flex-end !important;
+               /* 物理靠右 */
+               margin-left: auto !important;
+
+               /* 核心：轴心设在右侧，旋转时右边不动，左边垂下 */
+               transform-origin: center right !important;
+               transform: rotate(3deg) translateY(0px) !important;
+
+               margin-top: 0 !important;
+               margin-right: 2px !important;
+               /* 微调视觉边缘 */
+               z-index: 1;
+           }
+
+           /* --- 3. 圆形组件文字优化：增加间距 --- */
+           .cphone-circle-widget-wrapper {
+               /* 移除背景和边框，保持透明 */
+               background: transparent !important;
+               border: none !important;
+               backdrop-filter: none !important;
+               -webkit-backdrop-filter: none !important;
+               box-shadow: none !important;
+
+               /* 垂直布局 */
+               display: flex;
+               flex-direction: column;
+               align-items: center;
+               justify-content: center;
+           }
+
+           .cphone-circle-bg {
+               /* 图片容器 */
+               margin-bottom: 0 !important;
+               /* 移除旧边距，由 text-area 的 margin-top 控制 */
+           }
+
+           .circle-text-area {
+               /* 开启 Flex 布局来控制两行字的间距 */
+               display: flex !important;
+               flex-direction: column !important;
+               align-items: center !important;
+
+               /* 这里控制两行文字中间的距离，这就是你要的 */
+               gap: 6px !important;
+
+               /* 控制文字整体与圆图的距离 */
+               margin-top: 15px !important;
+           }
+
+           /* 第一行字：主标题 */
+           #cphone-circle-text {
+               font-size: 15px !important;
+               font-weight: 600 !important;
+               letter-spacing: 0.5px !important;
+               /* 字间距微调 */
+               color: #ffffff !important;
+               text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5) !important;
+               line-height: 1 !important;
+               margin: 0 !important;
+           }
+
+           /* 第二行字：副标题 */
+           #cphone-circle-subtext {
+               font-size: 12px !important;
+               font-weight: 400 !important;
+               opacity: 0.85 !important;
+               color: #ffffff !important;
+               text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+               font-family: "Georgia", serif !important;
+               /* 衬线体，优雅 */
+               font-style: italic !important;
+               line-height: 1 !important;
+               margin: 0 !important;
+           }
+
+           /* --- 4. 再次确保图标大小统一 (防止被覆盖) --- */
+           .cphone-fixed-app-grid {
+               gap: 8px 15px !important;
+               /* 微调网格间距 */
+           }
+
+           .app-icon.small .icon-bg {
+               width: 62px !important;
+               height: 62px !important;
+               min-width: 62px !important;
+               border-radius: 15px !important;
+               /* iOS 标准圆角 */
+               box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1) !important;
+           }
+
+           .app-icon.small .label {
+               margin-top: 4px !important;
+               font-size: 12px !important;
+               font-weight: 500 !important;
+               color: #ffffff !important;
+               text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+           }
+
+           /* --- 5. 拍立得堆叠优化 (右侧组件) --- */
+           /* 让拍立得也稍微倾斜一点点，增加随意感 */
+           .cphone-stack-polaroid {
+               transform: rotate(2deg);
+           }
+
+
+           /* --- CPhone 气泡：强制对齐复刻版 --- */
+
+           /* 1. 容器：强制居中，锁死宽度 */
+           .cphone-staggered-group {
+               display: flex !important;
+               flex-direction: column !important;
+               align-items: center !important;
+               /* 核心：垂直居中对齐 */
+               width: 330px !important;
+               /* 核心：固定宽度 */
+               margin: 0 auto !important;
+               padding: 10px 0 !important;
+               gap: 0 !important;
+               /* 去掉间隙，用 margin 控制堆叠 */
+           }
+
+           /* 2. 气泡通用：填满容器，保持一致 */
+           .cphone-bubble-pill {
+               width: 100% !important;
+               /* 强制占满 330px，保证上下一样宽 */
+               height: 60px !important;
+               border-radius: 35px !important;
+               /* 更圆润一点 */
+               box-sizing: border-box !important;
+               transition: transform 0.3s ease !important;
+
+               /* 核心：全部绕中心旋转，保证不会歪到没边 */
+               transform-origin: center center !important;
+           }
+
+           /* 3. 上方气泡：左低右高 (-3deg) */
+           .cphone-bubble-pill.top {
+               align-self: center !important;
+               /* 强制居中，不要靠左 */
+               transform: rotate(-3deg) !important;
+
+               margin-bottom: -12px !important;
+               /* 向下挤压，产生堆叠感 */
+               z-index: 2 !important;
+               /* 压在下面那个上面 */
+
+               /* 清除旧的干扰 */
+               margin-left: 0 !important;
+               margin-right: 0 !important;
+           }
+
+           /* 4. 下方气泡：同样左低右高 (-3deg)，保持平行 */
+           /* 根据原图，它们是平行的，这样视觉上最整齐 */
+           .cphone-bubble-pill.bottom {
+               align-self: center !important;
+               /* 强制居中，不要靠右 */
+               transform: rotate(-3deg) !important;
+
+               margin-top: 0 !important;
+               z-index: 1 !important;
+
+               /* 清除旧的干扰 */
+               margin-left: 0 !important;
+               margin-right: 0 !important;
+           }
+
+           /* 5. 修复 Dock 栏文字显示 */
+           .cphone-dock .app-icon .label {
+               display: block !important;
+               margin-top: 4px !important;
+               font-size: 11px !important;
+               font-weight: 500 !important;
+               color: #ffffff !important;
+               text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6) !important;
+               text-align: center !important;
+           }
+
+           /* --- CPhone 气泡：居中对齐 + 反向倾斜 + 增加间距版 --- */
+
+           /* 1. 容器：控制整体间距 */
+           .cphone-staggered-group {
+               display: flex !important;
+               flex-direction: column !important;
+               align-items: center !important;
+               /* 垂直居中 */
+               width: 330px !important;
+               margin: 0 auto !important;
+               padding: 10px 0 !important;
+
+               /* 【关键修改 1】增加气泡之间的物理间距 */
+               gap: 5px !important;
+           }
+
+           /* 2. 气泡通用设置 */
+           .cphone-bubble-pill {
+               width: 100% !important;
+               height: 60px !important;
+               border-radius: 35px !important;
+               box-sizing: border-box !important;
+               transition: transform 0.3s ease !important;
+               transform-origin: center center !important;
+           }
+
+           /* 3. 上方气泡：左低右高 (-3deg) */
+           .cphone-bubble-pill.top {
+               align-self: center !important;
+               transform: rotate(-3deg) !important;
+
+               /* 【关键修改 2】移除负边距，不再挤压 */
+               margin-bottom: 0 !important;
+
+               z-index: 2 !important;
+               margin-left: 0 !important;
+               margin-right: 0 !important;
+           }
+
+           /* 4. 下方气泡：左高右低 (3deg) */
+           .cphone-bubble-pill.bottom {
+               align-self: center !important;
+               transform: rotate(3deg) !important;
+
+               margin-top: 0 !important;
+               z-index: 1 !important;
+               margin-left: 0 !important;
+               margin-right: 0 !important;
+           }
+
+           /* 5. 确保Dock文字显示 */
+           .cphone-dock .app-icon .label {
+               display: block !important;
+           }
+
+           /* --- CPhone 全局布局调整：紧凑版 --- */
+
+           #cphone-layout-container {
+               display: flex;
+               flex-direction: column;
+               align-items: center;
+               width: 100%;
+
+               /* 【关键修改】减小行与行之间的间距 */
+               /* 原来是 35px，现在改为 10px，立刻变紧凑 */
+               gap: 35px !important;
+
+               /* 顶部稍微留一点点呼吸空间，防止气泡顶到刘海 */
+               padding-top: 15px !important;
+           }
+
+           /* 确保错落气泡组本身没有多余的外部边距 */
+           .cphone-staggered-group {
+               margin-bottom: 0 !important;
+               padding-bottom: 5px !important;
+               /* 稍微减小一点底部内边距 */
+           }
+
+           .cphone-dock-container {
+               /* 核心修改：移除 env() 计算，直接使用固定数值 */
+               /* 20px 是比较标准的距离，如果您想让它更靠下，可以改为 10px */
+               margin-bottom: 20px !important;
+
+               /* 确保没有额外的底部内边距干扰 */
+               padding-bottom: 0 !important;
+
+               /* 确保它是通过 margin-top: auto 被推到底部的 (保持原有逻辑) */
+               margin-top: auto !important;
+           }
+
+           /* 如果您开启了【手机外框模式】，可能需要稍微抬高一点点防止贴边太紧 */
+           body.frame-mode-active .cphone-dock-container {
+               margin-bottom: 25px !important;
+           }
+
+           .nai-binding-checkbox {
+               width: 20px;
+               height: 20px;
+               border: 2px solid #ccc;
+               border-radius: 50%;
+               /* 圆形 */
+               appearance: none;
+               -webkit-appearance: none;
+               transition: all 0.2s;
+               position: relative;
+               cursor: pointer;
+           }
+
+           .nai-binding-checkbox:checked {
+               background-color: var(--accent-color);
+               border-color: var(--accent-color);
+           }
+
+           .nai-binding-checkbox:checked::after {
+               content: '✔';
+               color: white;
+               font-size: 12px;
+               position: absolute;
+               top: 50%;
+               left: 50%;
+               transform: translate(-50%, -50%);
+           }

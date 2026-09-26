@@ -1,0 +1,1005 @@
+        timestamp: Date.now()
+      };
+
+      appendMessage(msg, chat);
+      chat.history.push(msg);
+      db.chats.put(chat);
+      renderChatList();
+
+      // 清空输入框并隐藏匹配面板
+      chatInput.value = '';
+      chatInput.style.height = 'auto';
+      smartMatchPanel.style.display = 'none';
+      chatInput.focus();
+    }
+
+    // 点击其他地方隐藏匹配面板
+    document.addEventListener('click', (e) => {
+      if (!smartMatchPanel.contains(e.target) && e.target !== chatInput) {
+        smartMatchPanel.style.display = 'none';
+      }
+    });
+    // ========================================
+    // 表情包智能匹配功能结束
+    // ========================================
+
+
+    // --- 锁屏壁纸上传处理开始 ---
+    const lockWallpaperInput = document.getElementById('lock-wallpaper-input');
+    if (lockWallpaperInput) {
+      lockWallpaperInput.addEventListener('change', async (event) => {
+        const file = event.target.files[0];
+        if (file) {
+          const base64Url = await new Promise((res, rej) => {
+            const reader = new FileReader();
+            reader.onload = () => res(reader.result);
+            reader.onerror = () => rej(reader.error);
+            reader.readAsDataURL(file);
+          });
+          const preview = document.getElementById('lock-wallpaper-preview');
+          preview.style.backgroundImage = `url(${base64Url})`;
+          preview.textContent = '';
+          preview.dataset.tempUrl = base64Url;
+          event.target.value = null;
+        }
+      });
+    }
+
+    const uploadLockWallpaperUrlBtn = document.getElementById('upload-lock-wallpaper-url-btn');
+    if (uploadLockWallpaperUrlBtn) {
+      uploadLockWallpaperUrlBtn.addEventListener('click', async () => {
+        const url = await showCustomPrompt("网络图片", "请输入锁屏壁纸的URL", "", "url");
+        if (url && url.trim()) {
+          const preview = document.getElementById('lock-wallpaper-preview');
+          preview.style.backgroundImage = `url(${url})`;
+          preview.textContent = '';
+          preview.dataset.tempUrl = url;
+        }
+      });
+    }
+    
+    // 全局锁屏壁纸重置按钮
+    const resetLockWallpaperBtn = document.getElementById('reset-lock-wallpaper-btn');
+    if (resetLockWallpaperBtn) {
+      resetLockWallpaperBtn.addEventListener('click', () => {
+        const preview = document.getElementById('lock-wallpaper-preview');
+        preview.style.backgroundImage = '';
+        preview.textContent = '无';
+        preview.dataset.tempUrl = 'reset';
+      });
+    }
+
+    const myphoneLockWallpaperInput = document.getElementById('myphone-lock-wallpaper-input');
+    if (myphoneLockWallpaperInput) {
+      myphoneLockWallpaperInput.addEventListener('change', async (event) => {
+        const file = event.target.files[0];
+        if (file) {
+          const base64Url = await new Promise((res, rej) => {
+            const reader = new FileReader();
+            reader.onload = () => res(reader.result);
+            reader.onerror = () => rej(reader.error);
+            reader.readAsDataURL(file);
+          });
+          const preview = document.getElementById('myphone-lock-wallpaper-preview');
+          preview.style.backgroundImage = `url(${base64Url})`;
+          preview.textContent = '';
+          preview.dataset.tempUrl = base64Url;
+          event.target.value = null;
+        }
+      });
+    }
+
+    const myphoneUploadLockWallpaperUrlBtn = document.getElementById('myphone-upload-lock-wallpaper-url-btn');
+    if (myphoneUploadLockWallpaperUrlBtn) {
+      myphoneUploadLockWallpaperUrlBtn.addEventListener('click', async () => {
+        const url = await showCustomPrompt("网络图片", "请输入MyPhone锁屏壁纸的URL", "", "url");
+        if (url && url.trim()) {
+          const preview = document.getElementById('myphone-lock-wallpaper-preview');
+          preview.style.backgroundImage = `url(${url})`;
+          preview.textContent = '';
+          preview.dataset.tempUrl = url;
+        }
+      });
+    }
+    
+    // MyPhone锁屏壁纸重置按钮
+    const myphoneResetLockWallpaperBtn = document.getElementById('myphone-reset-lock-wallpaper-btn');
+    if (myphoneResetLockWallpaperBtn) {
+      myphoneResetLockWallpaperBtn.addEventListener('click', () => {
+        const preview = document.getElementById('myphone-lock-wallpaper-preview');
+        preview.style.backgroundImage = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+        preview.textContent = '默认壁纸';
+        preview.dataset.tempUrl = 'reset';
+      });
+    }
+    // --- 锁屏壁纸上传处理结束 ---
+
+    document.getElementById('wallpaper-upload-input').addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      if (file) {
+
+        const base64Url = await new Promise((res, rej) => {
+          const reader = new FileReader();
+          reader.onload = () => res(reader.result);
+          reader.onerror = () => rej(reader.error);
+          reader.readAsDataURL(file);
+        });
+
+
+        newWallpaperBase64 = base64Url;
+
+
+        renderWallpaperScreen();
+
+
+        if (state.apiConfig.imgbbEnable && state.apiConfig.imgbbApiKey) {
+
+          (async () => {
+            try {
+              console.log("[ImgBB] 后台开始上传壁纸...");
+
+              const imageUrl = await uploadImageToImgBB(base64Url);
+
+
+              if (newWallpaperBase64 === base64Url) {
+                newWallpaperBase64 = imageUrl; // 悄悄地将变量更新为 URL
+                console.log("[ImgBB] 后台壁纸上传成功，临时变量已更新为 URL。");
+              } else {
+                console.log("[ImgBB] 后台壁纸上传完成，但用户已更改选择，放弃更新。");
+              }
+            } catch (uploadError) {
+
+              console.error("后台壁纸上传失败:", uploadError.message);
+
+            }
+          })();
+        }
+
+
+        event.target.value = null;
+      }
+    });
+
+    document.getElementById('save-wallpaper-btn').addEventListener('click', async () => {
+
+      if (newWallpaperBase64) {
+        state.globalSettings.wallpaper = newWallpaperBase64;
+      }
+
+
+
+
+      state.globalSettings.globalCss = document.getElementById('global-css-input').value.trim();
+      state.globalSettings.notificationSoundUrl = document.getElementById('notification-sound-url-input').value.trim();
+      state.globalSettings.notificationVolume = parseInt(document.getElementById('notification-volume-slider').value) / 100;
+      state.globalSettings.apiMaxTokens = parseInt(document.getElementById('api-max-tokens-input').value) || 0;
+      state.globalSettings.showStatusBar = document.getElementById('status-bar-toggle-switch').checked;
+      state.globalSettings.showSeconds = document.getElementById('global-show-seconds-switch').checked;
+
+      state.globalSettings.showPhoneFrame = document.getElementById('phone-frame-toggle-switch').checked;
+      state.globalSettings.enableMinimalChatUI = document.getElementById('minimal-chat-ui-switch').checked;
+      state.globalSettings.alwaysShowMusicIsland = document.getElementById('dynamic-island-music-toggle-switch').checked;
+      state.globalSettings.detachStatusBar = document.getElementById('detach-status-bar-switch').checked;
+      state.globalSettings.cleanChatDetail = document.getElementById('clean-chat-detail-switch').checked;
+      state.globalSettings.cleanApiSettings = document.getElementById('clean-api-settings-switch').checked;
+      state.globalSettings.apiStyleBeautify = document.getElementById('api-style-beautify-switch').checked;
+      state.globalSettings.dropdownPopupMode = document.getElementById('dropdown-popup-mode-switch').checked;
+      state.globalSettings.showThoughtChainInChat = document.getElementById('global-show-thought-chain-switch').checked;
+      state.globalSettings.lockScreenEnabled = document.getElementById('lock-screen-toggle').checked;
+      state.globalSettings.lockScreenBypassEnabled = document.getElementById('lock-screen-bypass-toggle').checked;
+      state.globalSettings.lockScreenPassword = document.getElementById('lock-screen-password-input').value.trim();
+
+      const lockPreview = document.getElementById('lock-wallpaper-preview');
+      if (lockPreview.dataset.tempUrl) {
+        if (lockPreview.dataset.tempUrl === 'reset') {
+            state.globalSettings.lockScreenWallpaper = '';
+        } else {
+            state.globalSettings.lockScreenWallpaper = lockPreview.dataset.tempUrl;
+        }
+      }
+      await db.globalSettings.put(state.globalSettings);
+
+
+      applyGlobalWallpaper();
+      applyCPhoneWallpaper();
+      applyMyPhoneWallpaper();
+      newWallpaperBase64 = null;
+
+      applyAppIcons();
+      applyCPhoneAppIcons();
+      applyMyPhoneAppIconsGlobal();
+
+      applyGlobalCss(state.globalSettings.globalCss);
+      applyStatusBarVisibility();
+      applyMinimalChatUI(state.globalSettings.enableMinimalChatUI);
+      if (typeof applyApiStyleBeautify === 'function') applyApiStyleBeautify();
+      initLockScreen();
+      alert('外观设置已保存并应用！');
+      showScreen('home-screen');
+    });
+
+
+    const secondaryApiPresetSelect = document.getElementById('secondary-api-preset-select');
+    if (secondaryApiPresetSelect) {
+      secondaryApiPresetSelect.addEventListener('change', window.handleSecondaryApiPresetSelectionChange);
+    }
+    const saveSecondaryApiPresetBtn = document.getElementById('save-secondary-api-preset-btn');
+    if (saveSecondaryApiPresetBtn) {
+      saveSecondaryApiPresetBtn.addEventListener('click', window.saveSecondaryApiPreset);
+    }
+    const deleteSecondaryApiPresetBtn = document.getElementById('delete-secondary-api-preset-btn');
+    if (deleteSecondaryApiPresetBtn) {
+      deleteSecondaryApiPresetBtn.addEventListener('click', window.deleteSecondaryApiPreset);
+    }
+
+    const messagesView = document.getElementById('messages-view');
+    messagesView.addEventListener('scroll', () => {
+
+      const {
+        scrollTop,
+        scrollHeight,
+        clientHeight
+      } = messagesView;
+
+
+
+      if (scrollHeight - scrollTop - clientHeight < clientHeight) {
+
+        if (!isLoadingMoreChats) {
+
+          loadMoreChats();
+        }
+      }
+    });
+
+
+    const saveApiSettingsButton = document.getElementById('save-api-settings-btn');
+    saveApiSettingsButton.addEventListener('click', async () => {
+      if (saveApiSettingsButton.dataset.saving === 'true') return;
+      const originalSaveText = saveApiSettingsButton.textContent;
+      saveApiSettingsButton.dataset.saving = 'true';
+      saveApiSettingsButton.classList.add('is-saving');
+      saveApiSettingsButton.setAttribute('aria-disabled', 'true');
+      saveApiSettingsButton.textContent = '保存中…';
+
+      let saveStage = 'API 配置';
+      let apiConfigSaved = false;
+      let allSettingsSaved = false;
+      let saveFeedbackTitle = '';
+      let saveFeedbackMessage = '';
+      const legacySettingsErrors = [];
+      const pendingLegacySettings = [];
+      const saveLegacySetting = (key, value) => pendingLegacySettings.push([key, String(value)]);
+      const flushLegacySettings = () => {
+        for (const [key, value] of pendingLegacySettings.splice(0)) {
+          try {
+            localStorage.setItem(key, value);
+          } catch (error) {
+            console.error(`保存本地兼容设置 ${key} 失败:`, error);
+            legacySettingsErrors.push({ key, error });
+          }
+        }
+      };
+      const describeSaveError = error => error?.name === 'QuotaExceededError'
+        ? '浏览器存储空间不足。请先备份数据，再清理不需要的内容。'
+        : `${error?.name || '错误'}：${error?.message || String(error)}`;
+      const escapeModalText = value => String(value).replace(/[&<>"']/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[character]);
+      const applySavedSetting = (name, action) => {
+        try {
+          action();
+        } catch (error) {
+          console.error(`应用${name}失败:`, error);
+          legacySettingsErrors.push({ key: name, error });
+        }
+      };
+
+      try {
+
+      const nextApiConfig = { ...state.apiConfig };
+
+      nextApiConfig.proxyUrl = document.getElementById('proxy-url').value.trim();
+      nextApiConfig.apiKey = document.getElementById('api-key').value.trim();
+      // 优先使用手写输入框的值，如果为空则使用下拉框的值
+      const modelInput = document.getElementById('model-input').value.trim();
+      nextApiConfig.model = modelInput || document.getElementById('model-select').value;
+      nextApiConfig.minimaxGroupId = document.getElementById('minimax-group-id').value.trim();
+      nextApiConfig.minimaxApiKey = document.getElementById('minimax-api-key').value.trim();
+      nextApiConfig.minimaxModel = document.getElementById('minimax-model-select').value;
+      const domainSelect = document.getElementById('minimax-domain-select');
+      if (domainSelect) {
+        nextApiConfig.minimaxDomain = domainSelect.value;
+        saveLegacySetting('minimax-domain', domainSelect.value);
+      }
+      saveLegacySetting('minimax-group-id', nextApiConfig.minimaxGroupId);
+      saveLegacySetting('minimax-api-key', nextApiConfig.minimaxApiKey);
+      saveLegacySetting('minimax-model', nextApiConfig.minimaxModel);
+      nextApiConfig.secondaryProxyUrl = document.getElementById('secondary-proxy-url').value.trim();
+      nextApiConfig.secondaryApiKey = document.getElementById('secondary-api-key').value.trim();
+      // 优先使用手写输入框的值，如果为空则使用下拉框的值
+      const secondaryModelInput = document.getElementById('secondary-model-input').value.trim();
+      nextApiConfig.secondaryModel = secondaryModelInput || document.getElementById('secondary-model-select').value;
+      
+      nextApiConfig.backgroundProxyUrl = document.getElementById('background-proxy-url').value.trim();
+      nextApiConfig.backgroundApiKey = document.getElementById('background-api-key').value.trim();
+      // 优先使用手写输入框的值，如果为空则使用下拉框的值
+      const backgroundModelInput = document.getElementById('background-model-input').value.trim();
+      nextApiConfig.backgroundModel = backgroundModelInput || document.getElementById('background-model-select').value;
+      
+      // 识图API
+      nextApiConfig.visionProxyUrl = document.getElementById('vision-proxy-url').value.trim();
+      nextApiConfig.visionApiKey = document.getElementById('vision-api-key').value.trim();
+      const visionModelInput = document.getElementById('vision-model-input').value.trim();
+      nextApiConfig.visionModel = visionModelInput || document.getElementById('vision-model-select').value;
+      
+      // 情侣空间API
+      nextApiConfig.couplespaceProxyUrl = document.getElementById('couplespace-proxy-url').value.trim();
+      nextApiConfig.couplespaceApiKey = document.getElementById('couplespace-api-key').value.trim();
+      const couplespaceModelInput = document.getElementById('couplespace-model-input').value.trim();
+      nextApiConfig.couplespaceModel = couplespaceModelInput || document.getElementById('couplespace-model-select').value;
+
+      const imgbbEnable = document.getElementById('imgbb-enable-switch').checked;
+      const imgbbApiKey = document.getElementById('imgbb-api-key').value.trim();
+      const catboxEnable = document.getElementById('catbox-enable-switch').checked;
+      const catboxUserHash = document.getElementById('catbox-userhash').value.trim();
+
+
+      nextApiConfig.imgbbEnable = imgbbEnable;
+      nextApiConfig.imgbbApiKey = imgbbApiKey;
+      nextApiConfig.catboxEnable = catboxEnable;
+      nextApiConfig.catboxUserHash = catboxUserHash;
+
+
+      saveLegacySetting('imgbb-enabled', imgbbEnable);
+      saveLegacySetting('imgbb-api-key', imgbbApiKey);
+      saveLegacySetting('catbox-enabled', catboxEnable);
+      saveLegacySetting('catbox-userhash', catboxUserHash);
+
+      // 识图Token优化开关
+      const imageTokenOptimize = document.getElementById('image-token-optimize-switch').checked;
+      nextApiConfig.imageTokenOptimize = imageTokenOptimize;
+      saveLegacySetting('image-token-optimize', imageTokenOptimize);
+
+      const githubEnable = document.getElementById('github-enable-switch').checked;
+      const githubAutoBackup = document.getElementById('github-auto-backup-switch').checked;
+      let backupInterval = parseInt(document.getElementById('github-backup-interval').value);
+      if (isNaN(backupInterval) || backupInterval < 1) backupInterval = 30;
+      nextApiConfig.githubEnable = githubEnable;
+      nextApiConfig.githubAutoBackup = githubAutoBackup;
+      const githubProxyEnable = document.getElementById('github-proxy-switch').checked;
+      const githubProxyUrl = document.getElementById('github-proxy-url').value.trim();
+
+      nextApiConfig.githubProxyEnable = githubProxyEnable;
+      nextApiConfig.githubProxyUrl = githubProxyUrl;
+
+      saveLegacySetting('github-proxy-enabled', githubProxyEnable);
+      saveLegacySetting('github-proxy-url', githubProxyUrl);
+      nextApiConfig.githubUsername = document.getElementById('github-username').value.trim();
+      nextApiConfig.githubRepo = document.getElementById('github-repo').value.trim();
+      nextApiConfig.githubToken = document.getElementById('github-token').value.trim();
+      nextApiConfig.githubFilename = document.getElementById('github-filename').value.trim() || 'ephone_backup.json';
+      saveLegacySetting('github-username', nextApiConfig.githubUsername);
+      saveLegacySetting('github-repo', nextApiConfig.githubRepo);
+      saveLegacySetting('github-token', nextApiConfig.githubToken);
+      saveLegacySetting('github-filename', nextApiConfig.githubFilename);
+      nextApiConfig.novelaiApiKey = document.getElementById('novelai-api-key').value.trim();
+      nextApiConfig.novelaiModel = document.getElementById('novelai-model').value;
+      nextApiConfig.novelaiEnabled = document.getElementById('novelai-switch').checked;
+      // 保存备份间隔
+      nextApiConfig.githubBackupInterval = backupInterval;
+      // 保存开关状态到 localStorage
+      saveLegacySetting('github-enabled', githubEnable);
+      saveLegacySetting('github-auto-backup', githubAutoBackup);
+      saveLegacySetting('github-backup-interval', backupInterval);
+
+      await db.apiConfig.put(nextApiConfig);
+      Object.assign(state.apiConfig, nextApiConfig);
+      apiConfigSaved = true;
+      flushLegacySettings();
+
+      saveStage = '后台与全局设置';
+      const nextGlobalSettings = { ...state.globalSettings };
+      const backgroundSwitch = document.getElementById('background-activity-switch');
+      const intervalInput = document.getElementById('background-interval-input');
+      const cooldownInput = document.getElementById('block-cooldown-input');
+
+      nextGlobalSettings.enableBackgroundActivity = backgroundSwitch.checked;
+      nextGlobalSettings.backgroundActivityInterval = parseInt(intervalInput.value) || 60;
+      nextGlobalSettings.blockCooldownHours = parseFloat(cooldownInput.value) || 1;
+      nextGlobalSettings.enableAiDrawing = document.getElementById('enable-ai-drawing-switch').checked;
+
+      // 保存悬浮球开关
+      const floatingBallSwitch = document.getElementById('floating-ball-switch');
+      const oldFloatingBallEnabled = nextGlobalSettings.floatingBallEnabled;
+      if (floatingBallSwitch) {
+        nextGlobalSettings.floatingBallEnabled = floatingBallSwitch.checked;
+      }
+
+      // 新增：保存心声和动态功能开关
+      const previousThoughtsUIEnabled = nextGlobalSettings.customThoughtsUIEnabled;
+      const previousThoughtsHTML = nextGlobalSettings.customThoughtsHTML;
+      const previousThoughtsCSS = nextGlobalSettings.customThoughtsCSS;
+      nextGlobalSettings.enableThoughts = document.getElementById('global-enable-thoughts-switch').checked;
+      nextGlobalSettings.customThoughtsUIEnabled = document.getElementById('custom-thoughts-ui-switch').checked;
+      nextGlobalSettings.customThoughtsHTML = document.getElementById('custom-thoughts-html-textarea').value;
+      nextGlobalSettings.customThoughtsCSS = document.getElementById('custom-thoughts-css-textarea').value;
+      window.PromptEntryManager?.syncAll();
+      nextGlobalSettings.customThoughtsPromptEnabled = document.getElementById('custom-thoughts-prompt-switch').checked;
+      nextGlobalSettings.customThoughtsPrompt = document.getElementById('custom-thoughts-prompt-textarea').value;
+      nextGlobalSettings.customSummaryPromptEnabled = document.getElementById('custom-summary-prompt-switch').checked;
+      nextGlobalSettings.customSummaryPrompt = document.getElementById('custom-summary-prompt-textarea').value;
+      nextGlobalSettings.customChatPromptEnabled = document.getElementById('custom-chat-prompt-switch').checked;
+      nextGlobalSettings.customChatPromptSingle = document.getElementById('custom-chat-prompt-single-textarea').value;
+      nextGlobalSettings.customChatPromptGroup = document.getElementById('custom-chat-prompt-group-textarea').value;
+      nextGlobalSettings.customChatPromptOffline = document.getElementById('custom-chat-prompt-offline-textarea').value;
+      nextGlobalSettings.customChatPromptGroupOffline = document.getElementById('custom-chat-prompt-group-offline-textarea').value;
+      if (window.PromptEntryManager) {
+        nextGlobalSettings.customPromptCollections = window.PromptEntryManager.exportState();
+      }
+      nextGlobalSettings.enableQzoneActions = document.getElementById('global-enable-qzone-actions-switch').checked;
+      nextGlobalSettings.enableViewMyPhone = document.getElementById('global-enable-view-myphone-switch').checked;
+      nextGlobalSettings.enableCrossChat = document.getElementById('global-enable-cross-chat-switch').checked;
+      nextGlobalSettings.promptClearMemoryOnChatClear = document.getElementById('global-prompt-clear-memory-switch').checked;
+      
+      // 新增：保存后台查看用户手机设置
+      nextGlobalSettings.enableViewMyPhoneInBackground = document.getElementById('global-enable-view-myphone-bg-switch').checked;
+      const viewMyPhoneChanceInput = document.getElementById('global-view-myphone-chance-input');
+      nextGlobalSettings.viewMyPhoneChance = viewMyPhoneChanceInput.value.trim() === '' ? null : parseInt(viewMyPhoneChanceInput.value);
+
+      nextGlobalSettings.chatRenderWindow = parseInt(document.getElementById('chat-render-window-input').value) || 50;
+      nextGlobalSettings.chatListRenderWindow = parseInt(document.getElementById('chat-list-render-window-input').value) || 30;
+      nextGlobalSettings.apiTemperature = parseFloat(document.getElementById('api-temperature-input').value);
+      nextGlobalSettings.apiTopP = parseFloat(document.getElementById('api-top-p-input').value);
+      nextGlobalSettings.apiMaxTokens = parseInt(document.getElementById('api-max-tokens-input').value) || 0;
+      nextGlobalSettings.apiPresencePenalty = parseFloat(document.getElementById('api-presence-penalty-input').value);
+      nextGlobalSettings.apiFrequencyPenalty = parseFloat(document.getElementById('api-frequency-penalty-input').value);
+
+      // 新增：保存 API 参数独立开关
+      const topPEnabledCheckbox = document.getElementById('api-top-p-enabled');
+      const maxTokensEnabledCheckbox = document.getElementById('api-max-tokens-enabled');
+      const presenceEnabledCheckbox = document.getElementById('api-presence-penalty-enabled');
+      const frequencyEnabledCheckbox = document.getElementById('api-frequency-penalty-enabled');
+
+      if (topPEnabledCheckbox) nextGlobalSettings.apiTopPEnabled = topPEnabledCheckbox.checked;
+      if (maxTokensEnabledCheckbox) nextGlobalSettings.apiMaxTokensEnabled = maxTokensEnabledCheckbox.checked;
+      if (presenceEnabledCheckbox) nextGlobalSettings.apiPresencePenaltyEnabled = presenceEnabledCheckbox.checked;
+      if (frequencyEnabledCheckbox) nextGlobalSettings.apiFrequencyPenaltyEnabled = frequencyEnabledCheckbox.checked;
+      
+      // 方案4：保存API历史记录开关状态
+      const apiHistorySwitch = document.getElementById('enable-api-history-switch');
+      if (apiHistorySwitch) {
+        nextGlobalSettings.enableApiHistory = apiHistorySwitch.checked;
+      }
+      
+      // 保存安全渲染模式
+      const safeRenderSwitch = document.getElementById('safe-render-mode-switch');
+      const oldSafeRenderMode = nextGlobalSettings.safeRenderMode;
+      if (safeRenderSwitch) {
+        nextGlobalSettings.safeRenderMode = safeRenderSwitch.checked;
+      }
+      
+      const apiStreamSwitch = document.getElementById('enable-api-stream-switch');
+      if (apiStreamSwitch) {
+        nextGlobalSettings.enableApiStream = apiStreamSwitch.checked;
+      }
+      
+      await db.globalSettings.put(nextGlobalSettings);
+      Object.assign(state.globalSettings, nextGlobalSettings);
+      if (floatingBallSwitch && oldFloatingBallEnabled !== nextGlobalSettings.floatingBallEnabled && typeof toggleFloatingBall === 'function') {
+        applySavedSetting('悬浮球设置', () => toggleFloatingBall(nextGlobalSettings.floatingBallEnabled));
+      }
+      if (
+        previousThoughtsUIEnabled !== nextGlobalSettings.customThoughtsUIEnabled
+        || previousThoughtsHTML !== nextGlobalSettings.customThoughtsHTML
+        || previousThoughtsCSS !== nextGlobalSettings.customThoughtsCSS
+      ) {
+        applySavedSetting('心声界面设置', () => window.invalidateCustomThoughtsUI?.(true));
+      }
+
+      // 如果安全渲染模式发生变化，提醒用户刷新页面
+      if (safeRenderSwitch && oldSafeRenderMode !== safeRenderSwitch.checked) {
+        setTimeout(() => {
+          if (confirm('安全渲染模式已' + (safeRenderSwitch.checked ? '开启' : '关闭') + '，需要刷新页面才能生效。是否立即刷新？')) {
+            location.reload();
+          }
+        }, 100);
+      }
+
+      applySavedSetting('后台活动', () => {
+        stopBackgroundSimulation();
+        if (nextGlobalSettings.enableBackgroundActivity) {
+          startBackgroundSimulation();
+          console.log(`后台活动模拟已启动，间隔: ${nextGlobalSettings.backgroundActivityInterval}秒`);
+        } else {
+          console.log('后台活动模拟已停止。');
+        }
+      });
+
+      applySavedSetting('自动备份计时器', () => {
+        if (githubEnable && githubAutoBackup) {
+          startAutoBackupTimer(backupInterval);
+        } else {
+          stopAutoBackupTimer();
+        }
+      });
+
+      saveStage = '图像生成设置';
+      // 保存NovelAI配置到localStorage
+      const novelaiEnabled = document.getElementById('novelai-switch').checked;
+      const novelaiModel = document.getElementById('novelai-model').value;
+      const novelaiApiKey = document.getElementById('novelai-api-key').value.trim();
+      saveLegacySetting('novelai-enabled', novelaiEnabled);
+      saveLegacySetting('novelai-model', novelaiModel);
+      saveLegacySetting('novelai-api-key', novelaiApiKey);
+      flushLegacySettings();
+
+      // 保存Google Imagen配置到localStorage
+      try {
+        saveGoogleImagenSettings();
+      } catch (error) {
+        console.error('保存 Google Imagen 设置失败:', error);
+        legacySettingsErrors.push({ key: 'Google Imagen', error });
+      }
+
+      // 保存 GPT 生图配置到 localStorage
+      try {
+        saveOpenAIImageSettings();
+      } catch (error) {
+        console.error('保存 GPT 生图设置失败:', error);
+        legacySettingsErrors.push({ key: 'GPT 生图', error });
+      }
+
+      if (legacySettingsErrors.length) {
+        const firstFailure = legacySettingsErrors[0];
+        saveFeedbackTitle = '部分设置未保存';
+        saveFeedbackMessage = `API 配置和全局设置已保存，但本地附带设置有 ${legacySettingsErrors.length} 项未保存。\n首项：${firstFailure.key}，${describeSaveError(firstFailure.error)}`;
+      } else {
+        allSettingsSaved = true;
+        saveFeedbackTitle = '保存成功';
+        saveFeedbackMessage = '所有 API 与后台设置已保存。';
+      }
+      } catch (error) {
+        console.error(`保存 ${saveStage} 失败:`, error);
+        saveFeedbackTitle = apiConfigSaved ? '部分设置未保存' : 'API 配置未保存';
+        saveFeedbackMessage = `${apiConfigSaved ? 'API 配置已保存，但' : ''}${saveStage}保存失败。\n${describeSaveError(error)}`
+          + (legacySettingsErrors.length ? `\n另有 ${legacySettingsErrors.length} 项本地附带设置未保存。` : '');
+      } finally {
+        saveApiSettingsButton.dataset.saving = 'false';
+        saveApiSettingsButton.classList.remove('is-saving');
+        saveApiSettingsButton.removeAttribute('aria-disabled');
+        saveApiSettingsButton.textContent = originalSaveText;
+      }
+      await showCustomAlert(saveFeedbackTitle, escapeModalText(saveFeedbackMessage));
+      if (allSettingsSaved) {
+        const apiSettingsScreen = document.getElementById('api-settings-screen');
+        apiSettingsScreen?.dispatchEvent(new CustomEvent('api-settings-save-success'));
+      }
+    });
+
+
+
+    const ApiKeyInput = document.getElementById('api-key')
+    ApiKeyInput.addEventListener('focus', (e) => {
+      e.target.setAttribute('type', 'text')
+    })
+    ApiKeyInput.addEventListener('blur', (e) => {
+      e.target.setAttribute('type', 'password')
+    })
+
+
+
+
+
+    async function fetchModels(urlInputId, keyInputId, selectId) {
+      const url = document.getElementById(urlInputId).value.trim();
+      const key = document.getElementById(keyInputId).value.trim();
+      if (!url || !key) return alert('请先填写对应的反代地址和密钥');
+
+      try {
+        let isGemini = url === GEMINI_API_URL;
+        const fetchOptions = isGemini ? {
+          method: 'GET',
+          mode: 'cors',
+          cache: 'no-cache',
+          credentials: 'omit'
+        } : {
+          method: 'GET',
+          mode: 'cors',
+          cache: 'no-cache',
+          credentials: 'omit',
+          headers: {
+            'Authorization': `Bearer ${key}`,
+            'Content-Type': 'application/json'
+          }
+        };
+
+        const response = await fetch(
+          isGemini ? `${GEMINI_API_URL}?key=${getRandomValue(key)}` : `${url}/v1/models`,
+          fetchOptions
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`无法获取模型列表 (${response.status}): ${errorText}`);
+        }
+
+        const data = await response.json();
+        let models = isGemini ? data.models.map(model => ({
+          id: model.name.split('/')[1] || model.name
+        })) : data.data;
+
+        if (!models || models.length === 0) {
+          throw new Error('返回的模型列表为空');
+        }
+
+        const modelSelect = document.getElementById(selectId);
+        modelSelect.innerHTML = '';
+
+        const savedModel = selectId === 'model-select' ? state.apiConfig.model : state.apiConfig.secondaryModel;
+
+        models.forEach(model => {
+          const option = document.createElement('option');
+          option.value = model.id;
+          option.textContent = model.id;
+          if (model.id === savedModel) option.selected = true;
+          modelSelect.appendChild(option);
+        });
+        alert('模型列表已更新');
+      } catch (error) {
+        console.error('拉取模型失败:', error);
+        alert(`拉取模型失败: ${error.message}`);
+      }
+    }
+
+
+    document.getElementById('fetch-models-btn').addEventListener('click', () => {
+      fetchModels('proxy-url', 'api-key', 'model-select');
+    });
+
+
+    document.getElementById('fetch-secondary-models-btn').addEventListener('click', () => {
+      fetchModels('secondary-proxy-url', 'secondary-api-key', 'secondary-model-select');
+    });
+
+    document.getElementById('fetch-background-models-btn').addEventListener('click', () => {
+      fetchModels('background-proxy-url', 'background-api-key', 'background-model-select');
+    });
+
+    document.getElementById('fetch-vision-models-btn').addEventListener('click', () => {
+      fetchModels('vision-proxy-url', 'vision-api-key', 'vision-model-select');
+    });
+    
+    document.getElementById('fetch-couplespace-models-btn').addEventListener('click', () => {
+      fetchModels('couplespace-proxy-url', 'couplespace-api-key', 'couplespace-model-select');
+    });
+
+    // 监听主模型下拉框变化，自动填入手写框
+    document.getElementById('model-select').addEventListener('change', (e) => {
+      const selectedModel = e.target.value;
+      if (selectedModel) {
+        document.getElementById('model-input').value = selectedModel;
+      }
+    });
+
+    // 监听副模型下拉框变化，自动填入手写框
+    document.getElementById('secondary-model-select').addEventListener('change', (e) => {
+      const selectedModel = e.target.value;
+      if (selectedModel) {
+        document.getElementById('secondary-model-input').value = selectedModel;
+      }
+    });
+
+    // 监听后台模型下拉框变化，自动填入手写框
+    document.getElementById('background-model-select').addEventListener('change', (e) => {
+      const selectedModel = e.target.value;
+      if (selectedModel) {
+        document.getElementById('background-model-input').value = selectedModel;
+      }
+    });
+
+    // 监听识图模型下拉框变化，自动填入手写框
+    document.getElementById('vision-model-select').addEventListener('change', (e) => {
+      const selectedModel = e.target.value;
+      if (selectedModel) {
+        document.getElementById('vision-model-input').value = selectedModel;
+      }
+    });
+
+    // 监听情侣空间模型下拉框变化，自动填入手写框
+    document.getElementById('couplespace-model-select').addEventListener('change', (e) => {
+      const selectedModel = e.target.value;
+      if (selectedModel) {
+        document.getElementById('couplespace-model-input').value = selectedModel;
+      }
+    });
+
+    // ========== 移动端控制台功能 ==========
+    (function () {
+      const consoleLogs = [];
+      let currentFilter = 'all';
+
+      // 保存原始console方法
+      const originalConsole = {
+        log: console.log,
+        warn: console.warn,
+        error: console.error,
+        info: console.info
+      };
+
+      // 添加日志到数组
+      function addLog(type, args) {
+        const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+        const message = Array.from(args).map(arg => {
+          if (typeof arg === 'object') {
+            try {
+              return JSON.stringify(arg, null, 2);
+            } catch (e) {
+              return String(arg);
+            }
+          }
+          return String(arg);
+        }).join(' ');
+
+        consoleLogs.push({ type, timestamp, message });
+
+        // 限制日志数量，最多保存1000条
+        if (consoleLogs.length > 1000) {
+          consoleLogs.shift();
+        }
+      }
+
+      // 重写console方法
+      console.log = function (...args) {
+        originalConsole.log.apply(console, args);
+        addLog('log', args);
+      };
+
+      console.warn = function (...args) {
+        originalConsole.warn.apply(console, args);
+        addLog('warn', args);
+      };
+
+      console.error = function (...args) {
+        originalConsole.error.apply(console, args);
+        addLog('error', args);
+      };
+
+      console.info = function (...args) {
+        originalConsole.info.apply(console, args);
+        addLog('info', args);
+      };
+
+      // 捕获未处理的错误
+      window.addEventListener('error', (event) => {
+        const message = `${event.message}\n  at ${event.filename}:${event.lineno}:${event.colno}`;
+        addLog('error', [message]);
+      });
+
+      // 捕获未处理的Promise拒绝
+      window.addEventListener('unhandledrejection', (event) => {
+        const message = `Unhandled Promise Rejection: ${event.reason}`;
+        addLog('error', [message]);
+      });
+
+      // 渲染控制台内容
+      function renderConsole() {
+        const content = document.getElementById('mobile-console-content');
+        if (!content) return;
+
+        const filteredLogs = currentFilter === 'all'
+          ? consoleLogs
+          : consoleLogs.filter(log => log.type === currentFilter);
+
+        if (filteredLogs.length === 0) {
+          content.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">暂无日志</div>';
+          return;
+        }
+
+        content.innerHTML = filteredLogs.map(log =>
+          `<div class="console-entry ${log.type}">
+            <span class="console-timestamp">[${log.timestamp}]</span>
+            <span class="console-message">${log.message}</span>
+          </div>`
+        ).join('');
+
+        // 自动滚动到底部
+        content.scrollTop = content.scrollHeight;
+      }
+
+      // 打开控制台按钮
+      const openConsoleBtn = document.getElementById('open-console-btn');
+      if (openConsoleBtn) {
+        const openConsoleHandler = async () => {
+          const consolePanel = document.getElementById('mobile-console');
+          if (consolePanel) {
+            consolePanel.style.display = 'flex';
+            renderConsole();
+
+            // 首次打开控制台时显示提示
+            const hasShownConsoleTip = localStorage.getItem('ephoneConsoleFirstTipShown');
+            if (!hasShownConsoleTip) {
+              await showCustomAlert(
+                '💡 控制台使用提示',
+                '如果您是因为遇到问题才打开控制台的，发现报错后请将错误信息发送给作者。\n\n您可以点击左上角的小人图标，进入私信页面联系作者。'
+              );
+              localStorage.setItem('ephoneConsoleFirstTipShown', 'true');
+            }
+          }
+        };
+        openConsoleBtn.addEventListener('click', openConsoleHandler);
+        openConsoleBtn.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          openConsoleHandler();
+        }, { passive: false });
+      }
+
+      // 关闭控制台按钮
+      const closeConsoleBtn = document.getElementById('console-close-btn');
+      if (closeConsoleBtn) {
+        const closeConsoleHandler = () => {
+          const consolePanel = document.getElementById('mobile-console');
+          if (consolePanel) {
+            consolePanel.style.display = 'none';
+          }
+        };
+        closeConsoleBtn.addEventListener('click', closeConsoleHandler);
+        closeConsoleBtn.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          closeConsoleHandler();
+        }, { passive: false });
+      }
+
+      // 清空控制台按钮
+      const clearConsoleBtn = document.getElementById('console-clear-btn');
+      if (clearConsoleBtn) {
+        const clearConsoleHandler = () => {
+          consoleLogs.length = 0;
+          renderConsole();
+        };
+        clearConsoleBtn.addEventListener('click', clearConsoleHandler);
+        clearConsoleBtn.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          clearConsoleHandler();
+        }, { passive: false });
+      }
+
+      // 控制台标签切换
+      const consoleTabs = document.querySelectorAll('.console-tab');
+      consoleTabs.forEach(tab => {
+        const tabClickHandler = () => {
+          consoleTabs.forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          currentFilter = tab.dataset.tab;
+          renderConsole();
+        };
+        tab.addEventListener('click', tabClickHandler);
+        tab.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          tabClickHandler();
+        }, { passive: false });
+      });
+
+      // 添加初始欢迎日志
+      console.log('移动端控制台已启动');
+      console.info('可在API设置中打开控制台查看日志');
+    })();
+    // ========== 移动端控制台功能结束 ==========
+
+    document.getElementById('add-world-book-btn').addEventListener('click', async () => {
+      const name = await showCustomPrompt('创建世界书', '请输入书名');
+      if (name && name.trim()) {
+        const newBook = {
+          id: 'wb_' + Date.now(),
+          name: name.trim(),
+          content: '',
+          isGlobal: false,
+          injectPosition: 'before' // 默认为前
+        };
+        await db.worldBooks.add(newBook);
+        state.worldBooks.push(newBook);
+        renderWorldBookScreen();
+        openWorldBookEditor(newBook.id);
+      }
+    });
+
+    document.getElementById('save-world-book-btn').addEventListener('click', async () => {
+      if (!window.editingWorldBookId) return;
+      const book = state.worldBooks.find(wb => wb.id === window.editingWorldBookId);
+      if (!book) return;
+
+
+      const newName = document.getElementById('world-book-name-input').value.trim();
+      if (!newName) {
+        alert('书名不能为空！');
+        return;
+      }
+      book.name = newName;
+      const categoryId = document.getElementById('world-book-category-select').value;
+      book.categoryId = categoryId ? parseInt(categoryId) : null;
+
+      // 保存全局开关状态
+      const isGlobal = document.getElementById('world-book-global-switch').checked;
+      book.isGlobal = isGlobal;
+
+      // 保存注入位置（无论是否全局都保存）
+      const injectPosition = document.getElementById('world-book-inject-position-select').value;
+      book.injectPosition = injectPosition;
+
+      const entriesContainer = document.getElementById('world-book-entries-container');
+      const entryBlocks = entriesContainer.querySelectorAll('.message-editor-block');
+      const newEntries = [];
+
+      entryBlocks.forEach(block => {
+        const keysInput = block.querySelector('.entry-keys-input').value.trim();
+        const content = block.querySelector('.entry-content-textarea').value.trim();
+        const isEnabled = block.querySelector('.entry-enabled-switch').checked;
+        if (content) {
+          newEntries.push({
+            comment: block.querySelector('.entry-comment-input').value.trim(),
+            keys: keysInput ? keysInput.split(',').map(k => k.trim()).filter(k => k) : [],
+            content: content,
+            enabled: isEnabled
+          });
+        }
+      });
+      book.content = newEntries;
+
+
+      await db.worldBooks.put(book);
+      document.getElementById('world-book-editor-title').textContent = newName;
+      window.editingWorldBookId = null;
+
+
+      showScreen('world-book-screen');
+
+
+      await renderWorldBookScreen();
+    });
+
+    document.getElementById('chat-messages').addEventListener('click', async (e) => {
+      // 【双语模式】点击消息气泡切换翻译
+      let bubble = e.target.closest('.message-bubble');
+      if (bubble && bubble.dataset.originalContent && state.activeChatId) {
+        const chat = state.chats[state.activeChatId];
+        if (chat && chat.settings.enableBilingualMode) {
+          // 检查是否是语音消息
+          const isVoiceMessage = bubble.classList.contains('is-voice-message');
+          
+          if (isVoiceMessage) {
+            // 语音消息：点击 voice-transcript 区域或整个气泡都可以切换翻译
+            // 但排除点击播放按钮（voice-message-body 内的波形区域）
+            if (!e.target.closest('.voice-waveform, .loading-spinner')) {
+              toggleBilingualTranslation(bubble, chat);
+              return;
+            }
+          } else {
+            // 文本消息：排除点击图片、按钮等特殊元素
+            if (!e.target.closest('img, button, a')) {
+              toggleBilingualTranslation(bubble, chat);
+              return;
+            }
+          }
+        }
+      }
+      
+      if (e.target.tagName === 'IMG') {
+        // 检查是否是聊天里的图片类名
+        if (e.target.classList.contains('chat-image') ||
+
+          e.target.classList.contains('realimag-image') ||
+          e.target.classList.contains('naiimag-image')) {
+
+          e.stopPropagation(); // 阻止气泡被选中等其他事件
+
+          // --- 核心修复逻辑：检测连击 ---
+
+          // 如果这是一个快速的第二次或第三次点击 (detail > 1)，
+          // 说明用户可能在尝试三击下载，或者是双击。
+          // 此时我们要取消掉还没执行的“放大”操作，并不做任何放大处理。
+          if (e.detail > 1) {
+            if (window.simpleZoomTimer) {
+              clearTimeout(window.simpleZoomTimer);
+              window.simpleZoomTimer = null;
+            }
+            return; // 直接退出，把舞台留给三击下载逻辑

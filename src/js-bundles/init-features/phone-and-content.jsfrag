@@ -1,0 +1,1105 @@
+      if (e.target.classList.contains('change-icon-btn')) {
+        const item = e.target.closest('.icon-setting-item');
+        const iconId = item.dataset.iconId;
+        if (iconId) {
+          handleIconChange(iconId, 'myphone', item);
+        }
+      }
+    });
+    document.getElementById('import-appearance-btn')?.addEventListener('click', () => {
+      document.getElementById('import-appearance-input').click();
+    });
+
+    document.getElementById('import-appearance-input')?.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        importAppearanceSettings(file);
+      }
+      e.target.value = null;
+    });
+
+
+
+
+    document.addEventListener('visibilitychange', () => {
+
+      if (document.visibilityState === 'hidden') {
+
+        localStorage.setItem('ephoneLastActiveTimestamp', Date.now());
+        console.log("应用已切换到后台，记录当前时间。");
+      }
+    });
+
+    document.getElementById('export-world-book-btn')?.addEventListener('click', exportWorldBooks);
+    document.getElementById('import-world-book-btn')?.addEventListener('click', () => {
+      document.getElementById('import-world-book-input').click();
+    });
+    document.getElementById('import-world-book-input')?.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length > 0) {
+        await handleWorldBookImport(files);
+      }
+      e.target.value = null;
+    });
+    document.getElementById('enable-ai-drawing-switch')?.addEventListener('change', async (e) => {
+      const isEnabled = e.target.checked;
+      state.globalSettings.enableAiDrawing = isEnabled;
+      await db.globalSettings.put(state.globalSettings);
+
+      // 展开/收起 Pollinations 设置面板
+      const pollinationsDetails = document.getElementById('pollinations-details');
+      if (pollinationsDetails) pollinationsDetails.style.display = isEnabled ? '' : 'none';
+
+
+      const activeScreen = document.querySelector('.screen.active');
+      if (activeScreen) {
+        switch (activeScreen.id) {
+          case 'chat-interface-screen':
+            renderChatInterface(state.activeChatId);
+            break;
+          case 'chat-list-screen':
+
+            if (document.getElementById('qzone-screen').classList.contains('active')) renderQzonePosts();
+
+            if (document.getElementById('favorites-view').classList.contains('active')) renderFavoritesScreen();
+            break;
+          case 'douban-screen':
+            renderDoubanScreen();
+            break;
+          case 'douban-post-detail-screen':
+            openDoubanPostDetail(activeDoubanPostId);
+            break;
+
+          case 'character-phone-screen':
+            const activeCharScreen = document.querySelector('.char-screen.active');
+            if (activeCharScreen) {
+              switch (activeCharScreen.id) {
+                case 'char-album-screen':
+                  renderCharAlbum();
+                  break;
+                case 'char-taobao-screen':
+                  renderCharTaobao();
+                  break;
+                case 'char-browser-article-screen':
+                  const char = state.chats[activeCharacterId];
+                  const history = char.simulatedBrowserHistory || [];
+                  const lastArticleIndex = history.length > 0 ? history.length - 1 : 0;
+                  renderCharArticle(history[lastArticleIndex]);
+                  break;
+                case 'char-usage-screen':
+                  renderCharAppUsage();
+                  break;
+                case 'char-qq-screen':
+                  renderCharSimulatedQQ();
+                  break;
+                case 'char-qq-conversation-screen':
+                  const convoIndex = document.querySelector('#char-chat-list .chat-list-item')?.dataset.conversationIndex || 0;
+                  openCharSimulatedConversation(parseInt(convoIndex));
+                  break;
+              }
+            }
+            break;
+        }
+      }
+      showCustomAlert('设置已应用', `AI生图功能已${isEnabled ? '开启' : '关闭'}。`);
+    });
+
+    // Pollinations Key 显示/隐藏切换
+    document.getElementById('pollinations-key-toggle')?.addEventListener('click', () => {
+      const input = document.getElementById('pollinations-api-key');
+      input.type = input.type === 'password' ? 'text' : 'password';
+    });
+    // Pollinations Key 保存
+    document.getElementById('pollinations-api-key')?.addEventListener('change', (e) => {
+      localStorage.setItem('pollinations-api-key', e.target.value.trim());
+    });
+    // Pollinations 模型保存
+    document.getElementById('pollinations-model')?.addEventListener('change', (e) => {
+      localStorage.setItem('pollinations-model', e.target.value);
+    });
+
+    document.getElementById('search-history-btn')?.addEventListener('click', openSearchHistoryScreen);
+    document.getElementById('search-history-back-btn')?.addEventListener('click', () => {
+      if (state.globalSettings.cleanChatDetail) {
+        showScreen('chat-settings-screen');
+        setTimeout(() => { if (typeof openCleanChatDetail === 'function') openCleanChatDetail(); }, 50);
+      } else {
+        showScreen('chat-settings-screen');
+      }
+    });
+    document.getElementById('execute-search-btn')?.addEventListener('click', handleSearchHistory);
+    document.getElementById('clear-search-btn')?.addEventListener('click', clearSearchFilters);
+
+
+
+
+    document.getElementById('upload-custom-frame-btn')?.addEventListener('click', handleUploadFrame);
+    document.getElementById('batch-import-frames-btn')?.addEventListener('click', handleBatchUploadFrames);
+
+
+    document.querySelector('#avatar-frame-modal .modal-body').addEventListener('click', (e) => {
+
+      if (e.target.classList.contains('delete-btn')) {
+        const frameId = parseInt(e.target.dataset.id);
+        if (!isNaN(frameId)) {
+          handleDeleteCustomFrame(frameId);
+        }
+      }
+    });
+
+
+
+
+
+    setupHomeScreenPagination();
+
+
+    window.openPresetScreen = openPresetScreen;
+
+
+    document.getElementById('add-preset-btn')?.addEventListener('click', async () => {
+      const name = await showCustomPrompt('创建新预设', '请输入预设名称');
+      if (name && name.trim()) {
+        const newPreset = {
+          id: 'preset_' + Date.now(),
+          name: name.trim(),
+          content: []
+        };
+        await db.presets.add(newPreset);
+        await renderPresetScreen();
+        openPresetEditor(newPreset.id);
+      }
+    });
+
+    document.getElementById('manage-preset-categories-btn')?.addEventListener('click', openPresetCategoryManager);
+
+    document.getElementById('add-preset-entry-btn')?.addEventListener('click', () => {
+      const container = document.getElementById('preset-entries-container');
+      if (container.querySelector('p')) {
+        container.innerHTML = '';
+      }
+      const newBlock = createPresetEntryBlock();
+      container.appendChild(newBlock);
+      newBlock.querySelector('.entry-content-textarea').focus();
+    });
+
+
+    document.getElementById('save-preset-btn')?.addEventListener('click', async () => {
+      if (!editingPresetId) return;
+      const preset = await db.presets.get(editingPresetId);
+      if (!preset) return;
+
+
+      const newName = document.getElementById('preset-name-input').value.trim();
+      if (!newName) {
+        alert('预设名称不能为空！');
+        return;
+      }
+      preset.name = newName;
+      preset.categoryId = parseInt(document.getElementById('preset-category-select').value) || null;
+
+      const entriesContainer = document.getElementById('preset-entries-container');
+      const entryBlocks = entriesContainer.querySelectorAll('.message-editor-block');
+      const newEntries = [];
+      entryBlocks.forEach(block => {
+        const content = block.querySelector('.entry-content-textarea').value.trim();
+        if (content) {
+          newEntries.push({
+            comment: block.querySelector('.entry-comment-input').value.trim(),
+            keys: (block.querySelector('.entry-keys-input').value.trim() || '').split(',').map(k => k.trim()).filter(Boolean),
+            content: content,
+            enabled: block.querySelector('.entry-enabled-switch').checked
+          });
+        }
+      });
+      preset.content = newEntries;
+
+
+      await db.presets.put(preset);
+      editingPresetId = null;
+
+
+      showScreen('preset-screen');
+
+
+
+      await renderPresetScreen();
+    });
+
+
+
+
+    document.getElementById('import-preset-btn')?.addEventListener('click', async () => {
+
+
+
+      try {
+
+        await requirePinActivation();
+
+
+        document.getElementById('import-preset-input').click();
+
+      } catch (error) {
+
+        console.warn("预设导入被取消:", error.message);
+      }
+
+    });
+
+    document.getElementById('import-preset-input')?.addEventListener('change', handlePresetImport);
+
+    document.getElementById('reset-button-order-btn')?.addEventListener('click', resetButtonOrder);
+
+    document.getElementById('clear-specific-data-btn')?.addEventListener('click', openDataClearWizard);
+
+
+    document.getElementById('cancel-clear-wizard-btn-step1')?.addEventListener('click', () => {
+      document.getElementById('data-clear-wizard-modal').classList.remove('visible');
+    });
+    document.getElementById('go-to-clear-step2-btn')?.addEventListener('click', handleDataClearNext);
+
+
+    document.getElementById('back-to-clear-step1-btn')?.addEventListener('click', handleDataClearBack);
+    document.getElementById('cancel-clear-wizard-btn-step2')?.addEventListener('click', () => {
+      document.getElementById('data-clear-wizard-modal').classList.remove('visible');
+    });
+    document.getElementById('confirm-final-clear-btn')?.addEventListener('click', handleConfirmDataClear);
+
+
+    document.getElementById('data-clear-wizard-modal')?.addEventListener('click', (e) => {
+      const item = e.target.closest('.clear-posts-item');
+      if (item) {
+
+        e.stopPropagation();
+        item.classList.toggle('selected');
+      }
+    });
+    document.getElementById('data-clear-wizard-modal')?.addEventListener('change', (e) => {
+
+      if (e.target.id === 'select-all-chars-for-clear') {
+        const isChecked = e.target.checked;
+        document.querySelectorAll('#data-clear-char-list .clear-posts-item').forEach(item => {
+          item.classList.toggle('selected', isChecked);
+        });
+      } else if (e.target.id === 'select-all-types-for-clear') {
+        const isChecked = e.target.checked;
+        document.querySelectorAll('#data-clear-type-list .clear-posts-item').forEach(item => {
+          item.classList.toggle('selected', isChecked);
+        });
+      }
+    });
+
+    document.getElementById('compress-images-btn')?.addEventListener('click', compressAllLocalImages);
+
+    // 清空聊天中的表情包消息相关事件监听
+    document.getElementById('clear-stickers-btn')?.addEventListener('click', openClearStickersModal);
+    document.getElementById('cancel-clear-stickers-btn')?.addEventListener('click', () => {
+      document.getElementById('clear-stickers-modal').classList.remove('visible');
+    });
+    document.getElementById('confirm-clear-stickers-btn')?.addEventListener('click', handleConfirmClearStickers);
+
+    document.getElementById('clear-stickers-modal')?.addEventListener('click', (e) => {
+      const item = e.target.closest('.clear-posts-item');
+      if (item && item.dataset.chatId) {
+        e.stopPropagation();
+        item.classList.toggle('selected');
+        
+        const chatId = item.dataset.chatId;
+        if (item.classList.contains('selected')) {
+          if (!selectedCharsForStickerClear.includes(chatId)) {
+            selectedCharsForStickerClear.push(chatId);
+          }
+        } else {
+          selectedCharsForStickerClear = selectedCharsForStickerClear.filter(id => id !== chatId);
+        }
+        
+        // 更新全选复选框状态
+        const totalItems = document.querySelectorAll('#clear-stickers-category-list .clear-posts-item').length;
+        const selectAllCheckbox = document.getElementById('select-all-categories-checkbox');
+        if (selectAllCheckbox) {
+          selectAllCheckbox.checked = selectedCharsForStickerClear.length === totalItems;
+        }
+      }
+    });
+
+    document.getElementById('select-all-categories-checkbox')?.addEventListener('change', (e) => {
+      const isChecked = e.target.checked;
+      const items = document.querySelectorAll('#clear-stickers-category-list .clear-posts-item');
+      
+      selectedCharsForStickerClear = [];
+      items.forEach(item => {
+        item.classList.toggle('selected', isChecked);
+        if (isChecked && item.dataset.chatId) {
+          selectedCharsForStickerClear.push(item.dataset.chatId);
+        }
+      });
+    });
+
+    document.getElementById('clear-chat-images-btn')?.addEventListener('click', openClearChatImagesModal);
+    document.getElementById('cancel-clear-images-btn')?.addEventListener('click', () => {
+      document.getElementById('clear-chat-images-modal').classList.remove('visible');
+    });
+    document.getElementById('confirm-clear-images-btn')?.addEventListener('click', handleConfirmClearChatImages);
+
+    // 清空聊天HTML
+    document.getElementById('clear-chat-html-btn')?.addEventListener('click', openClearChatHtmlModal);
+    document.getElementById('cancel-clear-html-btn')?.addEventListener('click', () => {
+      document.getElementById('clear-chat-html-modal').classList.remove('visible');
+    });
+    document.getElementById('confirm-clear-html-btn')?.addEventListener('click', handleConfirmClearChatHtml);
+    document.getElementById('select-all-chats-for-html-clear')?.addEventListener('change', (e) => {
+      const isChecked = e.target.checked;
+      const items = document.querySelectorAll('#clear-chat-html-list .clear-posts-item');
+      items.forEach(item => {
+        item.classList.toggle('selected', isChecked);
+      });
+    });
+
+    // 清空所有API历史记录
+    document.getElementById('clear-api-history-btn')?.addEventListener('click', async () => {
+      const confirmed = await showCustomConfirm(
+        '清空所有API历史记录',
+        '此操作将清空所有角色的API调用历史记录。<br><br>这不会影响聊天记录，只是清理调试数据。<br><br><strong>此操作不可撤销，确定继续吗？</strong>',
+        {
+          confirmButtonClass: 'btn-danger',
+          confirmText: '确认清空'
+        }
+      );
+      
+      if (!confirmed) return;
+      
+      try {
+        let clearedCount = 0;
+        let totalSize = 0;
+        
+        // 遍历所有聊天，清空apiHistory
+        const allChats = await db.chats.toArray();
+        for (const chat of allChats) {
+          if (chat.apiHistory && chat.apiHistory.length > 0) {
+            // 计算清理的数据大小（估算）
+            const historySize = JSON.stringify(chat.apiHistory).length;
+            totalSize += historySize;
+            
+            // 删除apiHistory字段
+            delete chat.apiHistory;
+            
+            // 更新数据库
+            await db.chats.put(chat);
+            clearedCount++;
+            
+            // 更新内存中的数据
+            if (state.chats[chat.id]) {
+              delete state.chats[chat.id].apiHistory;
+            }
+          }
+        }
+        
+        const sizeMB = (totalSize / 1024 / 1024).toFixed(2);
+        await showCustomAlert(
+          '清空成功',
+          `已清空 ${clearedCount} 个角色的API历史记录。<br>预计释放约 ${sizeMB} MB 空间。`
+        );
+        
+      } catch (error) {
+        console.error('清空API历史记录失败:', error);
+        await showCustomAlert('清空失败', `发生错误: ${error.message}`);
+      }
+    });
+
+    document.getElementById('clear-chat-images-modal')?.addEventListener('click', (e) => {
+      const item = e.target.closest('.clear-posts-item');
+      if (item) {
+        e.stopPropagation();
+        item.classList.toggle('selected');
+      }
+    });
+
+    document.getElementById('select-all-chars-for-image-clear')?.addEventListener('change', (e) => {
+      const isChecked = e.target.checked;
+      document.querySelectorAll('#clear-chat-images-list .clear-posts-item').forEach(item => {
+        item.classList.toggle('selected', isChecked);
+      });
+    });
+
+    document.getElementById('copy-message-btn')?.addEventListener('click', copyMessageContent);
+
+
+    document.getElementById('copy-timestamp-btn')?.addEventListener('click', copyMessageTimestamp);
+
+    document.getElementById('npc-list-back-btn')?.addEventListener('click', () => {
+
+      switchToChatListView('messages-view');
+    });
+
+
+    document.getElementById('add-npc-btn')?.addEventListener('click', () => openNpcEditor(null));
+
+
+    document.getElementById('save-npc-btn')?.addEventListener('click', saveNpc);
+    document.getElementById('npc-editor-modal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'manage-npc-groups-btn') {
+        openNpcGroupManager();
+      }
+    });
+    document.getElementById('close-npc-group-manager-btn')?.addEventListener('click', () => {
+      document.getElementById('npc-group-manager-modal').classList.remove('visible');
+      // 重新填充NPC编辑器里的下拉菜单
+      if (document.getElementById('npc-editor-modal').classList.contains('visible')) {
+        openNpcEditor(editingNpcId);
+      }
+    });
+    document.getElementById('add-new-npc-group-btn')?.addEventListener('click', addNewNpcGroup);
+    document.getElementById('existing-npc-groups-list')?.addEventListener('click', (e) => {
+      if (e.target.classList.contains('delete-group-btn')) {
+        deleteNpcGroup(parseInt(e.target.dataset.id));
+      }
+    });
+    document.getElementById('cancel-npc-editor-btn')?.addEventListener('click', () => {
+      document.getElementById('npc-editor-modal').classList.remove('visible');
+    });
+
+
+    document.getElementById('npc-avatar-input')?.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          document.getElementById('npc-avatar-preview').src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+    document.getElementById('chat-lock-overlay')?.addEventListener('click', (e) => {
+
+      if (e.target.id === 'spectator-reroll-btn') {
+        handleSpectatorReroll();
+      } else if (e.target.id === 'spectator-edit-btn') {
+
+        openAiResponseEditor();
+      }
+
+    });
+    addLongPressListener(document.getElementById('music-visual-container'), () => {
+      if (musicState.currentIndex > -1) {
+        handleChangeAlbumArt(musicState.currentIndex);
+      }
+    });
+    const doubanSettingsBtn = document.getElementById('douban-settings-btn');
+    if (doubanSettingsBtn) doubanSettingsBtn.addEventListener('click', openDoubanSettingsModal);
+    
+    const saveDoubanSettingsBtn = document.getElementById('save-douban-settings-btn');
+    if (saveDoubanSettingsBtn) saveDoubanSettingsBtn.addEventListener('click', saveDoubanSettings);
+    
+    const cancelDoubanSettingsBtn = document.getElementById('cancel-douban-settings-btn');
+    if (cancelDoubanSettingsBtn) cancelDoubanSettingsBtn.addEventListener('click', () => {
+      const modal = document.getElementById('douban-settings-modal');
+      if (modal) modal.classList.remove('visible');
+    });
+
+    // 管理NPC头像
+    const manageNpcAvatarsBtn = document.getElementById('manage-npc-avatars-btn');
+    if (manageNpcAvatarsBtn) manageNpcAvatarsBtn.addEventListener('click', () => {
+      const modal = document.getElementById('douban-settings-modal');
+      if (modal) modal.classList.remove('visible');
+      openNpcAvatarsModal();
+    });
+    
+    const addNpcAvatarUrlBtn = document.getElementById('add-npc-avatar-url-btn');
+    if (addNpcAvatarUrlBtn) addNpcAvatarUrlBtn.addEventListener('click', addNpcAvatarFromURL);
+    
+    const addNpcAvatarLocalBtn = document.getElementById('add-npc-avatar-local-btn');
+    if (addNpcAvatarLocalBtn) addNpcAvatarLocalBtn.addEventListener('click', addNpcAvatarFromLocal);
+    
+    const npcAvatarLocalInput = document.getElementById('npc-avatar-local-input');
+    if (npcAvatarLocalInput) npcAvatarLocalInput.addEventListener('change', handleNpcAvatarLocalUpload);
+    
+    const deleteSelectedNpcAvatarsBtn = document.getElementById('delete-selected-npc-avatars-btn');
+    if (deleteSelectedNpcAvatarsBtn) deleteSelectedNpcAvatarsBtn.addEventListener('click', deleteSelectedNpcAvatars);
+    
+    const selectAllNpcAvatars = document.getElementById('select-all-npc-avatars');
+    if (selectAllNpcAvatars) selectAllNpcAvatars.addEventListener('change', toggleSelectAllNpcAvatars);
+    
+    const closeNpcAvatarsBtn = document.getElementById('close-npc-avatars-btn');
+    if (closeNpcAvatarsBtn) closeNpcAvatarsBtn.addEventListener('click', () => {
+      const modal = document.getElementById('npc-avatars-modal');
+      if (modal) modal.classList.remove('visible');
+      selectedNpcAvatars.clear();
+    });
+
+    // 管理自定义小组
+    const manageCustomGroupsBtn = document.getElementById('manage-custom-groups-btn');
+    if (manageCustomGroupsBtn) manageCustomGroupsBtn.addEventListener('click', () => {
+      const modal = document.getElementById('douban-settings-modal');
+      if (modal) modal.classList.remove('visible');
+      openCustomGroupsModal();
+    });
+    
+    const addCustomGroupBtn = document.getElementById('add-custom-group-btn');
+    if (addCustomGroupBtn) addCustomGroupBtn.addEventListener('click', () => {
+      openEditGroupModal(null);
+    });
+    
+    const closeCustomGroupsBtn = document.getElementById('close-custom-groups-btn');
+    if (closeCustomGroupsBtn) closeCustomGroupsBtn.addEventListener('click', () => {
+      const modal = document.getElementById('custom-groups-modal');
+      if (modal) modal.classList.remove('visible');
+    });
+    
+    const saveEditGroupBtn = document.getElementById('save-edit-group-btn');
+    if (saveEditGroupBtn) saveEditGroupBtn.addEventListener('click', saveEditGroup);
+    
+    const cancelEditGroupBtn = document.getElementById('cancel-edit-group-btn');
+    if (cancelEditGroupBtn) cancelEditGroupBtn.addEventListener('click', () => {
+      const modal = document.getElementById('edit-custom-group-modal');
+      if (modal) modal.classList.remove('visible');
+    });
+
+    // 管理豆瓣帖子
+    const manageDoubanPostsBtn = document.getElementById('manage-douban-posts-btn');
+    if (manageDoubanPostsBtn) manageDoubanPostsBtn.addEventListener('click', () => {
+      openDeleteDoubanPostsModal();
+    });
+
+    // 删除豆瓣帖子模态框事件
+    const cancelDeleteDoubanPostsBtn = document.getElementById('cancel-delete-douban-posts-btn');
+    if (cancelDeleteDoubanPostsBtn) cancelDeleteDoubanPostsBtn.addEventListener('click', () => {
+      const modal = document.getElementById('delete-douban-posts-modal');
+      if (modal) modal.classList.remove('visible');
+      document.getElementById('douban-settings-modal')?.classList.add('visible');
+    });
+    
+    const confirmDeleteDoubanPostsBtn = document.getElementById('confirm-delete-douban-posts-btn');
+    if (confirmDeleteDoubanPostsBtn) confirmDeleteDoubanPostsBtn.addEventListener('click', handleConfirmDeleteDoubanPosts);
+
+    // 豆瓣帖子列表项点击事件（单选）
+    const deleteDoubanPostsList = document.getElementById('delete-douban-posts-list');
+    if (deleteDoubanPostsList) deleteDoubanPostsList.addEventListener('click', (e) => {
+      const item = e.target.closest('.clear-posts-item');
+      if (item) {
+        item.classList.toggle('selected');
+      }
+    });
+
+    // 全选豆瓣帖子
+    const selectAllDoubanPosts = document.getElementById('select-all-douban-posts');
+    if (selectAllDoubanPosts) selectAllDoubanPosts.addEventListener('change', (e) => {
+      const isChecked = e.target.checked;
+      document.querySelectorAll('#delete-douban-posts-list .clear-posts-item').forEach(item => {
+        if (isChecked) {
+          item.classList.add('selected');
+        } else {
+          item.classList.remove('selected');
+        }
+      });
+    });
+
+    document.getElementById('time-zone-search-input')?.addEventListener('input', (e) => {
+      const searchTerm = e.target.value.toLowerCase();
+      const selectEl = document.getElementById('time-zone-select');
+
+
+      for (const option of selectEl.options) {
+        const optionText = option.textContent.toLowerCase();
+
+
+        if (optionText.includes(searchTerm)) {
+          option.style.display = '';
+        } else {
+
+          option.style.display = 'none';
+        }
+      }
+    });
+
+
+
+
+
+    window.openWerewolfLobby = openWerewolfLobby;
+
+
+    document.getElementById('werewolf-game-btn')?.addEventListener('click', () => openWerewolfLobby('group'));
+
+
+    document.getElementById('cancel-werewolf-lobby-btn')?.addEventListener('click', () => {
+      document.getElementById('werewolf-lobby-modal').classList.remove('visible');
+    });
+    document.getElementById('start-werewolf-game-btn')?.addEventListener('click', initializeWerewolfGame);
+
+
+    document.getElementById('werewolf-role-confirm-btn')?.addEventListener('click', () => {
+      document.getElementById('werewolf-role-modal').classList.remove('visible');
+      executeNightPhase();
+    });
+
+    document.getElementById('exit-werewolf-game-btn')?.addEventListener('click', async () => {
+      const confirmed = await showCustomConfirm('退出游戏', '确定要退出当前这局狼人杀吗？游戏进度将不会被保存。', {
+        confirmButtonClass: 'btn-danger'
+      });
+      if (confirmed) {
+        werewolfGameState.isActive = false;
+
+        showScreen(werewolfGameState.chatId ? 'chat-interface-screen' : 'home-screen');
+      }
+    });
+
+    document.getElementById('werewolf-game-over-close-btn')?.addEventListener('click', () => {
+      document.getElementById('werewolf-game-over-modal').classList.remove('visible');
+      showScreen(werewolfGameState.chatId ? 'chat-list-screen' : 'home-screen');
+    });
+
+
+
+    document.getElementById('cancel-wolf-kill-btn')?.addEventListener('click', () => {
+      document.getElementById('werewolf-kill-modal').classList.remove('visible');
+    });
+
+
+
+    document.getElementById('cancel-werewolf-lobby-btn')?.addEventListener('click', () => {
+      document.getElementById('werewolf-lobby-modal').classList.remove('visible');
+    });
+
+    document.getElementById('werewolf-retry-btn')?.addEventListener('click', handleWerewolfRetry);
+    document.getElementById('manual-werewolf-summary-btn')?.addEventListener('click', handleManualWerewolfSummary);
+    document.getElementById('check-and-fix-data-btn')?.addEventListener('click', checkAndFixData);
+    const emergencyResetBtn = document.getElementById('emergency-reset-appearance-btn');
+    if (emergencyResetBtn) {
+      emergencyResetBtn.addEventListener('click', handleEmergencyAppearanceReset);
+    }
+    const appearanceResetBtn = document.getElementById('appearance-reset-btn');
+    if (appearanceResetBtn) {
+      appearanceResetBtn.addEventListener('click', handleResetVisualResources);
+    }
+    const factoryResetBtn = document.getElementById('factory-reset-btn');
+    if (factoryResetBtn) {
+      factoryResetBtn.addEventListener('click', handleFactoryReset);
+    }
+    document.getElementById('dynamic-island-music-toggle-switch')?.addEventListener('change', (e) => {
+      const isEnabled = e.target.checked;
+      state.globalSettings.alwaysShowMusicIsland = isEnabled; // 更新内存中的状态
+
+
+      const isFrameMode = document.body.classList.contains('frame-mode-active');
+
+
+      if (musicState.isActive && !isFrameMode) {
+        const lyricBar = document.getElementById('global-lyrics-bar');
+        const phoneScreenForIsland = document.getElementById('phone-screen');
+
+        if (isEnabled) {
+
+          lyricBar.classList.remove('visible');
+          phoneScreenForIsland.classList.add('dynamic-island-active');
+        } else {
+
+          phoneScreenForIsland.classList.remove('dynamic-island-active');
+          if (musicState.parsedLyrics && musicState.parsedLyrics.length > 0) {
+            lyricBar.classList.add('visible');
+          }
+        }
+      }
+    });
+    document.getElementById('delete-world-books-btn')?.addEventListener('click', openWorldBookDeletionModal);
+
+
+    document.getElementById('cancel-delete-world-books-btn')?.addEventListener('click', () => {
+      document.getElementById('delete-world-books-modal').classList.remove('visible');
+    });
+    document.getElementById('confirm-delete-world-books-btn')?.addEventListener('click', handleConfirmWorldBookDeletion);
+
+    document.getElementById('delete-world-books-modal')?.addEventListener('click', (e) => {
+
+      const item = e.target.closest('.clear-posts-item');
+      if (item) {
+        item.classList.toggle('selected');
+      }
+
+      if (e.target.id === 'select-all-world-books-for-clear') {
+        const isChecked = e.target.checked;
+        document.querySelectorAll('#delete-world-books-list .clear-posts-item').forEach(el => {
+          el.classList.toggle('selected', isChecked);
+        });
+      }
+    });
+
+
+    document.getElementById('sticker-search-input')?.addEventListener('input', () => {
+
+      renderStickerPanel(false);
+    });
+
+
+    document.getElementById('sticker-category-tabs')?.addEventListener('click', (e) => {
+      if (e.target.classList.contains('sticker-category-tab')) {
+        const categoryId = e.target.dataset.categoryId;
+        const finalId = (categoryId !== 'all' && categoryId !== 'uncategorized') ? parseInt(categoryId) : categoryId;
+
+
+        document.getElementById('sticker-search-input').value = '';
+
+
+        switchStickerCategory(finalId);
+      }
+    });
+
+
+
+
+    const chatMessagesContainer = document.getElementById('chat-messages');
+    chatMessagesContainer.addEventListener('scroll', () => {
+
+      if (chatMessagesContainer.scrollTop < 1 && !isLoadingMoreMessages) {
+        const totalMessages = state.chats[state.activeChatId]?.history.length || 0;
+
+        if (totalMessages > currentRenderedCount) {
+          loadMoreMessages();
+        }
+      }
+    });
+
+
+    const qzoneContent = document.querySelector('#qzone-screen .qzone-content');
+    qzoneContent.addEventListener('scroll', () => {
+      const {
+        scrollTop,
+        scrollHeight,
+        clientHeight
+      } = qzoneContent;
+
+      if (scrollHeight - scrollTop <= clientHeight + 100 && !isLoadingMorePosts) {
+        if (qzonePostsCache.length > qzonePostsRenderCount) {
+          loadMoreQzonePosts();
+        }
+      }
+    });
+
+
+    const localGridEl = document.getElementById('nai-gallery-grid-local');
+    const cloudGridEl = document.getElementById('nai-gallery-grid-cloud');
+
+    const naiGridScrollHandler = (e) => {
+
+      const targetGrid = e.currentTarget;
+      const tabId = targetGrid.id.includes('local') ? 'local' : 'cloud';
+
+
+      if (tabId !== activeNaiGalleryTab) {
+        return;
+      }
+
+      const { scrollTop, scrollHeight, clientHeight } = targetGrid;
+
+
+      if (scrollHeight - scrollTop <= clientHeight + 100 && !isLoadingMoreNaiImages[tabId]) {
+        if (naiGalleryCache[tabId].length > naiGalleryRenderCount[tabId]) {
+          loadMoreNaiGalleryImages();
+        }
+      }
+    };
+
+    // 分别为两个新网格绑定事件
+    if (localGridEl) {
+      localGridEl.addEventListener('scroll', naiGridScrollHandler);
+    }
+    if (cloudGridEl) {
+      cloudGridEl.addEventListener('scroll', naiGridScrollHandler);
+    }
+
+
+    document.getElementById('read-together-btn')?.addEventListener('click', openReadingRoom);
+    const restoreBtn = document.getElementById('reading-restore-btn');
+
+    makeDraggable(restoreBtn, restoreBtn);
+    document.getElementById('close-reading-btn')?.addEventListener('click', closeReadingRoom);
+    document.getElementById('open-reading-library-btn')?.addEventListener('click', openBookLibrary);
+    document.getElementById('next-page-btn')?.addEventListener('click', showNextPage);
+    document.getElementById('prev-page-btn')?.addEventListener('click', showPrevPage);
+    document.getElementById('book-upload-input')?.addEventListener('change', handleBookFileUpload);
+
+
+    document.getElementById('minimize-reading-btn')?.addEventListener('click', minimizeReadingRoom);
+    document.getElementById('reading-restore-btn')?.addEventListener('click', restoreReadingRoom);
+
+
+    makeDraggable(document.getElementById('reading-window'), document.querySelector('#reading-window .reading-header'));
+
+
+    document.getElementById('open-reading-library-btn')?.addEventListener('click', openBookLibrary);
+
+    document.getElementById('close-reading-library-btn-header')?.addEventListener('click', () => {
+      document.getElementById('reading-library-modal').classList.remove('visible');
+    });
+    document.getElementById('import-new-book-btn-header')?.addEventListener('click', importBook);
+
+
+
+    document.getElementById('reading-library-list')?.addEventListener('click', (e) => {
+      const target = e.target;
+      if (target.classList.contains('group-name')) {
+        const bookId = parseInt(target.dataset.bookId);
+        loadBookFromLibrary(bookId);
+      } else if (target.classList.contains('delete-group-btn')) {
+        const bookId = parseInt(target.dataset.bookId);
+        deleteBookFromLibrary(bookId);
+      }
+    });
+
+    document.getElementById('page-indicator')?.addEventListener('click', handlePageJump);
+    document.getElementById('reading-library-search-input')?.addEventListener('input', (e) => {
+
+      renderBookLibrary(e.target.value);
+    });
+    const debouncedUpdateReadingContext = debounce(updateReadingContextOnScroll, 300);
+
+
+    document.getElementById('reading-content')?.addEventListener('scroll', debouncedUpdateReadingContext);
+    const tempSlider = document.getElementById('api-temperature-slider');
+    const tempInput = document.getElementById('api-temperature-input');
+    const topPSlider = document.getElementById('api-top-p-slider');
+    const topPInput = document.getElementById('api-top-p-input');
+    const maxTokensSlider = document.getElementById('api-max-tokens-slider');
+    const maxTokensInput = document.getElementById('api-max-tokens-input');
+    const presenceSlider = document.getElementById('api-presence-penalty-slider');
+    const presenceInput = document.getElementById('api-presence-penalty-input');
+    const frequencySlider = document.getElementById('api-frequency-penalty-slider');
+    const frequencyInput = document.getElementById('api-frequency-penalty-input');
+
+    // 联动逻辑
+    tempSlider.addEventListener('input', (e) => tempInput.value = e.target.value);
+    tempInput.addEventListener('input', (e) => tempSlider.value = e.target.value);
+    
+    topPSlider.addEventListener('input', (e) => topPInput.value = e.target.value);
+    topPInput.addEventListener('input', (e) => topPSlider.value = e.target.value);
+
+    maxTokensSlider.addEventListener('input', (e) => maxTokensInput.value = e.target.value);
+    maxTokensInput.addEventListener('input', (e) => maxTokensSlider.value = e.target.value);
+
+    presenceSlider.addEventListener('input', (e) => presenceInput.value = e.target.value);
+    presenceInput.addEventListener('input', (e) => presenceSlider.value = e.target.value);
+
+    frequencySlider.addEventListener('input', (e) => frequencyInput.value = e.target.value);
+    frequencyInput.addEventListener('input', (e) => frequencySlider.value = e.target.value);
+
+    // API开关状态加载 (只在设置面板打开/初始化时用到)
+    const topPEnabledCheckbox = document.getElementById('api-top-p-enabled');
+    const maxTokensEnabledCheckbox = document.getElementById('api-max-tokens-enabled');
+    const presenceEnabledCheckbox = document.getElementById('api-presence-penalty-enabled');
+    const frequencyEnabledCheckbox = document.getElementById('api-frequency-penalty-enabled');
+    
+    // 初始化折叠面板显示状态的辅助函数
+    const initConfigDisplay = (checkboxId, configId) => {
+        const checkbox = document.getElementById(checkboxId);
+        const config = document.getElementById(configId);
+        if (checkbox && config) {
+            config.style.display = checkbox.checked ? 'flex' : 'none';
+            // 添加切换事件监听
+            checkbox.addEventListener('change', (e) => {
+                config.style.display = e.target.checked ? 'flex' : 'none';
+            });
+        }
+    };
+
+    if (topPEnabledCheckbox) {
+        topPEnabledCheckbox.checked = !!state.globalSettings.apiTopPEnabled;
+        initConfigDisplay('api-top-p-enabled', 'api-top-p-config');
+    }
+    if (maxTokensEnabledCheckbox) {
+        maxTokensEnabledCheckbox.checked = !!state.globalSettings.apiMaxTokensEnabled;
+        initConfigDisplay('api-max-tokens-enabled', 'api-max-tokens-config');
+    }
+    if (presenceEnabledCheckbox) {
+        presenceEnabledCheckbox.checked = !!state.globalSettings.apiPresencePenaltyEnabled;
+        initConfigDisplay('api-presence-penalty-enabled', 'api-presence-penalty-config');
+    }
+    if (frequencyEnabledCheckbox) {
+        frequencyEnabledCheckbox.checked = !!state.globalSettings.apiFrequencyPenaltyEnabled;
+        initConfigDisplay('api-frequency-penalty-enabled', 'api-frequency-penalty-config');
+    }
+
+
+    // 重置按钮逻辑
+    document.getElementById('reset-api-temperature-btn')?.addEventListener('click', () => {
+      tempSlider.value = 0.8;
+      tempInput.value = 0.8;
+    });
+    document.getElementById('reset-api-top-p-btn')?.addEventListener('click', () => {
+      topPSlider.value = 1.0;
+      topPInput.value = 1.0;
+    });
+    document.getElementById('reset-api-max-tokens-btn')?.addEventListener('click', () => {
+      maxTokensSlider.value = 0;
+      maxTokensInput.value = 0;
+    });
+    document.getElementById('reset-api-presence-penalty-btn')?.addEventListener('click', () => {
+      presenceSlider.value = 0.0;
+      presenceInput.value = 0.0;
+    });
+    document.getElementById('reset-api-frequency-penalty-btn')?.addEventListener('click', () => {
+      frequencySlider.value = 0.0;
+      frequencyInput.value = 0.0;
+    });
+    const chatListContainer = document.getElementById('messages-view');
+    chatListContainer.addEventListener('scroll', () => {
+      const {
+        scrollTop,
+        scrollHeight,
+        clientHeight
+      } = chatListContainer;
+
+      if (scrollHeight - scrollTop <= clientHeight + 150 && !isLoadingMoreChats) {
+        loadMoreChats();
+      }
+    });
+
+
+
+    document.getElementById('manage-product-categories-btn')?.addEventListener('click', openProductCategoryManager);
+    document.getElementById('close-product-category-manager-btn')?.addEventListener('click', () => {
+      document.getElementById('product-category-manager-modal').classList.remove('visible');
+
+
+      openProductEditor(editingProductId);
+    });
+    document.getElementById('add-new-product-category-btn')?.addEventListener('click', addNewProductCategory);
+    document.getElementById('existing-product-categories-list')?.addEventListener('click', (e) => {
+      if (e.target.classList.contains('delete-group-btn')) {
+        deleteProductCategory(parseInt(e.target.dataset.id));
+      }
+    });
+
+
+    document.getElementById('add-product-variation-btn')?.addEventListener('click', () => addProductVariationInput());
+
+
+    document.getElementById('cancel-variation-selection-btn')?.addEventListener('click', () => {
+      document.getElementById('variation-selection-modal').classList.remove('visible');
+    });
+    document.getElementById('variation-decrease-qty')?.addEventListener('click', () => {
+      const display = document.getElementById('variation-quantity-display');
+      let qty = parseInt(display.textContent);
+      if (qty > 1) display.textContent = qty - 1;
+    });
+    document.getElementById('variation-increase-qty')?.addEventListener('click', () => {
+      const display = document.getElementById('variation-quantity-display');
+      display.textContent = parseInt(display.textContent) + 1;
+    });
+    document.getElementById('product-category-tabs')?.addEventListener('click', (e) => {
+
+      if (e.target.classList.contains('product-category-tab')) {
+
+        const categoryId = e.target.dataset.categoryId === 'all' ? 'all' : parseInt(e.target.dataset.categoryId);
+
+
+        switchShoppingCategory(categoryId);
+      }
+    });
+    document.getElementById('generate-shopping-items-btn')?.addEventListener('click', handleGenerateShoppingItems);
+    document.getElementById('shopping-settings-btn')?.addEventListener('click', openShoppingSettingsModal);
+    document.getElementById('save-shopping-settings-btn')?.addEventListener('click', saveShoppingSettings);
+    document.getElementById('cancel-shopping-settings-btn')?.addEventListener('click', () => {
+      document.getElementById('shopping-settings-modal').classList.remove('visible');
+    });
+    document.getElementById('select-all-products-checkbox')?.addEventListener('change', (e) => {
+      const isChecked = e.target.checked;
+
+      const visibleItems = document.querySelectorAll('#product-grid .product-item');
+
+      visibleItems.forEach(item => {
+        const productId = parseInt(item.dataset.id);
+        item.classList.toggle('selected', isChecked);
+        if (isChecked) {
+          selectedProducts.add(productId);
+        } else {
+          selectedProducts.delete(productId);
+        }
+      });
+      document.getElementById('delete-selected-products-btn').textContent = `删除 (${selectedProducts.size})`;
+    });
+
+
+    document.getElementById('delete-selected-products-btn')?.addEventListener('click', async () => {
+      if (selectedProducts.size === 0) {
+        alert("请先选择要删除的商品。");
+        return;
+      }
+
+      const confirmed = await showCustomConfirm(
+        '确认删除',
+        `确定要永久删除选中的 ${selectedProducts.size} 个商品吗？此操作不可恢复。`, {
+        confirmButtonClass: 'btn-danger'
+      }
+      );
+
+      if (confirmed) {
+        await db.shoppingProducts.bulkDelete([...selectedProducts]);
+
+
+        document.getElementById('manage-products-btn').click();
+
+        await renderShoppingProducts();
+
+        await showCustomAlert("成功", "选中的商品已成功删除。");
+      }
+    });
+
+    // 外观预设相关事件（添加安全检查）
+    const appearancePresetSelect = document.getElementById('appearance-preset-select');
+    if (appearancePresetSelect) {
+      appearancePresetSelect.addEventListener('change', handleAppearancePresetSelectionChange);
+    }
+    const saveAppearancePresetBtn = document.getElementById('save-appearance-preset-btn');
+    if (saveAppearancePresetBtn) {
+      saveAppearancePresetBtn.addEventListener('click', saveAppearancePreset);
+    }
+    const deleteAppearancePresetBtn = document.getElementById('delete-appearance-preset-btn');
+    if (deleteAppearancePresetBtn) {
+      deleteAppearancePresetBtn.addEventListener('click', deleteAppearancePreset);
+    }
+
+
+
+    document.getElementById('novelai-switch')?.addEventListener('change', (e) => {
+      const detailsDiv = document.getElementById('novelai-details');
+      detailsDiv.style.display = e.target.checked ? 'block' : 'none';
+    });
+
+    // Google Imagen 开关与事件
+    document.getElementById('google-imagen-switch')?.addEventListener('change', (e) => {
+      const detailsDiv = document.getElementById('google-imagen-details');
+      detailsDiv.style.display = e.target.checked ? 'block' : 'none';
+    });
+
+    document.getElementById('google-imagen-key-toggle')?.addEventListener('click', function () {
+      const input = document.getElementById('google-imagen-api-key');
+      if (input.type === 'password') {
+        input.type = 'text';
+        this.textContent = '😌';
+      } else {
+        input.type = 'password';
+        this.textContent = '🧐';
+      }
+    });
+
+    document.getElementById('google-imagen-test-btn')?.addEventListener('click', testGoogleImagenGeneration);
+
+    const openAIImageSwitch = document.getElementById('openai-image-switch');
+    openAIImageSwitch?.addEventListener('change', (e) => {
+      const detailsDiv = document.getElementById('openai-image-details');
+      if (detailsDiv) detailsDiv.style.display = e.target.checked ? 'block' : 'none';
+    });
+
+    document.getElementById('openai-image-key-toggle')?.addEventListener('click', function () {
+      const input = document.getElementById('openai-image-api-key');
+      if (!input) return;
+      input.type = input.type === 'password' ? 'text' : 'password';
+      this.textContent = input.type === 'password' ? '🧐' : '😌';
+    });
+
+    document.getElementById('openai-image-output-format')?.addEventListener('change', (e) => {
+      const compressionRow = document.getElementById('openai-image-compression-row');
+      if (compressionRow) compressionRow.style.display = ['jpeg', 'webp'].includes(e.target.value) ? 'flex' : 'none';
+    });
+
+    document.getElementById('openai-image-test-btn')?.addEventListener('click', testOpenAIImageGeneration);

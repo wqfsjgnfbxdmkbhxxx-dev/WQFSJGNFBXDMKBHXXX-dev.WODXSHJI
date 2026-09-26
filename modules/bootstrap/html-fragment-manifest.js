@@ -1,0 +1,23 @@
+window.__EPHONE_HTML_FRAGMENT_SCRIPTS = [
+  "generated/html-fragments/document-head.js",
+  "generated/html-fragments/intro-and-home.js",
+  "generated/html-fragments/health-and-couple.js",
+  "generated/html-fragments/cphone.js",
+  "generated/html-fragments/myphone.js",
+  "generated/html-fragments/worldbook-and-presets.js",
+  "generated/html-fragments/api-settings-core.js",
+  "generated/html-fragments/api-settings-providers.js",
+  "generated/html-fragments/api-settings-data.js",
+  "generated/html-fragments/data-and-social-list.js",
+  "generated/html-fragments/chat-interface.js",
+  "generated/html-fragments/appearance-and-thoughts.js",
+  "generated/html-fragments/calls-and-social.js",
+  "generated/html-fragments/chat-settings-main.js",
+  "generated/html-fragments/chat-settings-extra.js",
+  "generated/html-fragments/feature-screens.js",
+  "generated/html-fragments/modals-general.js",
+  "generated/html-fragments/modals-feature.js",
+  "generated/html-fragments/modals-phone-and-finance.js",
+  "generated/html-fragments/online-and-myphone-modals.js",
+  "generated/html-fragments/games-and-document-tail.js"
+];

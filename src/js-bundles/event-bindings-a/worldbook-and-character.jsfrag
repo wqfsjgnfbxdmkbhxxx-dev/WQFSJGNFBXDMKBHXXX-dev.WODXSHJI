@@ -1,0 +1,1020 @@
+// ============================================================
+// init-event-bindingsA.js
+// 事件绑定A：init() 函数前半段
+// 从 init-and-state.js 约 2569~6030 行拆分
+// 包含：世界书导入导出、角色创建、全局清理、音乐播放器事件、
+//       聊天输入、表情包智能匹配、移动端控制台、世界书编辑器、
+//       聊天消息点击事件、聊天设置弹窗、群成员设置等
+// ============================================================
+
+window.initEventBindingsA = async function(state, db) {
+    // 参考并改写自 yxlforever/YYY：
+    // https://github.com/yxlforever/YYY/commit/fb27ca3fafb9a38f6f9f91daabd457a290f0be19
+    // 用途：避免同一页面生命周期内重复创建数百个事件监听器和样式节点。
+    // 不改变现有按钮、入口、设置项与事件行为。
+    if (window.__initEventBindingsAReady) return;
+    window.__initEventBindingsAReady = true;
+
+    // 从 window 获取全局变量
+    const audioPlayer = window.audioPlayer;
+    const musicState = window.musicState;
+    
+    initLanguage();
+
+    // 弹窗模式的多选框 - 用于浏览器不兼容下拉框时的替代方案
+    function showMultiselectPopup(title, sourceContainer, onChangeCallback) {
+      // 移除已有弹窗
+      const existing = document.getElementById('multiselect-popup-overlay');
+      if (existing) existing.remove();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'multiselect-popup-overlay';
+      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;';
+
+      const popup = document.createElement('div');
+      popup.style.cssText = 'background:var(--secondary-bg,#fff);border-radius:14px;width:85%;max-width:360px;max-height:70vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.25);';
+
+      // 标题栏
+      const header = document.createElement('div');
+      header.style.cssText = 'padding:14px 16px;font-size:16px;font-weight:600;border-bottom:0.5px solid var(--border-color,#e0e0e0);text-align:center;color:var(--text-color,#333);';
+      header.textContent = title;
+
+      // 选项列表
+      const listWrap = document.createElement('div');
+      listWrap.style.cssText = 'flex:1;overflow-y:auto;padding:8px 0;';
+
+      // 从源容器克隆所有checkbox选项
+      const sourceLabels = sourceContainer.querySelectorAll('label');
+      sourceLabels.forEach(srcLabel => {
+        const srcCheckbox = srcLabel.querySelector('input[type="checkbox"]');
+        if (!srcCheckbox) return;
+
+        const item = document.createElement('div');
+        item.style.cssText = 'display:flex;align-items:center;padding:12px 16px;cursor:pointer;transition:background 0.15s;';
+        item.addEventListener('mouseenter', () => item.style.background = 'var(--hover-bg,#f5f5f5)');
+        item.addEventListener('mouseleave', () => item.style.background = 'transparent');
+
+        const checkbox = document.createElement('div');
+        const isChecked = srcCheckbox.checked;
+        checkbox.style.cssText = `width:22px;height:22px;border-radius:6px;border:2px solid ${isChecked ? 'var(--accent-color,#007aff)' : '#ccc'};margin-right:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s;${isChecked ? 'background:var(--accent-color,#007aff);' : ''}`;
+        checkbox.innerHTML = isChecked ? '<span style="color:#fff;font-size:14px;">✓</span>' : '';
+
+        const label = document.createElement('span');
+        label.style.cssText = 'font-size:15px;color:var(--text-color,#333);';
+        label.textContent = srcLabel.textContent.trim();
+
+        item.appendChild(checkbox);
+        item.appendChild(label);
+
+        item.addEventListener('click', () => {
+          srcCheckbox.checked = !srcCheckbox.checked;
+          const nowChecked = srcCheckbox.checked;
+          checkbox.style.border = `2px solid ${nowChecked ? 'var(--accent-color,#007aff)' : '#ccc'}`;
+          checkbox.style.background = nowChecked ? 'var(--accent-color,#007aff)' : 'transparent';
+          checkbox.innerHTML = nowChecked ? '<span style="color:#fff;font-size:14px;">✓</span>' : '';
+          srcCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+
+        listWrap.appendChild(item);
+      });
+
+      // 如果没有选项
+      if (sourceLabels.length === 0) {
+        const empty = document.createElement('div');
+        empty.style.cssText = 'padding:24px 16px;text-align:center;color:var(--text-secondary,#999);font-size:14px;';
+        empty.textContent = '暂无可选项';
+        listWrap.appendChild(empty);
+      }
+
+      // 确认按钮
+      const footer = document.createElement('div');
+      footer.style.cssText = 'padding:12px 16px;border-top:0.5px solid var(--border-color,#e0e0e0);';
+      const confirmBtn = document.createElement('button');
+      confirmBtn.textContent = '确定';
+      confirmBtn.style.cssText = 'width:100%;padding:10px;background:var(--accent-color,#007aff);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:500;cursor:pointer;';
+      confirmBtn.addEventListener('click', () => overlay.remove());
+      footer.appendChild(confirmBtn);
+
+      popup.appendChild(header);
+      popup.appendChild(listWrap);
+      popup.appendChild(footer);
+      overlay.appendChild(popup);
+
+      // 点击遮罩关闭
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.remove();
+      });
+
+      document.body.appendChild(overlay);
+    }
+
+    async function handleWorldBookImport(files) {
+      if (!files || files.length === 0) return;
+
+      try {
+        // 分离JSON文件、TXT文件、ZIP文件和DOCX文件
+        const jsonFiles = [];
+        const txtFiles = [];
+        const zipFiles = [];
+        const docxFiles = [];
+
+        for (const file of files) {
+          if (file.name.toLowerCase().endsWith('.json')) {
+            jsonFiles.push(file);
+          } else if (file.name.toLowerCase().endsWith('.txt')) {
+            txtFiles.push(file);
+          } else if (file.name.toLowerCase().endsWith('.zip')) {
+            zipFiles.push(file);
+          } else if (file.name.toLowerCase().endsWith('.docx')) {
+            docxFiles.push(file);
+          }
+        }
+
+        // 处理JSON文件（保持原有逻辑，仅处理第一个JSON文件）
+        if (jsonFiles.length > 0) {
+          const file = jsonFiles[0];
+          const text = await file.text();
+          const data = JSON.parse(text);
+
+          if (data.type === 'EPhoneWorldBookBackup') {
+            console.log("检测到 EPhone 备份文件，执行标准导入...");
+            await importWorldBooks(data);
+          } else if (data.entries && typeof data.entries === 'object') {
+            console.log("检测到 世界书文件，需要激活码...");
+            try {
+              await requirePinActivation();
+              await importTavernWorldBook(data, file.name);
+            } catch (error) {
+              console.warn("世界书导入被取消:", error.message);
+            }
+          } else {
+            throw new Error("文件格式无法识别。请确保您选择的是有效的 EPhone 世界书备份或 Tavern AI 世界书文件。");
+          }
+        }
+
+        // 处理TXT文件
+        if (txtFiles.length > 0) {
+          await handleTxtWorldBookImport(txtFiles);
+        }
+
+        // 处理DOCX文件
+        if (docxFiles.length > 0) {
+          await handleDocxWorldBookImport(docxFiles);
+        }
+
+        // 处理ZIP文件
+        if (zipFiles.length > 0) {
+          await handleZipWorldBookImport(zipFiles);
+        }
+
+      } catch (error) {
+        console.error("导入世界书时出错:", error);
+        await showCustomAlert('导入失败', `文件解析或应用失败: ${error.message}`);
+      }
+    }
+
+    // 新增：处理TXT文件导入
+    async function handleTxtWorldBookImport(txtFiles) {
+      try {
+        // 读取所有TXT文件的内容
+        const fileContents = await Promise.all(
+          txtFiles.map(async (file) => ({
+            name: file.name,
+            content: await file.text()
+          }))
+        );
+
+        // 显示确认对话框让用户选择要导入的文件
+        const selectedFiles = await showTxtImportConfirmModal(fileContents);
+
+        if (!selectedFiles || selectedFiles.length === 0) {
+          return;
+        }
+
+        // 为每个选中的TXT文件创建一本世界书
+        let importedCount = 0;
+        for (const fileData of selectedFiles) {
+          const bookName = fileData.name.replace(/\.txt$/i, '');
+
+          const newWorldBook = {
+            id: 'wb_txt_' + Date.now() + '_' + importedCount,
+            name: bookName,
+            content: [{
+              keys: [],
+              comment: '由TXT文件导入',
+              content: fileData.content.trim(),
+              enabled: true
+            }],
+            categoryId: null
+          };
+
+          await db.worldBooks.add(newWorldBook);
+          state.worldBooks.push(newWorldBook);
+          importedCount++;
+
+          // 添加小延迟确保ID唯一
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+
+        await renderWorldBookScreen();
+        await showCustomAlert('导入成功', `成功导入 ${importedCount} 个TXT文件到世界书！`);
+
+      } catch (error) {
+        console.error("TXT文件导入失败:", error);
+        await showCustomAlert('导入失败', `TXT文件导入失败: ${error.message}`);
+      }
+    }
+
+    // 显示TXT文件导入确认对话框
+    function showTxtImportConfirmModal(fileContents) {
+      return new Promise((resolve) => {
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.style.display = 'flex';
+        modal.innerHTML = `
+          <div class="modal-content" style="max-width: 600px; max-height: 80vh; display: flex; flex-direction: column; border-radius: 16px; padding: 24px; background: var(--secondary-bg, #ffffff); box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+            <h2 style="margin-top: 0; margin-bottom: 8px; font-size: 20px; color: var(--text-color, #333);">确认导入TXT文件</h2>
+            <p style="color: var(--text-secondary, #666); margin-bottom: 20px; font-size: 14px;">
+              找到 <span style="color: var(--accent-color, #007aff); font-weight: bold;">${fileContents.length}</span> 个TXT文件，请选择要导入的文件：
+            </p>
+            <div style="flex: 1; overflow-y: auto; margin-bottom: 24px; padding-right: 5px; border-radius: 8px;">
+              ${fileContents.map((file, index) => `
+                <div style="margin-bottom: 12px; padding: 16px; background: var(--hover-bg, #f8f9fa); border: 1px solid var(--border-color, #eaeaea); border-radius: 10px; transition: all 0.2s;">
+                  <label style="display: flex; align-items: flex-start; cursor: pointer; margin: 0; width: 100%;">
+                    <input type="checkbox" class="txt-import-checkbox" data-index="${index}" 
+                           style="margin-right: 12px; margin-top: 4px; width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-color, #007aff);" checked>
+                    <div style="flex: 1; min-width: 0;">
+                      <div style="font-weight: 600; margin-bottom: 10px; color: var(--text-color, #333); font-size: 15px; word-break: break-all;">${escapeHTML(file.name)}</div>
+                      <div style="font-size: 13px; color: var(--text-secondary, #666); max-height: 120px; overflow-y: auto; 
+                                  white-space: pre-wrap; word-break: break-word; 
+                                  background: var(--bg-color, #ffffff); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color, #f0f0f0); line-height: 1.5;">
+                        ${escapeHTML(file.content.substring(0, 200))}${file.content.length > 200 ? '...' : ''}
+                      </div>
+                      <div style="font-size: 12px; color: #999; margin-top: 8px; display: flex; align-items: center;">
+                        <span style="display: inline-block; width: 4px; height: 4px; border-radius: 50%; background: #ccc; margin-right: 6px;"></span>
+                        大小: ${(file.content.length / 1024).toFixed(2)} KB
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              `).join('')}
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 16px; border-top: 1px solid var(--border-color, #f0f0f0);">
+              <button id="txt-import-select-all" style="padding: 10px 16px; background: var(--hover-bg, #f0f0f0); color: var(--text-color, #333); 
+                      border: 1px solid var(--border-color, #dcdcdc); border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s;">全选</button>
+              <div style="flex: 1;"></div>
+              <button id="txt-import-cancel" style="padding: 10px 20px; background: var(--hover-bg, #f0f0f0); color: var(--text-color, #333); 
+                      border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s;">取消</button>
+              <button id="txt-import-confirm" style="padding: 10px 24px; background: var(--accent-color, #007aff); color: white; 
+                      border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; box-shadow: 0 4px 12px rgba(0,122,255,0.3); transition: transform 0.1s, box-shadow 0.2s;">确认导入</button>
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        const checkboxes = modal.querySelectorAll('.txt-import-checkbox');
+
+        // 全选/取消全选按钮
+        const selectAllBtn = modal.querySelector('#txt-import-select-all');
+        let allSelected = true;
+        selectAllBtn.addEventListener('click', () => {
+          allSelected = !allSelected;
+          checkboxes.forEach(cb => cb.checked = allSelected);
+          selectAllBtn.textContent = allSelected ? '取消全选' : '全选';
+        });
+
+        // 取消按钮
+        modal.querySelector('#txt-import-cancel').addEventListener('click', () => {
+          document.body.removeChild(modal);
+          resolve(null);
+        });
+
+        // 确认按钮
+        modal.querySelector('#txt-import-confirm').addEventListener('click', () => {
+          const selected = [];
+          checkboxes.forEach(cb => {
+            if (cb.checked) {
+              const index = parseInt(cb.dataset.index);
+              selected.push(fileContents[index]);
+            }
+          });
+
+          document.body.removeChild(modal);
+
+          if (selected.length === 0) {
+            showCustomAlert('提示', '请至少选择一个文件进行导入');
+            resolve(null);
+          } else {
+            resolve(selected);
+          }
+        });
+
+        // 点击模态框外部关闭
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            document.body.removeChild(modal);
+            resolve(null);
+          }
+        });
+      });
+    }
+
+    // 新增：处理DOCX文件导入
+    async function handleDocxWorldBookImport(docxFiles) {
+      try {
+        // 检查mammoth是否可用
+        if (typeof mammoth === 'undefined') {
+          throw new Error('mammoth库未加载，无法解析DOCX文件');
+        }
+
+        // 读取所有DOCX文件的内容
+        const fileContents = await Promise.all(
+          docxFiles.map(async (file) => {
+            try {
+              const arrayBuffer = await file.arrayBuffer();
+              const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+              return {
+                name: file.name,
+                content: result.value
+              };
+            } catch (error) {
+              console.error('解析DOCX文件失败:', file.name, error);
+              return null;
+            }
+          })
+        );
+
+        // 过滤掉解析失败的文件
+        const validFiles = fileContents.filter(f => f !== null && f.content);
+
+        if (validFiles.length === 0) {
+          await showCustomAlert('导入失败', '无法解析任何DOCX文件');
+          return;
+        }
+
+        // 显示确认对话框让用户选择要导入的文件
+        const selectedFiles = await showDocxImportConfirmModal(validFiles);
+
+        if (!selectedFiles || selectedFiles.length === 0) {
+          return;
+        }
+
+        // 为每个选中的DOCX文件创建一本世界书
+        let importedCount = 0;
+        for (const fileData of selectedFiles) {
+          const bookName = fileData.name.replace(/\.docx$/i, '');
+
+          const newWorldBook = {
+            id: 'wb_docx_' + Date.now() + '_' + importedCount,
+            name: bookName,
+            content: [{
+              keys: [],
+              comment: '由DOCX文件导入',
+              content: fileData.content.trim(),
+              enabled: true
+            }],
+            categoryId: null
+          };
+
+          await db.worldBooks.add(newWorldBook);
+          state.worldBooks.push(newWorldBook);
+          importedCount++;
+
+          // 添加小延迟确保ID唯一
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+
+        await renderWorldBookScreen();
+        await showCustomAlert('导入成功', `成功导入 ${importedCount} 个DOCX文件到世界书！`);
+
+      } catch (error) {
+        console.error('DOCX文件导入失败:', error);
+        await showCustomAlert('导入失败', `DOCX文件导入失败: ${error.message}`);
+      }
+    }
+
+    // 显示DOCX文件导入确认对话框
+    function showDocxImportConfirmModal(fileContents) {
+      return new Promise((resolve) => {
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.style.display = 'flex';
+        modal.innerHTML = `
+          <div class="modal-content" style="max-width: 600px; max-height: 80vh; display: flex; flex-direction: column; border-radius: 16px; padding: 24px; background: var(--secondary-bg, #ffffff); box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+            <h2 style="margin-top: 0; margin-bottom: 8px; font-size: 20px; color: var(--text-color, #333);">确认导入DOCX文件</h2>
+            <p style="color: var(--text-secondary, #666); margin-bottom: 20px; font-size: 14px;">
+              找到 <span style="color: var(--accent-color, #007aff); font-weight: bold;">${fileContents.length}</span> 个DOCX文件，请选择要导入的文件：
+            </p>
+            <div style="flex: 1; overflow-y: auto; margin-bottom: 24px; padding-right: 5px; border-radius: 8px;">
+              ${fileContents.map((file, index) => `
+                <div style="margin-bottom: 12px; padding: 16px; background: var(--hover-bg, #f8f9fa); border: 1px solid var(--border-color, #eaeaea); border-radius: 10px; transition: all 0.2s;">
+                  <label style="display: flex; align-items: flex-start; cursor: pointer; margin: 0; width: 100%;">
+                    <input type="checkbox" class="docx-import-checkbox" data-index="${index}" 
+                           style="margin-right: 12px; margin-top: 4px; width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-color, #007aff);" checked>
+                    <div style="flex: 1; min-width: 0;">
+                      <div style="font-weight: 600; margin-bottom: 10px; color: var(--text-color, #333); font-size: 15px; word-break: break-all;">${escapeHTML(file.name)}</div>
+                      <div style="font-size: 13px; color: var(--text-secondary, #666); max-height: 120px; overflow-y: auto; 
+                                  white-space: pre-wrap; word-break: break-word; 
+                                  background: var(--bg-color, #ffffff); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color, #f0f0f0); line-height: 1.5;">
+                        ${escapeHTML(file.content.substring(0, 200))}${file.content.length > 200 ? '...' : ''}
+                      </div>
+                      <div style="font-size: 12px; color: #999; margin-top: 8px; display: flex; align-items: center;">
+                        <span style="display: inline-block; width: 4px; height: 4px; border-radius: 50%; background: #ccc; margin-right: 6px;"></span>
+                        大小: ${(file.content.length / 1024).toFixed(2)} KB
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              `).join('')}
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 16px; border-top: 1px solid var(--border-color, #f0f0f0);">
+              <button id="docx-import-select-all" style="padding: 10px 16px; background: var(--hover-bg, #f0f0f0); color: var(--text-color, #333); 
+                      border: 1px solid var(--border-color, #dcdcdc); border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s;">全选</button>
+              <div style="flex: 1;"></div>
+              <button id="docx-import-cancel" style="padding: 10px 20px; background: var(--hover-bg, #f0f0f0); color: var(--text-color, #333); 
+                      border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s;">取消</button>
+              <button id="docx-import-confirm" style="padding: 10px 24px; background: var(--accent-color, #007aff); color: white; 
+                      border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; box-shadow: 0 4px 12px rgba(0,122,255,0.3); transition: transform 0.1s, box-shadow 0.2s;">确认导入</button>
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        const checkboxes = modal.querySelectorAll('.docx-import-checkbox');
+
+        // 全选/取消全选按钮
+        const selectAllBtn = modal.querySelector('#docx-import-select-all');
+        let allSelected = true;
+        selectAllBtn.addEventListener('click', () => {
+          allSelected = !allSelected;
+          checkboxes.forEach(cb => cb.checked = allSelected);
+          selectAllBtn.textContent = allSelected ? '取消全选' : '全选';
+        });
+
+        // 取消按钮
+        modal.querySelector('#docx-import-cancel').addEventListener('click', () => {
+          document.body.removeChild(modal);
+          resolve(null);
+        });
+
+        // 确认按钮
+        modal.querySelector('#docx-import-confirm').addEventListener('click', () => {
+          const selected = [];
+          checkboxes.forEach(cb => {
+            if (cb.checked) {
+              const index = parseInt(cb.dataset.index);
+              selected.push(fileContents[index]);
+            }
+          });
+
+          document.body.removeChild(modal);
+
+          if (selected.length === 0) {
+            showCustomAlert('提示', '请至少选择一个文件进行导入');
+            resolve(null);
+          } else {
+            resolve(selected);
+          }
+        });
+
+        // 点击模态框外部关闭
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            document.body.removeChild(modal);
+            resolve(null);
+          }
+        });
+      });
+    }
+
+    // 新增：处理ZIP文件导入
+    async function handleZipWorldBookImport(zipFiles) {
+      try {
+        // 检查JSZip是否可用
+        if (typeof JSZip === 'undefined') {
+          throw new Error('JSZip库未加载，请刷新页面重试');
+        }
+
+        let allExtractedFiles = [];
+
+        // 处理所有ZIP文件
+        for (const zipFile of zipFiles) {
+          console.log('正在处理ZIP文件:', zipFile.name);
+
+          const zip = await JSZip.loadAsync(zipFile);
+          const zipFileName = zipFile.name.replace(/\.zip$/i, '');
+
+          // 遍历ZIP中的所有文件
+          for (const [filename, file] of Object.entries(zip.files)) {
+            // 跳过目录和JSON文件
+            if (file.dir) continue;
+
+            const lowerFilename = filename.toLowerCase();
+
+            // 只处理TXT和DOCX文件，忽略JSON文件
+            if (lowerFilename.endsWith('.json')) {
+              console.log('跳过JSON文件:', filename);
+              continue;
+            }
+
+            if (lowerFilename.endsWith('.txt')) {
+              // 处理TXT文件
+              const content = await file.async('text');
+              allExtractedFiles.push({
+                name: filename,
+                content: content,
+                type: 'txt',
+                zipName: zipFileName
+              });
+              console.log('提取TXT文件:', filename);
+
+            } else if (lowerFilename.endsWith('.docx')) {
+              // 处理DOCX文件
+              try {
+                const arrayBuffer = await file.async('arraybuffer');
+
+                // 使用mammoth解析DOCX
+                if (typeof mammoth !== 'undefined') {
+                  const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+                  allExtractedFiles.push({
+                    name: filename,
+                    content: result.value,
+                    type: 'docx',
+                    zipName: zipFileName
+                  });
+                  console.log('提取DOCX文件:', filename);
+                } else {
+                  console.warn('mammoth库未加载，无法解析DOCX文件:', filename);
+                }
+              } catch (error) {
+                console.error('解析DOCX文件失败:', filename, error);
+              }
+            }
+          }
+        }
+
+        if (allExtractedFiles.length === 0) {
+          await showCustomAlert('提示', 'ZIP文件中没有找到可导入的TXT或DOCX文件（JSON文件已被忽略）');
+          return;
+        }
+
+        console.log('从ZIP中提取的文件总数:', allExtractedFiles.length);
+
+        // 显示确认对话框让用户选择要导入的文件
+        const selectedFiles = await showZipImportConfirmModal(allExtractedFiles);
+
+        if (!selectedFiles || selectedFiles.length === 0) {
+          return;
+        }
+
+        // 为每个选中的文件创建一本世界书
+        let importedCount = 0;
+        for (const fileData of selectedFiles) {
+          const bookName = fileData.name.replace(/\.(txt|docx)$/i, '');
+
+          const newWorldBook = {
+            id: 'wb_zip_' + Date.now() + '_' + importedCount,
+            name: `${bookName} (来自${fileData.zipName})`,
+            content: [{
+              keys: [],
+              comment: `由ZIP文件中的${fileData.type.toUpperCase()}文件导入`,
+              content: fileData.content.trim(),
+              enabled: true
+            }],
+            categoryId: null
+          };
+
+          await db.worldBooks.add(newWorldBook);
+          state.worldBooks.push(newWorldBook);
+          importedCount++;
+
+          // 添加小延迟确保ID唯一
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+
+        await renderWorldBookScreen();
+        await showCustomAlert('导入成功', `成功从ZIP文件导入 ${importedCount} 个世界书！`);
+
+      } catch (error) {
+        console.error('ZIP文件导入失败:', error);
+        await showCustomAlert('导入失败', `ZIP文件导入失败: ${error.message}`);
+      }
+    }
+
+    // 显示ZIP文件导入确认对话框
+    function showZipImportConfirmModal(fileContents) {
+      return new Promise((resolve) => {
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.style.display = 'flex';
+        modal.innerHTML = `
+          <div class="modal-content" style="max-width: 600px; max-height: 80vh; display: flex; flex-direction: column; border-radius: 16px; padding: 24px; background: var(--secondary-bg, #ffffff); box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+            <h2 style="margin-top: 0; margin-bottom: 8px; font-size: 20px; color: var(--text-color, #333);">确认从ZIP导入文件</h2>
+            <p style="color: var(--text-secondary, #666); margin-bottom: 20px; font-size: 14px;">
+              从ZIP文件中找到 <span style="color: var(--accent-color, #007aff); font-weight: bold;">${fileContents.length}</span> 个可导入文件（TXT/DOCX），请选择要导入的文件：
+            </p>
+            <div style="flex: 1; overflow-y: auto; margin-bottom: 24px; padding-right: 5px; border-radius: 8px;">
+              ${fileContents.map((file, index) => `
+                <div style="margin-bottom: 12px; padding: 16px; background: var(--hover-bg, #f8f9fa); border: 1px solid var(--border-color, #eaeaea); border-radius: 10px; transition: all 0.2s;">
+                  <label style="display: flex; align-items: flex-start; cursor: pointer; margin: 0; width: 100%;">
+                    <input type="checkbox" class="zip-import-checkbox" data-index="${index}" 
+                           style="margin-right: 12px; margin-top: 4px; width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-color, #007aff);" checked>
+                    <div style="flex: 1; min-width: 0;">
+                      <div style="font-weight: 600; margin-bottom: 6px; color: var(--text-color, #333); font-size: 15px; word-break: break-all; display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
+                        ${escapeHTML(file.name)}
+                        <span style="background: var(--accent-color, #007aff); color: white; padding: 2px 8px; border-radius: 4px; 
+                                     font-size: 11px; font-weight: normal;">${file.type.toUpperCase()}</span>
+                      </div>
+                      <div style="font-size: 12px; color: var(--text-secondary, #888); margin-bottom: 10px; display: flex; align-items: center;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        来自: ${escapeHTML(file.zipName)}.zip
+                      </div>
+                      <div style="font-size: 13px; color: var(--text-secondary, #666); max-height: 120px; overflow-y: auto; 
+                                  white-space: pre-wrap; word-break: break-word; 
+                                  background: var(--bg-color, #ffffff); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color, #f0f0f0); line-height: 1.5;">
+                        ${escapeHTML(file.content.substring(0, 200))}${file.content.length > 200 ? '...' : ''}
+                      </div>
+                      <div style="font-size: 12px; color: #999; margin-top: 8px; display: flex; align-items: center;">
+                        <span style="display: inline-block; width: 4px; height: 4px; border-radius: 50%; background: #ccc; margin-right: 6px;"></span>
+                        大小: ${(file.content.length / 1024).toFixed(2)} KB
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              `).join('')}
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 16px; border-top: 1px solid var(--border-color, #f0f0f0);">
+              <button id="zip-import-select-all" style="padding: 10px 16px; background: var(--hover-bg, #f0f0f0); color: var(--text-color, #333); 
+                      border: 1px solid var(--border-color, #dcdcdc); border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s;">全选</button>
+              <div style="flex: 1;"></div>
+              <button id="zip-import-cancel" style="padding: 10px 20px; background: var(--hover-bg, #f0f0f0); color: var(--text-color, #333); 
+                      border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s;">取消</button>
+              <button id="zip-import-confirm" style="padding: 10px 24px; background: var(--accent-color, #007aff); color: white; 
+                      border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; box-shadow: 0 4px 12px rgba(0,122,255,0.3); transition: transform 0.1s, box-shadow 0.2s;">确认导入</button>
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        const checkboxes = modal.querySelectorAll('.zip-import-checkbox');
+
+        // 全选/取消全选按钮
+        const selectAllBtn = modal.querySelector('#zip-import-select-all');
+        let allSelected = true;
+        selectAllBtn.addEventListener('click', () => {
+          allSelected = !allSelected;
+          checkboxes.forEach(cb => cb.checked = allSelected);
+          selectAllBtn.textContent = allSelected ? '取消全选' : '全选';
+        });
+
+        // 取消按钮
+        modal.querySelector('#zip-import-cancel').addEventListener('click', () => {
+          document.body.removeChild(modal);
+          resolve(null);
+        });
+
+        // 确认按钮
+        modal.querySelector('#zip-import-confirm').addEventListener('click', () => {
+          const selected = [];
+          checkboxes.forEach(cb => {
+            if (cb.checked) {
+              const index = parseInt(cb.dataset.index);
+              selected.push(fileContents[index]);
+            }
+          });
+
+          document.body.removeChild(modal);
+
+          if (selected.length === 0) {
+            showCustomAlert('提示', '请至少选择一个文件进行导入');
+            resolve(null);
+          } else {
+            resolve(selected);
+          }
+        });
+
+        // 点击模态框外部关闭
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            document.body.removeChild(modal);
+            resolve(null);
+          }
+        });
+      });
+    }
+
+
+    async function importTavernWorldBook(tavernData, fileName) {
+      const bookNameSuggestion = fileName.replace(/\.json$/i, '');
+
+      const newBookName = await showCustomPrompt(
+        "导入 Tavern AI 世界书",
+        "请为这本设定集命名：",
+        bookNameSuggestion
+      );
+
+      if (!newBookName || !newBookName.trim()) {
+        alert("导入已取消，因为未提供书名。");
+        return;
+      }
+
+      const newEntries = Object.values(tavernData.entries).map(entry => {
+
+        return {
+          keys: entry.key || [],
+          comment: entry.comment || '无备注',
+          content: entry.content || '',
+          enabled: !entry.disable
+        };
+      }).filter(entry => entry.content);
+
+      if (newEntries.length === 0) {
+        alert("这个 Tavern AI 世界书中没有找到任何有效的条目。");
+        return;
+      }
+
+      const newWorldBook = {
+        id: 'wb_' + Date.now(),
+        name: newBookName.trim(),
+        content: newEntries,
+        categoryId: null
+      };
+
+      await db.worldBooks.add(newWorldBook);
+      state.worldBooks.push(newWorldBook);
+      await renderWorldBookScreen();
+
+      await showCustomAlert('导入成功！', `已成功从 Tavern AI 文件导入设定集《${newBookName}》。`);
+    }
+
+
+    function showWorldBookExportSelectionModal(books, categories) {
+      return new Promise(resolve => {
+        const modal = document.getElementById('custom-modal-overlay');
+        const modalTitle = document.getElementById('custom-modal-title');
+        const modalBody = document.getElementById('custom-modal-body');
+        const modalFooter = document.querySelector('#custom-modal .custom-modal-footer');
+
+        if (!modal || !modalTitle || !modalBody || !modalFooter) {
+          resolve(books);
+          return;
+        }
+
+        modalTitle.textContent = '选择要导出的世界书';
+        modalBody.innerHTML = `
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;">
+            <span id="world-book-export-count" style="font-size:13px; color:var(--text-secondary, #666);"></span>
+            <div style="display:flex; gap:6px;">
+              <button type="button" id="select-all-world-books-for-export" style="padding:5px 9px; border:1px solid var(--border-color, #ddd); border-radius:7px; background:var(--secondary-bg, #fff); color:var(--text-color, #333); cursor:pointer;">全选</button>
+              <button type="button" id="deselect-all-world-books-for-export" style="padding:5px 9px; border:1px solid var(--border-color, #ddd); border-radius:7px; background:var(--secondary-bg, #fff); color:var(--text-color, #333); cursor:pointer;">取消全选</button>
+            </div>
+          </div>
+          <div id="world-book-export-list" style="max-height:48vh; overflow-y:auto; border:1px solid var(--border-color, #e5e5e5); border-radius:9px; text-align:left;"></div>
+        `;
+
+        const categoryNameById = new Map(categories.map(category => [String(category.id), category.name]));
+        const list = document.getElementById('world-book-export-list');
+        const count = document.getElementById('world-book-export-count');
+        const checkboxes = [];
+
+        books.forEach((book, index) => {
+          const row = document.createElement('label');
+          row.style.cssText = 'display:flex; align-items:center; gap:10px; padding:10px 11px; cursor:pointer; border-bottom:1px solid var(--border-color, #eee);';
+
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.checked = true;
+          checkbox.dataset.bookIndex = String(index);
+          checkbox.style.cssText = 'width:18px; height:18px; padding:0; margin:0; flex:0 0 auto; cursor:pointer;';
+          checkboxes.push(checkbox);
+
+          const text = document.createElement('span');
+          text.style.cssText = 'display:flex; flex-direction:column; min-width:0; flex:1;';
+
+          const name = document.createElement('span');
+          name.textContent = book.name || '未命名世界书';
+          name.style.cssText = 'font-size:14px; color:var(--text-color, #333); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+          text.appendChild(name);
+
+          if (book.categoryId !== null && book.categoryId !== undefined && book.categoryId !== '') {
+            const category = document.createElement('span');
+            category.textContent = categoryNameById.get(String(book.categoryId)) || '未知分类';
+            category.style.cssText = 'margin-top:2px; font-size:11px; color:var(--text-secondary, #888);';
+            text.appendChild(category);
+          }
+
+          row.appendChild(checkbox);
+          row.appendChild(text);
+          list.appendChild(row);
+        });
+
+        const lastRow = list.lastElementChild;
+        if (lastRow) lastRow.style.borderBottom = 'none';
+
+        modalFooter.style.cssText = '';
+        modalFooter.style.flexDirection = 'row';
+        modalFooter.innerHTML = `
+          <button type="button" id="custom-modal-cancel">取消</button>
+          <button type="button" id="custom-modal-confirm" class="confirm-btn">导出</button>
+        `;
+
+        const cancelBtn = document.getElementById('custom-modal-cancel');
+        const confirmBtn = document.getElementById('custom-modal-confirm');
+        const selectAllBtn = document.getElementById('select-all-world-books-for-export');
+        const deselectAllBtn = document.getElementById('deselect-all-world-books-for-export');
+
+        const updateCount = () => {
+          const selectedCount = checkboxes.filter(checkbox => checkbox.checked).length;
+          count.textContent = `已选择 ${selectedCount} / ${books.length} 本`;
+          confirmBtn.disabled = selectedCount === 0;
+          confirmBtn.style.opacity = selectedCount === 0 ? '0.45' : '1';
+          confirmBtn.style.cursor = selectedCount === 0 ? 'not-allowed' : 'pointer';
+        };
+
+        checkboxes.forEach(checkbox => checkbox.addEventListener('change', updateCount));
+        selectAllBtn.onclick = () => {
+          checkboxes.forEach(checkbox => { checkbox.checked = true; });
+          updateCount();
+        };
+        deselectAllBtn.onclick = () => {
+          checkboxes.forEach(checkbox => { checkbox.checked = false; });
+          updateCount();
+        };
+        cancelBtn.onclick = () => {
+          modal.classList.remove('visible');
+          resolve(null);
+        };
+        confirmBtn.onclick = () => {
+          const selectedBooks = checkboxes
+            .filter(checkbox => checkbox.checked)
+            .map(checkbox => books[Number(checkbox.dataset.bookIndex)]);
+          modal.classList.remove('visible');
+          resolve(selectedBooks);
+        };
+
+        updateCount();
+        modal.classList.add('visible');
+      });
+    }
+
+    async function exportWorldBooks() {
+      try {
+        const books = await db.worldBooks.toArray();
+        const categories = await db.worldBookCategories.toArray();
+
+        if (books.length === 0) {
+          alert("没有可导出的世界书数据。");
+          return;
+        }
+
+        const selectedBooks = await showWorldBookExportSelectionModal(books, categories);
+        if (!selectedBooks) return;
+
+        const selectedCategoryIds = new Set(
+          selectedBooks
+            .map(book => book.categoryId)
+            .filter(categoryId => categoryId !== null && categoryId !== undefined && categoryId !== '')
+            .map(String)
+        );
+        const selectedCategories = categories.filter(category => selectedCategoryIds.has(String(category.id)));
+
+        const backupData = {
+          type: 'EPhoneWorldBookBackup',
+          version: 1,
+          timestamp: Date.now(),
+          books: selectedBooks,
+          categories: selectedCategories
+        };
+
+        const blob = new Blob(
+          [JSON.stringify(backupData, null, 2)], {
+          type: 'application/json'
+        }
+        );
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `EPhone-WorldBooks-${new Date().toISOString().split('T')[0]}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+
+        await showCustomAlert('导出成功', `已成功导出 ${selectedBooks.length} 本世界书！`);
+
+      } catch (error) {
+        console.error("导出世界书时出错:", error);
+        await showCustomAlert('导出失败', `发生了一个错误: ${error.message}`);
+      }
+    }
+
+
+    async function importWorldBooks(data) {
+
+      try {
+        if (data.type !== 'EPhoneWorldBookBackup' || !data.books) {
+          throw new Error("文件格式不正确，这不是一个有效的世界书备份文件。");
+        }
+
+        const confirmed = await showCustomConfirm(
+          '导入世界书',
+          '这将用文件中的数据【完全覆盖】您当前所有的世界书和分类。此操作不可撤销！', {
+          confirmButtonClass: 'btn-danger',
+          confirmText: '确认覆盖'
+        }
+        );
+
+        if (!confirmed) return;
+
+        await db.transaction('rw', db.worldBooks, db.worldBookCategories, async () => {
+          await db.worldBooks.clear();
+          await db.worldBookCategories.clear();
+
+          if (Array.isArray(data.books)) {
+            await db.worldBooks.bulkPut(data.books);
+          }
+          if (Array.isArray(data.categories)) {
+            await db.worldBookCategories.bulkPut(data.categories);
+          }
+        });
+
+
+        state.worldBooks = await db.worldBooks.toArray();
+        await renderWorldBookScreen();
+
+        await showCustomAlert('导入成功', '世界书数据已成功恢复！');
+
+      } catch (error) {
+        console.error("导入世界书时出错:", error);
+        await showCustomAlert('导入失败', `文件解析或应用失败: ${error.message}`);
+      }
+    }
+
+
+
+    const lastActiveTimestamp = localStorage.getItem('ephoneLastActiveTimestamp');
+    if (lastActiveTimestamp) {
+      const minutesOffline = (Date.now() - parseInt(lastActiveTimestamp)) / (1000 * 60);
+
+      if (minutesOffline > 5) {
+
+
+        simulateBackgroundActivity(minutesOffline);
+      }
+    }
+
+    setupCharPlayerControls();
+
+    window.showScreen = showScreen;
+    window.openRenderingRulesScreen = openRenderingRulesScreen;
+    window.handleListenTogetherClick = handleListenTogetherClick;
+
+    window.openCharacterSelector = openCharacterSelector;
+    window.openCharApp = openCharApp;
+    window.switchToMyPhone = switchToMyPhone;
+    window.openCharWallet = openCharWallet;
+    window.switchToCharHomeScreen = switchToCharHomeScreen;
+
+    // MY Phone 函数暴露
+    window.openMyphoneScreen = openMyphoneScreen;
+    window.openMyPhoneApp = openMyPhoneApp;
+    window.switchToMyPhoneHomeScreen = switchToMyPhoneHomeScreen;
+    window.switchToCPhone = switchToCPhone;
+    window.openMyPhoneSettings = openMyPhoneSettings;
+    window.openMyPhoneViewRecords = openMyPhoneViewRecords;
+    window.showMyPhoneAddContactDialog = showMyPhoneAddContactDialog;
+    window.manualCreateMyPhoneContact = manualCreateMyPhoneContact;
+    window.showImportMainScreenCharacters = showImportMainScreenCharacters;
+    window.updateImportSelectAllState = updateImportSelectAllState;
+    window.importSelectedCharacters = importSelectedCharacters;
+    window.openMyPhoneContactSettings = openMyPhoneContactSettings;
+    window.saveMyPhoneContactSettings = saveMyPhoneContactSettings;
+    window.changeMyPhoneContactAvatar = changeMyPhoneContactAvatar;
+    window.addMyPhoneMessage = addMyPhoneMessage;
+    window.showMyPhoneTransferActionModal = showMyPhoneTransferActionModal;
+    window.handleMyPhoneTransferResponse = handleMyPhoneTransferResponse;
+
+
+
+    const stickerActionBar = document.createElement('div');
+    stickerActionBar.id = 'sticker-action-bar';
+    stickerActionBar.innerHTML = `
+       <input type="checkbox" id="select-all-stickers-checkbox" style="margin-right: 10px;">
+      <button id="delete-selected-stickers-btn" class="form-button-secondary">删除 (0)</button>
+   `;
+    document.getElementById('sticker-panel').appendChild(stickerActionBar);
+    const exportStickersBtn = document.createElement('button');
+    exportStickersBtn.id = 'export-selected-stickers-btn';
+    exportStickersBtn.textContent = '导出 (0)';
+    exportStickersBtn.className = 'form-button'; // 使用主按钮样式
+    exportStickersBtn.style.marginLeft = '10px';
+
+    stickerActionBar.appendChild(exportStickersBtn);
+
+    exportStickersBtn.addEventListener('click', executeBatchExportStickers);
+    const globalCssStyleTag = document.createElement('style');
+    globalCssStyleTag.id = 'global-custom-style';
+    document.head.appendChild(globalCssStyleTag);
+
+

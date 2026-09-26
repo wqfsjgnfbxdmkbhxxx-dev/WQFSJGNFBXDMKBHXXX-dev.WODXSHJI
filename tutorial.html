@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>EPhone 使用教程</title>
+  <style>
+    :root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:#202127;background:#ffffff;font-synthesis:none}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-width:280px}button,input{font:inherit}button{cursor:pointer}a{color:#4778a8;text-decoration:none}a:hover{text-decoration:underline}
+    .shell{max-width:760px;margin:auto;padding:14px 13px 42px}.top{display:flex;align-items:center;gap:10px;margin-bottom:15px}.brand{font-size:17px;font-weight:650;letter-spacing:.02em}.home-btn{border:0;background:#fff;border-radius:12px;min-width:36px;height:36px;color:#424856;box-shadow:0 1px 4px #23314812}.top-note{margin-left:auto;font-size:11px;color:#888d99}
+    .hero,.panel,.article,.search-wrap{background:#fff;border:1px solid #e8eaef;border-radius:17px;box-shadow:0 2px 9px #17223809}.hero{padding:20px 19px;margin-bottom:12px}.eyebrow{font-size:11px;letter-spacing:.12em;color:#79849a;font-weight:650}.hero h1{font-size:24px;line-height:1.32;margin:7px 0 8px;font-weight:700}.hero p{font-size:13px;line-height:1.72;color:#69717e;margin:0}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.btn{border:1px solid #dfe4eb;border-radius:10px;background:#fff;color:#344050;padding:9px 12px;font-size:12px;font-weight:600;line-height:1.25}.btn.primary{background:#657b9f;border-color:#657b9f;color:white}.btn:focus-visible,.topic:focus-visible,.quick:focus-visible,input:focus-visible{outline:2px solid #527fc0;outline-offset:2px}
+    .search-wrap{display:flex;align-items:center;gap:9px;padding:0 13px;margin-bottom:12px}.search-icon{font-size:16px;color:#8d96a3}.search-wrap input{border:0;outline:0;min-width:0;width:100%;height:43px;background:transparent;color:#25303e;font-size:13px}.search-wrap input::placeholder{color:#9aa1ad}
+    .panel{padding:17px 17px 15px;margin-bottom:12px}.panel h2,.article h2{font-size:15px;margin:0 0 12px;font-weight:650}.quick-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.quick{display:flex;flex-direction:column;gap:5px;min-height:78px;border:1px solid #e7eaf0;background:#fafbfc;border-radius:12px;padding:11px;color:#293443;text-align:left}.quick b{font-size:12px}.quick small{font-size:11px;color:#87909e;line-height:1.45}.quick .mark{color:#6b85ae;font-size:17px}.group{margin-top:18px}.group:first-of-type{margin-top:0}.group h3{font-size:12px;color:#737e8f;font-weight:650;margin:0 0 7px}.topic-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.topic{border:1px solid #edf0f3;border-radius:9px;background:#fff;padding:10px 11px;text-align:left;color:#344051;font-size:12px;min-width:0;line-height:1.4}.topic:hover,.quick:hover{background:#f2f5fa}.topic span{float:right;color:#a0a9b5}.empty{font-size:12px;color:#838d9b;padding:10px 0}
+    .article{padding:20px 18px 23px}.crumb{display:flex;gap:6px;align-items:center;font-size:11px;color:#8893a3;margin-bottom:11px}.crumb button{padding:0;border:0;background:none;color:#6685ab;font-size:11px}.article h1{font-size:23px;line-height:1.35;margin:0 0 8px}.lead{font-size:13px;color:#657080;line-height:1.7;margin:0 0 17px}.meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:15px}.pill{font-size:10px;background:#f0f3f8;color:#70809a;border-radius:6px;padding:4px 7px}.path{font-size:12px;line-height:1.6;background:#f5f7fa;border-radius:10px;padding:10px 12px;color:#48566a;margin:13px 0}.path b{color:#364860}.article h2{margin:22px 0 9px}.steps{counter-reset:step;list-style:none;padding:0;margin:0}.steps li{position:relative;min-height:31px;padding:1px 0 13px 34px;font-size:13px;line-height:1.7;color:#3c4654}.steps li:before{counter-increment:step;content:counter(step);position:absolute;left:0;top:1px;width:22px;height:22px;display:grid;place-items:center;border-radius:50%;background:#e9eef6;color:#647d9f;font-size:11px;font-weight:700}.note{font-size:12px;line-height:1.65;border-left:3px solid #9ab2ce;background:#f5f8fb;padding:9px 12px;border-radius:0 8px 8px 0;color:#516273;margin:12px 0}.note.warning{border-color:#d8ad75;background:#fbf7f0;color:#715b40}.article p,.article li{font-size:12.5px;line-height:1.75}.article p{color:#566170}.related{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}.related .btn{font-size:11px;padding:7px 9px}.figure{border:1px solid #e6eaf0;border-radius:12px;background:#f9fafc;padding:13px;margin:16px 0}.figure figcaption{font-size:11px;color:#788596;line-height:1.6;margin-top:10px}.figure img{display:block;width:100%;height:auto;border-radius:8px}.diagram{display:flex;gap:7px;align-items:center;justify-content:center;flex-wrap:wrap}.diagram .box{min-width:75px;max-width:160px;flex:1;background:#fff;border:1px solid #dbe3ee;padding:12px 6px;text-align:center;border-radius:9px;color:#435674;font-size:11px;font-weight:600}.diagram .arrow{color:#90a5c0}.figure .mock{max-width:320px;margin:auto;border:1px solid #d8dfe9;border-radius:15px;overflow:hidden;background:white}.mock-head{padding:8px 10px;background:#f2f4f8;border-bottom:1px solid #e8ebf0;text-align:center;font-size:11px;font-weight:650}.mock-row{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #edf0f3;font-size:11px}.mock-row:last-child{border:0}.mock-row strong{font-weight:600;color:#516c91}.focus{outline:2px solid #7797c5;outline-offset:-2px;border-radius:4px}.article-footer{border-top:1px solid #edf0f3;margin-top:22px;padding-top:14px}.back-top{font-size:11px;color:#8490a0;margin-top:20px;display:inline-block}.hide{display:none!important}
+    @media(max-width:380px){.shell{padding:10px 9px 30px}.hero{padding:17px 14px}.hero h1{font-size:21px}.panel,.article{padding:15px 13px}.quick-grid{grid-template-columns:1fr}.quick{min-height:0}.topic-list{grid-template-columns:1fr}.top-note{display:none}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="top"><button type="button" class="home-btn" id="back-home" aria-label="返回教程首页">⌂</button><span class="brand">EPhone 教程</span><span class="top-note">操作说明 · 离线可读</span></div>
+    <section id="home-view">
+      <div class="hero"><div class="eyebrow">使用指南</div><h1>想做什么，从这里开始</h1><p>跟着步骤完成一次聊天，或按功能和遇到的问题查找答案。所有示例人物、地址和对话都是演示内容。</p><div class="actions"><button class="btn primary" data-open="start">开始使用</button><button class="btn" data-group="features">按功能找</button><button class="btn" data-group="help">遇到问题</button></div></div>
+      <label class="search-wrap"><span class="search-icon" aria-hidden="true">⌕</span><input id="search" type="search" placeholder="搜索 API、角色、世界书、备份、联机…" autocomplete="off" aria-label="搜索教程"></label>
+      <section class="panel" id="quick-panel"><h2>常用入口</h2><div class="quick-grid"><button class="quick" data-open="api"><span class="mark">◈</span><b>配置 API</b><small>填写地址、密钥与模型</small></button><button class="quick" data-open="chat"><span class="mark">◉</span><b>开始聊天</b><small>创建角色并发送消息</small></button><button class="quick" data-open="backup"><span class="mark">▣</span><b>备份数据</b><small>导出、导入与迁移</small></button></div></section>
+      <section class="panel" id="directory"><h2 id="directory-title">全部内容</h2><div id="topic-groups"></div></section>
+    </section>
+    <article class="article hide" id="article-view" aria-live="polite"></article>
+  </main>
+  <script>
+  (()=>{
+    'use strict';
+    const groups=[
+      {id:'start',name:'开始使用',items:['start','map','api','character','chat']},
+      {id:'features',name:'聊天与角色',items:['chat-tools','chat-settings','persona','presets','worldbook','memory','rendering','group-chat']},
+      {id:'extras',name:'手机与扩展功能',items:['phones','social','media','calls','games','couple','online','appearance']},
+      {id:'data',name:'数据与维护',items:['backup','import','update','privacy']},
+      {id:'help',name:'遇到问题',items:['help-api','help-reply','help-image','help-list','help-import','help-online','help-ui','help-audio']}
+    ];
+    const guides={
+      start:{title:'从零完成一次聊天',desc:'照着这条路线操作，直到你收到角色的回复。',path:'桌面 → API 设置 → QQ',steps:['打开桌面底部的「API 设置」，填写你已有服务的地址、API Key 和可用模型，然后点击「完成」。','回到桌面打开「QQ」，点击消息页右上角的「＋」。选择「手动创建角色」，按提示填写备注名和本名；也可以选择导入角色卡。','进入新聊天，发送一句简单的测试消息，例如“你好，介绍一下你自己”。','看到角色回复后，再进入聊天右上角的设置，补充人设、昵称等内容。'],success:'聊天中出现角色的回复，说明这条基础流程已经走通。',note:'没有 API 服务信息时，先阅读「配置 API」。不要把 API Key 发给其他人。',visual:'flow',related:['api','character','chat','help-reply']},
+      map:{title:'认识桌面与入口',desc:'桌面是各项功能的入口；常用设置在底部，聊天入口是 QQ。',steps:['「QQ」进入消息、动态、回忆、收藏和 NPC 等页面。','「世界书」「预设」分别管理背景资料和可复用的配置。','底部「API 设置」管理模型与数据；「字体」「Cphone」有独立入口。','向其他桌面页滑动，可以找到 Myphone、角色生成、联机、情侣空间等应用。'],success:'能从桌面找到需要的应用，并通过页面左上角的返回按钮回到上一层。',visual:'home',related:['api','phones','appearance']},
+      api:{title:'配置对话 API',desc:'模型服务通常需要地址、密钥和模型名称，具体值由你的服务提供方给出。',path:'桌面 → API 设置 → 主 API（对话）',steps:['在「反代地址」填服务提供方给出的接口地址；使用默认官方地址时按界面提示填写。','在「API Key」填自己的密钥。输入框会遮住内容；教程中的示例值不能用于真实请求。','在「模型（手写）」输入服务实际支持的模型名，或使用设置页提供的模型获取方式。','点击顶部「完成」保存，再去 QQ 发一条简短消息验证。'],success:'角色能正常回复，比仅看到设置已保存更能说明配置可用。',note:'图片理解需要模型支持视觉能力；不同服务对地址、模型名和可用功能的要求可能不同。',visual:'api',related:['help-api','help-reply','help-image']},
+      character:{title:'创建或导入角色',desc:'QQ 消息页的「＋」提供手动创建和导入角色的入口。',path:'桌面 → QQ → 消息页右上角「＋」',steps:['选择「手动创建角色」，依次填写备注名与角色本名。备注名用于你在列表中识别角色，本名供 AI 理解。','如果已经有角色卡，可选「从角色卡导入（.json/.png）」。TXT、DOCX、ZIP 有单独的导入选项。','创建后进入聊天，打开右上角聊天设置，填写人设和与你有关的信息。','先用短消息试聊，确认称呼与设定符合预期，再继续补充详细内容。'],success:'消息列表出现新角色，并能进入它的聊天。',note:'桌面的「角色生成」是另一个入口；它提供辅助生成角色的工具，不影响手动创建和角色卡导入。',visual:'character',related:['chat','persona','chat-settings']},
+      chat:{title:'发出第一条消息',desc:'先用短句确认聊天可用，再探索图片、语音和扩展玩法。',path:'桌面 → QQ → 选择角色',steps:['进入角色聊天，点击底部输入框并输入文字。','发送一条简短消息，等待回复。','若一直没有回复，先回到 API 设置核对配置，再查看「角色不回复」的排查条目。','需要调整称呼、人设或记忆时，打开聊天右上角设置。'],success:'消息出现在对话中，随后出现角色回复。',visual:'chat',related:['chat-tools','chat-settings','help-reply']},
+      'chat-tools':{title:'聊天里的常用操作',desc:'从一段正常文字聊天开始，再按需要使用更多表达方式。',path:'QQ → 角色聊天',steps:['点聊天顶部的设置图标，调整当前聊天的专属配置。','聊天顶部的长期记忆入口用于查看与当前角色相关的记忆。','一起听入口在聊天顶部；图片、语音等入口位于聊天输入区域，是否可用取决于相应配置和设备权限。','需要管理已有消息时，使用消息本身提供的操作入口，并在确认删除类操作前核对范围。'],related:['chat-settings','memory','media','help-image']},
+      'chat-settings':{title:'聊天设置怎么用',desc:'这里配置当前聊天的名称、人设、世界书和记忆等独立选项。',path:'QQ → 某个聊天 → 右上角设置 → 聊天详情',steps:['先核对「备注名 / 群名」「对方本名（AI 识别用）」与「我的昵称」。','根据需要填写角色人设及与你有关的设定；不要把互相矛盾的要求重复写在不同位置。','使用「关联世界书」给当前角色添加背景资料；按需要配置长期记忆。','点击顶部「完成」，再发消息观察角色行为是否符合设定。'],note:'聊天设置项目较多，建议一次只改少量选项，便于判断是哪项产生影响。',related:['persona','worldbook','memory']},
+      persona:{title:'人设、预设和提示词',desc:'角色人设描述“这个角色是谁”；预设保存可复用的配置；提示词控制具体指令。',steps:['要改变单个角色的性格与背景，先编辑该聊天的人设。','要把一组内容重复用于不同聊天，可使用预设管理。','自定义提示词属于更直接的行为指令，修改后用实际对话检查效果。','当多处内容互相冲突，优先检查本次聊天所关联的设置。'],visual:'roles',related:['chat-settings','presets','worldbook']},
+      presets:{title:'管理预设',desc:'把常用内容集中保存，减少重复填写。',path:'桌面 → 预设',steps:['进入预设页面，点击「＋」创建预设。','填写预设名称、分类与内容条目，并保存。','需要使用已有文件时点击导入入口；编辑前先确认当前选择的预设。','回到相关聊天检查预设是否按预期使用。'],related:['persona','chat-settings']},
+      worldbook:{title:'创建和使用世界书',desc:'世界书用条目组织背景、地点、规则等资料，并可与角色关联。',path:'桌面 → 世界书',steps:['点击右上角「＋」创建世界书，填写书名和内容条目。','需要所有角色共用时可开启「全局世界书」；只给特定角色使用时，在聊天设置里关联。','按需要选择条目的注入位置，并用实际聊天检查内容是否生效。','菜单中有导入与导出功能，分享前先检查条目里有没有私密内容。'],visual:'worldbook',related:['chat-settings','persona','backup']},
+      memory:{title:'长期记忆与向量记忆',desc:'记忆帮助角色在后续聊天中使用过去的信息。两种机制与可调选项都在相关页面中提供。',path:'QQ → 角色聊天 → 长期记忆 / 聊天详情',steps:['打开聊天顶部的长期记忆入口，先看看当前已经保存了什么。','在聊天详情中按需要设置自动总结长期记忆，以及向量记忆相关选项。','如果角色记错了事实，先检查保存的记忆内容，再调整读取和总结设置。','清空聊天或记忆前仔细阅读界面确认提示，必要时先导出备份。'],visual:'memory',related:['chat-settings','backup','privacy']},
+      rendering:{title:'渲染规则与思维链',desc:'这两项有独立入口，适合在基础聊天正常后按需要设置。',steps:['桌面「渲染器」进入渲染规则，查看当前规则与预期显示效果。','桌面其他页的「思维链」进入相应设置。','每次只调整一项并回到聊天核对结果，避免把模型输出问题与显示问题混在一起。'],related:['chat','help-ui']},
+      'group-chat':{title:'创建群聊',desc:'QQ 消息页有独立的创建群聊入口。',path:'桌面 → QQ → 消息页右上角群聊图标',steps:['点击群聊图标进入创建流程。','按页面提示选择成员和配置群聊。','创建后在消息列表找到群聊，先发送短消息确认成员与回复方式符合预期。','需要调整群聊专属设置时，进入该群聊的聊天详情。'],related:['chat-settings','help-reply']},
+      phones:{title:'Myphone 与 Cphone',desc:'两个手机入口彼此独立，分别展示“我的手机”和角色手机相关内容。',path:'桌面其他页 → Myphone；桌面底部 → Cphone',steps:['打开 Myphone，按页面提供的应用入口浏览自己的手机内容。','打开 Cphone，先选择角色，再进入该角色的手机。','角色手机中的相册、便签、日记、音乐等内容按各自页面操作。','退出时使用页面返回操作，避免把两个手机中的内容混淆。'],visual:'phones',related:['social','media']},
+      social:{title:'动态、相册与社交内容',desc:'QQ 的动态与相册，以及桌面上的豆瓣、绿江等，各自有独立入口。',steps:['QQ 底部切到「动态」，可以查看说说、动态与相册入口。','相册页提供创建相册、查看照片等操作；上传前确认所选内容。','豆瓣、绿江、邮箱等应用从桌面图标进入，按各自页面的按钮操作。','若内容与某个角色有关，先核对当前角色或聊天，避免操作到错误对象。'],related:['phones','privacy']},
+      media:{title:'图片、音乐、阅读与语音',desc:'媒体功能所需的模型能力、浏览器权限和文件格式可能不同。',steps:['发送图片或让模型理解图片时，先确认当前模型支持视觉。','语音录制、通话等功能首次使用时，按浏览器提示授予所需权限。','音乐和阅读使用各自页面的导入或播放入口；阅读页支持导入 TXT 或使用网络 URL。','播放或生成失败时，先确认资源可访问、格式受支持，再查看对应设置。'],related:['help-image','help-audio','api']},
+      calls:{title:'通话与一起听',desc:'聊天页提供一起听入口，通话有独立界面与记录。',steps:['从目标角色的聊天进入相关操作，先确认当前对象正确。','如需麦克风或通知权限，按浏览器提示授权。','通话结束后可在通话记录里查看历史；中断时先返回聊天确认当前状态。'],related:['media','help-audio']},
+      games:{title:'游戏与轻量工具',desc:'桌面页可以找到狼人杀、你画我猜、番茄钟和月经记录等入口。',steps:['在桌面滑动查找相应图标并进入。','按页面提示创建、加入或开始操作。','需要退出时使用该页面的返回或关闭按钮；游戏进度与聊天设置分开管理。'],related:['map']},
+      couple:{title:'情侣空间',desc:'情侣空间有独立入口和角色选择流程。',path:'桌面其他页 → 情侣空间',steps:['打开情侣空间，按页面提示选择角色。','进入后使用相应功能，并核对当前绑定的角色。','与角色关系相关的变化以当前页面反馈为准；切换角色后重新确认展示内容。'],related:['character','privacy']},
+      online:{title:'真人联机',desc:'联机需要可用的服务器地址和双方各自的身份设置。',path:'桌面其他页 → 联机 → 帮助与教程',steps:['先阅读联机功能解释，确认联机与 AI 聊天的区别。','获取朋友提供的服务器地址，或查看服务器部署教程。','在联机页面按提示设置身份、连接服务器、添加好友。','连接失败时检查地址、服务器运行情况和网络；详细操作可打开页面内的「联机功能操作指南」。'],links:[['联机功能解释','online-help-explain.html'],['联机操作指南','online-help-guide.html'],['服务器部署教程','online-help-deploy.html']],related:['help-online']},
+      appearance:{title:'外观、字体与桌面布局',desc:'外观相关选项分布在桌面的独立入口。',steps:['「外观设置」调整壁纸等外观选项。','桌面底部的「字体」管理字体显示。','桌面组件与自由布局按各自编辑入口操作；调整前先记住原位置。','在窄屏上检查文字与组件是否被挤压，必要时恢复或继续调整。'],related:['map','help-ui']},
+      backup:{title:'导出备份',desc:'换设备或进行大幅修改前，先导出一份可保存的文件。',path:'桌面 → API 设置 → 数据备份与迁移',steps:['点击「导出所有数据」，按浏览器提示保存文件。','只想处理部分数据时，使用「高级导出导入」里的分类选项，并核对所选类别。','确认下载文件确实存在，再进行清空、导入或换设备操作。','备份可能包含私人聊天、角色资料及设置；不要随意公开分享。'],visual:'backup',related:['import','privacy','update']},
+      import:{title:'导入与恢复数据',desc:'导入前先保存当前数据，避免无法找回原有内容。',path:'桌面 → API 设置 → 数据备份与迁移',steps:['先执行一次「导出所有数据」，保留当前状态。','完整备份使用「导入备份文件」；分类备份使用「导入分类备份」。','在文件选择器中选对备份文件，认真阅读界面给出的确认信息。','导入完成后检查角色、聊天和设置；如有异常，不要立刻重复导入，应先核对文件类别。'],note:'不同导入入口适用的文件和影响范围不同，不要仅凭文件名判断是否会覆盖数据。',related:['backup','help-import']},
+      update:{title:'更新、缓存与换设备',desc:'更新前做好备份；换设备时先确保备份文件可访问。',steps:['更新前导出数据并确认文件已保存。','页面有更新提示时，按当前界面提示操作；更新后若画面仍旧，先正常刷新。','换设备时在新设备打开 EPhone，再从数据备份与迁移处选择合适的导入入口。','恢复后检查关键聊天和设置，再继续日常使用。'],related:['backup','import','help-ui']},
+      privacy:{title:'保护密钥与私人数据',desc:'API Key、聊天记录、角色资料和备份文件都可能含有私人信息。',steps:['API Key 只填写在应用配置里，不要放到聊天消息、截图或公开文档中。','分享世界书、预设或备份前，先检查其内容与分享范围。','需要展示问题时，遮住密钥、真实地址、私人聊天和身份信息。','在共用设备上导出备份后，确认下载文件存放位置。'],related:['api','backup','online']},
+      'help-api':{title:'模型请求失败或无法连接',desc:'先确认配置与服务本身，再定位具体功能。',steps:['检查设备是否联网，以及服务提供方是否正常。','回到 API 设置，逐项核对地址、密钥和模型名；不要在公开渠道发送真实密钥。','先用普通文字消息测试，排除图片、语音等额外能力的影响。','如果服务返回错误提示，按提示核对权限、额度或模型支持情况。'],related:['api','help-reply']},
+      'help-reply':{title:'角色不回复或回复很慢',desc:'发送成功与模型成功回复是两件事。',steps:['确认消息已出现在当前聊天中，并等待当前请求结束。','试发一句短文本；若仍无回复，核对 API 地址、Key 和模型名。','检查是否只在某个角色或群聊中发生；若是，查看该聊天的专属设置。','若连续失败，记录页面显示的具体错误，再按错误类型排查。'],related:['api','chat-settings','help-api']},
+      'help-image':{title:'图片发送或识别失败',desc:'图片能力取决于模型、服务和当前功能的配置。',steps:['先验证普通文字聊天是否正常。','确认当前模型确实支持视觉输入；模型名称相似不代表能力相同。','更换受支持的图片格式或更小的文件重试。','若是图片生成失败，检查对应图片服务的独立配置。'],related:['api','media']},
+      'help-list':{title:'聊天列表空白',desc:'应用设置中提供「安全渲染模式」，可用于部分列表渲染异常。',path:'桌面 → API 设置 → 调试工具',steps:['先正常返回桌面，再重新进入 QQ 消息页。','若列表仍空白，在「调试工具」中开启「安全渲染模式」。','按界面提示刷新页面，再查看聊天列表。','仍异常时，先备份数据，再记录具体表现以便排查。'],related:['backup','help-ui']},
+      'help-import':{title:'备份导入失败',desc:'先确认入口和文件类型匹配，再看页面的具体错误提示。',steps:['确认完整备份使用「导入备份文件」，分类备份使用「导入分类备份」。','检查文件是否完整、是否选错文件。','不要连续重复导入；先保留当前数据的备份，再针对错误提示处理。','导入完成但数据看似缺失时，检查是否导入了部分分类。'],related:['backup','import']},
+      'help-online':{title:'联机连接失败',desc:'联机服务与对话 API 是两套配置。',steps:['检查服务器地址是否按联机页面要求填写。','确认服务器仍在运行，双方网络都可访问。','核对自己的 ID 与好友提供的 ID，检查是否重复或输入错误。','返回联机页的操作指南，按连接、搜索好友、申请的顺序检查。'],links:[['联机操作指南','online-help-guide.html']],related:['online']},
+      'help-ui':{title:'页面显示错位或内容仍旧',desc:'先确认当前设备宽度、字体和外观设置，再查看更新状态。',steps:['正常刷新一次页面，确认加载的是当前内容。','若只在某个外观配置出现，回到字体或外观设置核对。','若聊天列表单独空白，使用安全渲染模式排查。','问题持续时保留截图和发生前的操作路径，避免直接清空数据。'],related:['appearance','help-list','update']},
+      'help-audio':{title:'语音、音乐或通知没有声音',desc:'浏览器权限、设备音量和资源状态都会影响播放。',steps:['检查设备音量、静音状态及当前输出设备。','查看浏览器是否允许此页面使用麦克风或发送通知。','确认当前音频资源能访问，尝试页面提供的播放操作。','回到对应页面检查功能开关和设置；不要只凭按钮状态判断权限已生效。'],related:['media','calls']}
+    };
+    const $=id=>document.getElementById(id);
+    function escapeHtml(value){return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+    function visual(kind){
+      if(kind==='flow')return '<figure class="figure"><div class="diagram"><span class="box">配置 API</span><span class="arrow">→</span><span class="box">创建角色</span><span class="arrow">→</span><span class="box">发消息</span><span class="arrow">→</span><span class="box">收到回复</span></div><figcaption>首次聊天路线：每一步都能在页面中找到对应入口。</figcaption></figure>';
+      if(kind==='api')return '<figure class="figure"><div class="mock"><div class="mock-head">API 设置 · 主 API（对话）</div><div class="mock-row focus"><span>反代地址</span><strong>服务提供的地址</strong></div><div class="mock-row focus"><span>API Key</span><strong>••••••••</strong></div><div class="mock-row focus"><span>模型（手写）</span><strong>可用模型名</strong></div><div class="mock-row"><span>顶部操作</span><strong>完成</strong></div></div><figcaption>字段位置示意；示意值不能用于连接。请以你使用的服务提供的信息为准。</figcaption></figure>';
+      if(kind==='character')return '<figure class="figure"><div class="diagram"><span class="box">QQ 消息页<br>右上角 ＋</span><span class="arrow">→</span><span class="box">手动创建角色<br>或导入角色卡</span><span class="arrow">→</span><span class="box">进入聊天</span></div><figcaption>创建聊天时提供三类入口：手动、角色卡以及 TXT/DOCX/ZIP 文件导入。</figcaption></figure>';
+      if(kind==='chat')return '<figure class="figure"><div class="mock"><div class="mock-head">QQ · 与演示角色聊天</div><div class="mock-row"><span>你</span><strong>你好，介绍一下你自己</strong></div><div class="mock-row"><span>演示角色</span><strong>你好，很高兴认识你。</strong></div><div class="mock-row focus"><span>底部</span><strong>输入并发送</strong></div></div><figcaption>虚构对话示意。看到角色的回复，才算完成连接验证。</figcaption></figure>';
+      if(kind==='home')return '<figure class="figure"><div class="diagram"><span class="box">桌面<br>QQ / 世界书</span><span class="arrow">·</span><span class="box">底部<br>API 设置 / Cphone</span><span class="arrow">·</span><span class="box">其他桌面页<br>Myphone / 联机等</span></div><figcaption>按功能入口所在区域绘制的桌面地图；实际图标位置会随桌面布局调整。</figcaption></figure>';
+      if(kind==='roles')return '<figure class="figure"><div class="diagram"><span class="box">角色人设<br>描述角色</span><span class="box">世界书<br>补充背景</span><span class="box">预设<br>复用配置</span><span class="box">提示词<br>写具体指令</span></div><figcaption>这些内容用途不同；同一要求写在多处时，要检查是否互相冲突。</figcaption></figure>';
+      if(kind==='worldbook')return '<figure class="figure"><div class="diagram"><span class="box">世界书条目</span><span class="arrow">→</span><span class="box">全局使用<br>或关联角色</span><span class="arrow">→</span><span class="box">聊天时提供背景</span></div><figcaption>示意世界书的作用范围；具体内容是否使用，还需在聊天中验证。</figcaption></figure>';
+      if(kind==='memory')return '<figure class="figure"><div class="diagram"><span class="box">过去的聊天</span><span class="arrow">→</span><span class="box">总结或保存记忆</span><span class="arrow">→</span><span class="box">后续聊天读取</span></div><figcaption>记忆流程示意。保存内容和读取设置会影响角色之后的表现。</figcaption></figure>';
+      if(kind==='phones')return '<figure class="figure"><div class="diagram"><span class="box">Myphone<br>我的手机</span><span class="box">Cphone<br>先选角色，再看角色手机</span></div><figcaption>两个入口和内容范围不同，操作前留意当前所在页面与角色。</figcaption></figure>';
+      if(kind==='backup')return '<figure class="figure"><div class="diagram"><span class="box">当前数据</span><span class="arrow">→</span><span class="box">导出备份文件</span><span class="arrow">→</span><span class="box">确认文件已保存</span></div><figcaption>导入或换设备前，先完成并核对导出的备份文件。</figcaption></figure>';
+      return '';
+    }
+    function renderHome(){
+      $('home-view').classList.remove('hide');$('article-view').classList.add('hide');$('back-home').style.visibility='hidden';
+      const query=$('search').value.trim().toLocaleLowerCase();let count=0;
+      $('topic-groups').innerHTML=groups.map(group=>{
+        const items=group.items.filter(id=>{const item=guides[id];return !query||(item.title+' '+item.desc+' '+item.steps.join(' ')).toLocaleLowerCase().includes(query);});
+        if(!items.length)return '';count+=items.length;
+        return `<div class="group" id="group-${group.id}"><h3>${group.name}</h3><div class="topic-list">${items.map(id=>`<button type="button" class="topic" data-open="${id}">${escapeHtml(guides[id].title)}<span>›</span></button>`).join('')}</div></div>`;
+      }).join('')||'<p class="empty">没有找到相关内容。试试“API”“备份”或“联机”。</p>';
+      $('directory-title').textContent=query?`搜索结果（${count}）`:'全部内容';
+      $('quick-panel').classList.toggle('hide',!!query);
+    }
+    function renderArticle(id){
+      const item=guides[id];if(!item){history.replaceState(null,'','#');renderHome();return;}
+      const group=groups.find(g=>g.items.includes(id));
+      $('home-view').classList.add('hide');$('article-view').classList.remove('hide');$('back-home').style.visibility='visible';
+      $('article-view').innerHTML=`<div class="crumb"><button type="button" data-home="1">教程首页</button><span>›</span><span>${group.name}</span></div><h1>${escapeHtml(item.title)}</h1><p class="lead">${escapeHtml(item.desc)}</p><div class="meta"><span class="pill">${group.name}</span><span class="pill">操作指南</span></div>${item.path?`<div class="path"><b>入口：</b>${escapeHtml(item.path)}</div>`:''}${visual(item.visual)}<h2>怎么做</h2><ol class="steps">${item.steps.map(s=>`<li>${escapeHtml(s)}</li>`).join('')}</ol>${item.success?`<div class="note"><b>完成后：</b>${escapeHtml(item.success)}</div>`:''}${item.note?`<div class="note warning">${escapeHtml(item.note)}</div>`:''}${item.links?`<h2>详细说明</h2><div class="related">${item.links.map(([name,url])=>`<a class="btn" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(name)} ↗</a>`).join('')}</div>`:''}<div class="article-footer"><h2>相关内容</h2><div class="related">${(item.related||[]).map(other=>`<button type="button" class="btn" data-open="${other}">${escapeHtml(guides[other].title)}</button>`).join('')||'<button type="button" class="btn" data-home="1">返回全部内容</button>'}</div></div><a class="back-top" href="#" data-home="1">返回教程首页 ↑</a>`;
+      window.scrollTo(0,0);
+    }
+    function route(){const id=decodeURIComponent(location.hash.slice(1));if(id)renderArticle(id);else renderHome();}
+    document.addEventListener('click',event=>{
+      const open=event.target.closest('[data-open]');if(open){location.hash=open.dataset.open;return;}
+      const home=event.target.closest('[data-home]');if(home){event.preventDefault();location.hash='';return;}
+      const group=event.target.closest('[data-group]');if(group){$('search').value='';renderHome();$('group-'+group.dataset.group).scrollIntoView({behavior:'smooth',block:'start'});}
+    });
+    $('back-home').addEventListener('click',()=>{location.hash='';});
+    $('search').addEventListener('input',renderHome);
+    window.addEventListener('hashchange',route);
+    route();
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+           /* ========================================= */
+           /* ▼▼▼ 设置页面布局优化 (Spa Aesthetics) ▼▼▼ */
+           /* ========================================= */
+
+           /* 1. 增加呼吸感 */
+           .settings-container {
+               padding: 24px 20px !important;
+               /* 增加整体内边距 */
+           }
+
+           /* 2. 卡片间距与质感 */
+           .settings-section {
+               margin-bottom: 24px !important;
+               /* 卡片间距增大 */
+               border-radius: 16px !important;
+               /* 更圆润的角 */
+               box-shadow: 0 2px 12px rgba(0, 0, 0, 0.02) !important;
+               /* 极轻微的悬浮感 */
+               border: 1px solid rgba(0, 0, 0, 0.03);
+               /* 极其微妙的边界 */
+               overflow: hidden !important;
+           }
+
+           /* 3. 列表项高度与分割线 */
+           .settings-item,
+           .settings-item-block {
+               padding: 18px 20px !important;
+               /* 增加单行高度，不仅是点击区域，更是视觉留白 */
+               min-height: 56px !important;
+               border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+               /* 线条更细更淡 */
+           }
+
+           /* 4. 字体优化 */
+           .settings-item label {
+               font-size: 16px !important;
+               font-weight: 500 !important;
+               /* 略微加粗，提升层级 */
+               letter-spacing: -0.01em;
+               color: #1d1d1f !important;
+           }
+
+           .settings-header {
+               font-size: 13px !important;
+               font-weight: 600 !important;
+               color: #86868b !important;
+               /* 高级灰 */
+               margin: 30px 0 10px 20px !important;
+               /* 标题与卡片的距离 */
+               text-transform: uppercase;
+               letter-spacing: 0.05em;
+           }
+
+           /* 5. 暗黑模式微调 */
+           #phone-screen.dark-mode .settings-section {
+               border: 1px solid rgba(255, 255, 255, 0.05);
+               background-color: #1c1c1e !important;
+           }
+
+           #phone-screen.dark-mode .settings-item {
+               border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+           }
+
+           #phone-screen.dark-mode .settings-item label {
+               color: #f5f5f7 !important;
+           }
+

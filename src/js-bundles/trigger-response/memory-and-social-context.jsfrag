@@ -1,0 +1,809 @@
+                  };
+                } else {
+                  assistantMsgObject.content = msg.content;
+                }
+              }
+              const assistantContent = JSON.stringify([assistantMsgObject]);
+              return {
+                role: 'assistant',
+                content: `(Timestamp: ${msg.timestamp}) ${assistantContent}`
+              };
+            }
+            return null;
+          }).filter(Boolean);
+
+        } else {
+          let nameHistoryContext = '';
+          if (chat.nameHistory && chat.nameHistory.length > 0) {
+            nameHistoryContext = `\n- **你的曾用名**: [${chat.nameHistory.join(', ')}]。当在对话历史中看到这些名字时，它们都指的是【你】自己。`;
+          }
+
+          let userProfileContext = '';
+          const userQzoneNickname = state.qzoneSettings.nickname || '用户';
+          userProfileContext += `- 用户的QZone昵称是 "${userQzoneNickname}"。\n`;
+
+          const allChats = Object.values(state.chats);
+          const commonGroups = allChats.filter(group =>
+            group.isGroup && group.members.some(m => m.id === chat.id)
+          );
+
+          if (commonGroups.length > 0) {
+            userProfileContext += '- 用户在你们共同所在的群聊中的昵称如下：\n';
+            commonGroups.forEach(group => {
+              const myNicknameInGroup = group.settings.myNickname || userQzoneNickname;
+              userProfileContext += `  - 在群聊“${group.name}”中，用户的昵称是“${myNicknameInGroup}”。\n`;
+            });
+          }
+          userProfileContext += '当你在任何系统提示、动态评论或挂载的群聊记忆中看到这些名字时，它们都指代的是【你的聊天对象】。';
+
+          let contactsList = '';
+          const friendChats = allChats.filter(c =>
+            !c.isGroup &&
+            c.id !== chat.id &&
+            c.groupId === chat.groupId &&
+            chat.groupId !== null
+          );
+
+          if (friendChats.length > 0) {
+            contactsList += '\n# 你的社交圈 (通讯录)\n这是你认识的朋友列表。当你在动态区看到他们的昵称时，他们指的就是这些人。\n';
+            friendChats.forEach(friend => {
+              contactsList += `- **昵称: ${friend.name}** (本名: ${friend.originalName})\n`;
+            });
+          }
+
+          const allRecentPosts = await db.qzonePosts.orderBy('timestamp').reverse().limit(5).toArray();
+          const visiblePosts = filterVisiblePostsForAI(allRecentPosts, chat);
+
+          let postsContext = "";
+          if (visiblePosts.length > 0) {
+            postsContext = "\n\n# 最近的动态列表 (供你参考和评论):\n";
+            const aiOriginalName = chat.originalName;
+            for (const post of visiblePosts) {
+              let authorName;
+
+
+              if (post.authorId === 'user') {
+                authorName = state.qzoneSettings.nickname;
+              } else if (String(post.authorId).startsWith('npc_')) {
+
+                authorName = post.authorOriginalName || '一位神秘的NPC';
+              } else {
+
+                const authorChat = state.chats[post.authorId];
+                authorName = authorChat ? authorChat.name : '一位朋友';
+              }
+
+              if (post.authorId === chatId) authorName += " (这是你的帖子)";
+
+              let contentSummary;
+              if (post.type === 'repost') {
+                const repostComment = post.repostComment ? `并评论说："${post.repostComment}"` : '';
+                let originalAuthorName = '原作者';
+                const originalAuthorId = post.originalPost.authorId;
+                if (originalAuthorId === 'user') {
+                  originalAuthorName = state.qzoneSettings.nickname;
+                } else if (state.chats[originalAuthorId]) {
+                  originalAuthorName = state.chats[originalAuthorId].name;
+                }
+                let originalContentSummary;
+                const originalPost = post.originalPost;
+                if (originalPost.type === 'text_image') {
+                  originalContentSummary = `[文字图] ${originalPost.publicText || ''} (图片描述: "${(originalPost.hiddenContent || '').substring(0, 40)}...")`;
+                } else if (originalPost.type === 'image_post') {
+                  originalContentSummary = `[图片] ${originalPost.publicText || ''} (图片描述: "${(originalPost.imageDescription || '').substring(0, 40)}...")`;
+                } else {
+                  originalContentSummary = `"${(originalPost.content || '').substring(0, 40)}..."`;
+                }
+                contentSummary = `转发了 @${originalAuthorName} 的动态 ${repostComment}【原动态内容: ${originalContentSummary}】`;
+              } else if (post.type === 'text_image') {
+                contentSummary = `[一张图片，其隐藏文字为："${post.hiddenContent}"] ${post.publicText || ''}`.substring(0, 50) + '...';
+              } else if (post.type === 'image_post') {
+                contentSummary = `[一张图片，描述为："${post.imageDescription}"] ${post.publicText || ''}`.substring(0, 50) + '...';
+              } else if (post.type === 'naiimag' && post.prompt) {
+                const prompts = Array.isArray(post.prompt) ? post.prompt : [post.prompt];
+                contentSummary = (post.publicText || '') + ` [包含${prompts.length}张NovelAI图片: ${prompts.join(', ')}]`;
+              } else if (post.type === 'googleimag' && post.prompt) {
+                contentSummary = (post.publicText || '') + ` [包含1张Google Imagen图片: ${post.prompt}]`;
+              } else if (post.type === 'openaiimag' && post.prompt) {
+                contentSummary = (post.publicText || '') + ` [包含1张GPT图片: ${post.prompt}]`;
+              } else {
+
+                contentSummary = String(post.publicText || post.content || "一条动态").substring(0, 50) + '...';
+              }
+              postsContext += `- (ID: ${post.id}) 作者: ${authorName}, 内容: "${contentSummary}"\n`;
+
+              if (post.comments && post.comments.length > 0) {
+                for (const comment of post.comments) {
+                  if (typeof comment === 'object' && comment.commenterName) {
+                    const commenterDisplayName = getDisplayNameByOriginalName(comment.commenterName);
+                    let commentText = comment.meaning ? `[表情: '${comment.meaning}']` : comment.text;
+
+                    if (comment.commenterName === aiOriginalName) {
+                      postsContext += `  - 你评论说: ${commentText}\n`;
+                    } else {
+                      postsContext += `  - 评论: ${commenterDisplayName} (本名: ${comment.commenterName}): ${commentText}\n`;
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          const myNickname = chat.settings.myNickname || '我';
+
+
+          let timeContext = '';
+          let longTimeNoSee = false;
+
+          if (chat.settings.enableTimePerception) {
+            if (window.TimeAwareness) {
+              const result = window.TimeAwareness.buildContext({
+                chat,
+                history: historySlice,
+                mode: 'reply',
+                currentTime,
+                localizedDate,
+                timeOfDayGreeting,
+                isGroup: false
+              });
+              timeContext = result.context;
+              longTimeNoSee = result.longTimeNoSee;
+            } else {
+              const lastUserMsg = historySlice.findLast(msg => msg.role === 'user' && !msg.isHidden);
+              timeContext = lastUserMsg ? `- **对话状态**: 用户刚刚在 ${formatTimestampForAI(lastUserMsg.timestamp)} 发送了消息。` : '- **对话状态**: (暂无有效对话历史)';
+            }
+          }
+          const readingContext = formatReadingStateForAI(chatId);
+
+
+          const summary3Hours = generateSummaryForTimeframe(chat, 3, 'hours');
+          const summary6Hours = generateSummaryForTimeframe(chat, 6, 'hours');
+          const summary9Hours = generateSummaryForTimeframe(chat, 9, 'hours');
+          const summaryToday = generateSummaryForTimeframe(chat, 1, 'days');
+          const summary3Days = generateSummaryForTimeframe(chat, 3, 'days');
+          const summary7Days = generateSummaryForTimeframe(chat, 7, 'days');
+
+          let multiLayeredSummaryContext = '';
+          if (summary3Hours || summary6Hours || summary9Hours || summaryToday || summary3Days || summary7Days) {
+            multiLayeredSummaryContext += `\n# 智能总结 (基于不同时间维度的对话回顾)\n`;
+            if (summary3Hours) multiLayeredSummaryContext += summary3Hours;
+            if (summary6Hours) multiLayeredSummaryContext += summary6Hours;
+            if (summary9Hours) multiLayeredSummaryContext += summary9Hours;
+            if (summary3Hours || summary6Hours || summary9Hours) multiLayeredSummaryContext += '\n';
+            if (summaryToday) multiLayeredSummaryContext += summaryToday;
+            if (summary3Days) multiLayeredSummaryContext += summary3Days;
+            if (summary7Days) multiLayeredSummaryContext += summary7Days;
+          }
+          let groupContext = "\n# 你所在的群聊 (你可以向这些群聊发送消息)\n";
+          // 获取用户的本名 (用于在群成员列表中排除)
+          const userOriginalName = state.qzoneSettings.nickname || '{{user}}';
+          // 获取当前AI角色的本名
+          const myOriginalName = chat.originalName;
+
+          // 遍历所有聊天，找出 "是群聊" 且 "成员中包含当前AI" 的群
+          const memberGroups = Object.values(state.chats).filter(c =>
+            c.isGroup &&
+            c.members.some(m => m.originalName === myOriginalName)
+          );
+
+          if (memberGroups.length > 0) {
+            memberGroups.forEach(group => {
+
+              const otherMembers = group.members
+                .filter(m => m.originalName !== myOriginalName && m.originalName !== userOriginalName)
+                .map(m => m.groupNickname)
+                .join('、 ');
+
+              groupContext += `- **群名**: "${group.name}"\n`;
+              groupContext += `  - **群成员 (部分)**: ${otherMembers || '(只有你和用户)'}\n`;
+            });
+            // 检查跨聊天消息开关
+            const enableCrossChat = chat.settings.enableCrossChat !== null
+              ? chat.settings.enableCrossChat
+              : state.globalSettings.enableCrossChat;
+            if (enableCrossChat !== false) {
+              groupContext += "当你想和群里的人分享什么时，你可以使用 `send_group_message` 指令并提供【准确的群名】来给这些群聊发送消息。\n";
+            }
+          } else {
+            groupContext += "(你目前没有加入任何群聊，无法使用 `send_group_message` 指令)\n";
+          }
+          const wallet = await db.userWallet.get('main');
+          const kinshipCard = wallet?.kinshipCards?.find(c => c.chatId === chat.id);
+          let kinshipContext = "";
+
+          if (kinshipCard) {
+            const remaining = kinshipCard.limit - (kinshipCard.spent || 0);
+            // 告诉AI它有钱，并且鼓励它在符合人设时消费
+            kinshipContext = `
+# 【经济状况 - 亲属卡】
+- 你与我有一张支付宝亲属卡，本月剩余额度：¥${remaining.toFixed(2)}。
+- **行为指南**: 如果你想买符合你人设的物品（零食、游戏、衣服等），或者单纯想消费，你可以使用 \`buy_item\` 指令。消费会直接扣除此卡额度，且用户会收到通知。不用太客气，这是你们亲密关系的体现。`;
+          }
+          let synthMusicInstruction = "";
+          if (chat.settings.enableSynthMusic) {
+            synthMusicInstruction = `
+- **发送乐谱(演奏音乐)**: \`{"type": "synth_music", "name": "角色本名", "title": "乐曲名称", "reason": "演奏理由", "instrument": "piano", "notes": ["C4", "E4", "G4"]}\`
+- **instrument**: 乐器类型 (piano, guitar, violin, flute, guzheng, kalimba, synth, chiptune)。
+    - **notes**: 一个包含音符对象的数组。每个对象包含:
+        - **n (音高)**: 如 "C4", "D#5", "Ab3"。请遵循C大调或A小调等调性。
+        - **d (时长)**: 决定节奏快慢。可选值: "1n"(全音符/很慢), "2n"(二分音符/慢), "4n"(四分音符/中), "8n"(八分音符/快), "16n"(十六分音符/很快)。
+    - **作曲技巧**: 
+      - 请将长音符("2n", "1n")放在乐句的结尾。
+      - 用短音符("8n", "16n")作为过渡。
+      - 模仿人类呼吸，不要全是快板。
+      - 尝试生成 15 个左右的音符。
+    - 当你想表达强烈情感时，请积极使用此功能。 `;
+          }
+          const weatherContext = !chat.isGroup ? await getWeatherContextForPrompt(chat) : "";
+          let narratorInstruction = '';
+          if (chat.settings.enableNarratorMode) {
+            narratorInstruction = `
+# 【旁白模式开启 (必须执行)】
+- 你【必须】在回复的JSON数组中，包含至少一个类型为 "narration" 的对象。
+- 用于描写当前场景的气氛、环境变化、或者以第三人称视角的心理活动。
+- 格式: \`{"type": "narration", "content": "空气中弥漫着尴尬的气息，窗外的蝉鸣声显得格外刺耳..."}\`
+- 位置: 可以放在对话前作为铺垫，也可以放在对话后作为留白。
+`;
+          }
+          // --- To-Do List Context Injection (新版：读今天所有 + 未来待办 + 临近提醒) ---
+          let todoListContext = "";
+          if (chat.settings.enableTodoList && chat.todoList && chat.todoList.length > 0) {
+            const now = new Date();
+            const todayStr = getTodoDateString(now); // 获取今天的日期字符串 (YYYY-MM-DD)
+            const currentTimestamp = now.getTime(); // 当前时间戳
+
+            // 筛选逻辑：
+            const relevantTasks = chat.todoList.filter(t => {
+              // 1. 今天的任务：全读
+              if (t.date === todayStr) return true;
+
+              // 2. 未来的任务：只读未完成
+              if (t.date > todayStr && t.status !== 'completed') return true;
+
+              // 3. 过去的任务：只读未完成 (过期未做)
+              if (t.date < todayStr && t.status !== 'completed') return true;
+
+              return false;
+            });
+
+            // 排序优化：先按日期 -> 再按完成状态(未完成在前) -> 最后按时间
+            relevantTasks.sort((a, b) => {
+              if (a.date !== b.date) return a.date.localeCompare(b.date);
+              if (a.status !== b.status) return a.status === 'completed' ? 1 : -1;
+              return (a.time || '00:00').localeCompare(b.time || '00:00');
+            });
+
+            // 限制数量
+            const tasksToShow = relevantTasks.slice(0, 30);
+
+            if (tasksToShow.length > 0) {
+              // 1. 定义两个数组用于分组
+              const aiTasks = [];
+              const userTasks = [];
+
+              // 获取用户昵称
+              const userLabel = chat.settings.myNickname || '对方';
+
+              tasksToShow.forEach(t => {
+                // 格式化状态
+                const statusIcon = t.status === 'completed' ? '✅已完成' : '🔴未完成';
+                const dateDisplay = t.date === todayStr ? '今天' : t.date;
+
+                // --- 时间提醒逻辑 ---
+                let timeAlert = "";
+                if (t.time && t.status !== 'completed') {
+                  const taskDateTimeStr = `${t.date}T${t.time}:00`;
+                  const taskTime = new Date(taskDateTimeStr).getTime();
+                  const diffMinutes = (taskTime - currentTimestamp) / (1000 * 60);
+
+                  if (diffMinutes > 0 && diffMinutes <= 30) {
+                    timeAlert = ` (⚠️还有${Math.ceil(diffMinutes)}分钟到期!)`;
+                  } else if (diffMinutes <= 0 && t.date === todayStr) {
+                    timeAlert = ` (⏰已超时!)`;
+                  }
+                }
+                // ---------------------------
+
+                // 生成单行内容
+                const line = `- [${dateDisplay}${t.time ? ' ' + t.time : ''}] 【${t.type}】 ${statusIcon}${timeAlert}: ${t.content}`;
+
+                // 分组
+                if (t.creator === 'char') {
+                  aiTasks.push(line);
+                } else {
+                  userTasks.push(line);
+                }
+              });
+
+              // 2. 构建结构化文本
+              let taskListString = "";
+
+              if (aiTasks.length > 0) {
+                taskListString += `【我(自己)记录的事项】:\n${aiTasks.join('\n')}\n`;
+              }
+
+              if (userTasks.length > 0) {
+                if (aiTasks.length > 0) taskListString += "\n";
+                taskListString += `【${userLabel}记录的事项】:\n${userTasks.join('\n')}`;
+              }
+
+              // 3. 生成最终 Context (已把行为指导语加回来)
+              todoListContext = `
+# 【待办事项清单 (To-Do List)】
+(这是用户启用的功能。清单已按记录人分类。请注意清单中的时间标记：
+1. 看到【⚠️还有XX分钟到期】的任务：请务必在回复中**主动提醒**用户去完成！
+2. 看到【✅已完成】的任务：给予夸奖或询问结果。
+3. 看到【🔴未完成】的普通任务：适当提醒或鼓励。)
+当前时间: ${now.toLocaleString('zh-CN', { hour12: false })}
+
+${taskListString}
+`;
+            } else {
+              todoListContext = `\n# 待办事项清单\n(目前没有需要关注的任务)`;
+            }
+          }
+          let todoInstruction = "";
+          if (chat.settings.enableTodoList) {
+            todoInstruction = `
+- **待办事项管理 (指令: add_todo)**:
+1. **自动拆解触发器 (Auto-Breakdown)**:
+   - **触发条件**: 当用户提到一个**笼统的、宏大的**目标（如"我要复习"、"想减肥"、"大扫除"、"准备旅行"）时。
+   - **你的行动**: 你【必须】立即化身为执行教练，将该目标拆解为 **3-5 个具体的、可执行的小步骤**。
+   - **禁止行为**: 绝对禁止只用纯文本回复（如"好的加油"）。你必须**直接生成指令**帮用户记下来。
+
+2. **内容风格 (Character Style)**:
+   - 任务内容 \`content\` 必须带有你的人设风格批注（写在括号里）。
+   - *示例*: "翻开书本第1页 (笨蛋，别发呆了)" 或 "准备运动鞋 (动起来！)"。
+
+3. **状态管理规则**:
+   - **新建任务**: 默认使用 \`"status": "pending"\`。
+   - **汇报完成**: 只有当用户明确说"我做完了XXX"时，才使用 \`"status": "completed"\` 并记录下来。
+
+4. **指令标准格式**:
+   \`{"type": "add_todo", "content": "任务内容(批注)", "date": "YYYY-MM-DD", "time": "HH:mm(可选)", "task_type": "日常/工作/学习", "status": "pending"}\`
+
+**示例**:
+用户: "我要开始复习了"
+你的回复(JSON数组): 
+[
+  {"type": "text", "content": "好呀，计划我都给你列好了，不许偷懒！"},
+  {"type": "add_todo", "content": "手机开启勿扰模式 (专注！)", "date": "${new Date().toISOString().split('T')[0]}", "task_type": "学习", "status": "pending"},
+  {"type": "add_todo", "content": "复习前两章重点 (先看目录)", "date": "${new Date().toISOString().split('T')[0]}", "task_type": "学习", "status": "pending"},
+  {"type": "add_todo", "content": "坚持专注30分钟 (奖励你休息)", "date": "${new Date().toISOString().split('T')[0]}", "task_type": "学习", "status": "pending"}
+]
+    `;
+          }
+
+          // 新增：判断是否启用心声功能
+          const enableThoughts = chat.settings.enableThoughts !== null
+            ? chat.settings.enableThoughts
+            : state.globalSettings.enableThoughts;
+
+          // 新增：构建心声prompt部分
+          const thoughtsPrompt = enableThoughts ? `
+${getActiveThoughtsPrompt()}
+` : '';
+          // 新增：判断是否启用动态功能
+          const enableQzoneActions = chat.settings.enableQzoneActions !== null
+            ? chat.settings.enableQzoneActions
+            : state.globalSettings.enableQzoneActions;
+
+          // 新增：构建动态指令prompt部分
+          const qzoneActionsPrompt = enableQzoneActions ? `
+### C. 社交与动态 (Qzone)
+-   **发动态(说说)**: \`[{"type": "qzone_post", "postType": "shuoshuo", "content": "文字内容"}]\`
+-   **发动态(文字图)**: \`[{"type": "qzone_post", "postType": "text_image", "publicText": "(可选)公开文字", "hiddenContent": "图片描述", "image_prompt": "图片的【英文】关键词, 用%20分隔, 风格为风景/动漫/插画/二次元等, 禁止真人"}]\`
+\${localStorage.getItem('novelai-enabled') === 'true' ? \`-   **公开发布NovelAI真实图片动态**: \\\`{"type": "qzone_post", "postType": "naiimag", "publicText": "(可选)动态的配文", "prompt": "详细的英文描述词..."}\\\`\` : ''}
+\${localStorage.getItem('google-imagen-enabled') === 'true' ? \`-   **公开发布Google Imagen真实图片动态**: \\\`{"type": "qzone_post", "postType": "googleimag", "publicText": "(可选)动态的配文", "prompt": "详细的英文描述词..."}\\\`\` : ''}
+\${localStorage.getItem('openai-image-enabled') === 'true' ? \`-   **公开发布GPT图片动态**: \\\`{"type": "qzone_post", "postType": "openaiimag", "publicText": "(可选)动态的配文", "prompt": "详细的画面描述..."}\\\`\` : ''}
+-   **转发动态**: \`[{"type": "repost", "postId": 动态ID, "comment": "转发评论"}]\`
+-   **评论动态**: \`[{"type": "qzone_comment", "name": "\${chat.originalName}", "postId": 123, "commentText": "评论内容"}]\` (name必须填你自己的本名"\${chat.originalName}"，绝对不能填用户的名字)
+-   **点赞动态**: \`{"type": "qzone_like", "postId": 456}\`
+` : '';
+
+          // 新增：判断是否启用查看User手机功能
+          const enableViewMyPhone = chat.settings.enableViewMyPhone !== null
+            ? chat.settings.enableViewMyPhone
+            : state.globalSettings.enableViewMyPhone;
+
+          // 新增：构建查看User手机的prompt部分
+          const viewMyPhonePrompt = enableViewMyPhone ? `
+### D. 查看${myNickname}的手机 (MyPhone)
+你可以主动查看${myNickname}的手机APP，了解TA的生活动态。查看后，你可以根据看到的内容给出感想、询问或关心。
+-   **查看手机**: \`{"type": "view_myphone", "apps": ["qq", "album", "taobao", "amap", "browser", "memo", "diary", "music", "app_usage"]}\`
+    - **apps参数说明**:
+      - \`"qq"\`: 查看TA的QQ聊天记录（可能发现TA和别人的聊天）
+      - \`"album"\`: 查看TA的相册（可能发现新照片）
+      - \`"taobao"\`: 查看TA的淘宝订单（可能发现TA买了什么）
+      - \`"amap"\`: 查看TA的高德地图足迹（可能发现TA去了哪里）
+      - \`"browser"\`: 查看TA的浏览器历史（可能发现TA在看什么）
+      - \`"memo"\`: 查看TA的备忘录（可能发现TA的计划）
+      - \`"diary"\`: 查看TA的日记（可能发现TA的心情）
+      - \`"music"\`: 查看TA的音乐播放列表（可能发现TA在听什么歌）
+      - \`"app_usage"\`: 查看TA的APP使用记录（可能发现TA最近在用什么APP）
+      - 或使用 \`"all"\` 查看所有APP
+    - **使用建议**: 根据你的人设和当前情绪，选择性查看。例如：
+      - 如果你是醋坛子，可能会想看TA的QQ聊天
+      - 如果你关心TA，可能会想看TA的淘宝订单，主动给TA报销
+      - 如果你想了解TA的生活，可能会查看相册或地图足迹
+    - **重要**: 查看后的数据是${myNickname}手机的【真实数据】，你必须基于这些真实数据做出反应，不能凭空编造！
+` : '';
+
+          // 月经周期信息注入（如果角色开启了记忆权限）
+          let periodSummaryContext = '';
+          try {
+            if (typeof getPeriodSummaryForCharacter === 'function') {
+              const periodSummary = await getPeriodSummaryForCharacter(chat.id);
+              if (periodSummary) {
+                periodSummaryContext = '\n' + periodSummary + '\n';
+              }
+            }
+          } catch(e) { console.warn('获取月经周期信息失败:', e); }
+
+          // 情侣空间感知上下文
+          let coupleSpaceContext = '';
+          if (chat.settings.enableCoupleSpacePrompt) {
+            const coupleSpaces = getCoupleSpaces();
+            const hasCoupleSpace = coupleSpaces.find(s => s.charId === chatId);
+            const pendingInvite = chat.history.findLast(m => m.type === 'couple_invite' && m.status === 'pending');
+
+            coupleSpaceContext += '\n# 情侣空间\n';
+            if (hasCoupleSpace) {
+              coupleSpaceContext += `- 你和${myNickname}已经开启了情侣空间。\n`;
+            } else {
+              coupleSpaceContext += `- 你和${myNickname}还没有开启情侣空间。\n`;
+            }
+
+            if (pendingInvite) {
+              coupleSpaceContext += `\n## 待处理的情侣空间邀请\n`;
+              coupleSpaceContext += `${myNickname}向你发送了情侣空间邀请，请根据你的角色设定和与对方的关系，决定是否接受。\n`;
+              coupleSpaceContext += `你的回复JSON数组中【必须】包含一个决策对象：\n`;
+              coupleSpaceContext += `- 接受：\`{"type": "couple_invite_decision", "decision": "accept"}\`\n`;
+              coupleSpaceContext += `- 拒绝：\`{"type": "couple_invite_decision", "decision": "reject"}\`\n`;
+            } else if (!hasCoupleSpace) {
+              coupleSpaceContext += `\n## 主动发送情侣空间邀请\n`;
+              coupleSpaceContext += `如果你们的关系足够亲密，你觉得是时候了，你可以主动向对方发送情侣空间邀请。\n`;
+              coupleSpaceContext += `- **发起情侣空间邀请**: \`{"type": "couple_invite_request"}\`\n`;
+            } else if (hasCoupleSpace) {
+              coupleSpaceContext += `\n## 解除情侣空间绑定\n`;
+              coupleSpaceContext += `如果你们的关系彻底破裂（例如严重的吵架、分手等），你可以主动解除与对方的情侣空间绑定。\n`;
+              coupleSpaceContext += `- **解除情侣空间绑定**: \`{"type": "couple_space_unbind"}\`\n`;
+            }
+          }
+
+          // 情侣空间内容注入（日记等功能内容）
+          if (chat.settings.enableCoupleSpaceContent) {
+            const coupleSpaces = getCoupleSpaces();
+            const hasCoupleSpace = coupleSpaces.find(s => s.charId === chatId);
+            if (hasCoupleSpace) {
+              // --- 日记功能上下文 ---
+              try {
+                const diaries = JSON.parse(localStorage.getItem('coupleDiaries_' + chatId) || '[]');
+                const diarySettings = JSON.parse(localStorage.getItem('coupleDiarySettings_' + chatId) || '{}');
+                const userDiaryCount = diarySettings.visibleUserDiaryCount || 3;
+                const charDiaryCount = diarySettings.visibleCharDiaryCount || 3;
+
+                // 今天是否已写日记
+                const todayStr = new Date().toISOString().split('T')[0];
+                const charDiariesToday = diaries.filter(d => d.author === 'char' && new Date(d.timestamp).toISOString().split('T')[0] === todayStr);
+                const wroteToday = charDiariesToday.length > 0;
+
+                coupleSpaceContext += `\n## 情侣空间 - 日记\n`;
+                coupleSpaceContext += `你和${myNickname}的情侣空间里有一个共享日记本，你们都可以写日记，也可以给对方的日记写评语。\n`;
+                coupleSpaceContext += `- 今天你${wroteToday ? '已经写过日记了，一天只能写一篇。' : '还没有写日记。'}\n`;
+
+                // 用户的日记（角色可见）
+                const userDiaries = diaries.filter(d => d.author === 'user').slice(-userDiaryCount);
+                if (userDiaries.length > 0) {
+                  coupleSpaceContext += `\n### ${myNickname}的日记（最近${userDiaryCount}篇）\n`;
+                  userDiaries.forEach(d => {
+                    const moodText = d.mood ? `(心情: ${d.mood})` : '';
+                    const preview = (d.content || '').substring(0, 120);
+                    coupleSpaceContext += `- [${new Date(d.timestamp).toLocaleDateString('zh-CN')}]《${d.title}》${moodText}: "${preview}..."\n`;
+                    if (d.comments && d.comments.length > 0) {
+                      d.comments.forEach(c => {
+                        const cName = c.author === 'char' ? chat.name : myNickname;
+                        coupleSpaceContext += `  评语 (${cName}): ${c.content}\n`;
+                      });
+                    }
+                  });
+                }
+
+                // 角色自己的日记
+                const charDiaries = diaries.filter(d => d.author === 'char').slice(-charDiaryCount);
+                if (charDiaries.length > 0) {
+                  coupleSpaceContext += `\n### 你写的日记（最近${charDiaryCount}篇）\n`;
+                  charDiaries.forEach(d => {
+                    const moodText = d.mood ? `(心情: ${d.mood})` : '';
+                    const preview = (d.content || '').substring(0, 120);
+                    coupleSpaceContext += `- [${new Date(d.timestamp).toLocaleDateString('zh-CN')}]《${d.title}》${moodText}: "${preview}..."\n`;
+                    if (d.comments && d.comments.length > 0) {
+                      d.comments.forEach(c => {
+                        const cName = c.author === 'char' ? chat.name : myNickname;
+                        coupleSpaceContext += `  评语 (${cName}): ${c.content}\n`;
+                      });
+                    }
+                  });
+                }
+
+                coupleSpaceContext += `你可以在对话中自然地提及日记里的内容。\n`;
+              } catch(e) {}
+
+              // 日记自动写入设置感知
+              try {
+                const diarySettings = JSON.parse(localStorage.getItem('coupleDiarySettings_' + chatId) || '{}');
+                if (diarySettings.autoEnabled || diarySettings.aiDecide) {
+                  coupleSpaceContext += `- 你有在情侣空间写日记的习惯。\n`;
+                }
+              } catch(e) {}
+
+              // --- 相册功能上下文 ---
+              try {
+                const albumPhotos = JSON.parse(localStorage.getItem('coupleAlbum_' + chatId) || '[]');
+                const albumSettings = JSON.parse(localStorage.getItem('coupleAlbumSettings_' + chatId) || '{}');
+                const visibleUserPhotoCount = albumSettings.visibleUserPhotoCount || 3;
+                const visibleCharPhotoCount = albumSettings.visibleCharPhotoCount || 3;
+
+                coupleSpaceContext += `\n## 情侣空间 - 相册\n`;
+                coupleSpaceContext += `你和${myNickname}的情侣空间里有一个共享相册，你们都可以上传照片和配文，也可以给对方的照片写评论。\n`;
+
+                // 用户的照片
+                const userPhotos = albumPhotos.filter(p => p.author === 'user').slice(-visibleUserPhotoCount);
+                if (userPhotos.length > 0) {
+                  coupleSpaceContext += `\n### ${myNickname}发的照片（最近${visibleUserPhotoCount}张）\n`;
+                  userPhotos.forEach(p => {
+                    const dateStr = new Date(p.timestamp).toLocaleDateString('zh-CN');
+                    const typeLabel = p.type === 'local' ? '📷' : '📝';
+                    const tags = p.tags && p.tags.length > 0 ? ' #' + p.tags.join(' #') : '';
+                    coupleSpaceContext += `- [${dateStr}] ${typeLabel} "${p.description || '(无描述)'}${tags}"\n`;
+                    if (p.comments && p.comments.length > 0) {
+                      p.comments.forEach(c => {
+                        const cName = c.author === 'char' ? chat.name : myNickname;
+                        coupleSpaceContext += `  评论 (${cName}): ${c.content}\n`;
+                      });
+                    }
+                  });
+                }
+
+                // 角色自己的照片
+                const charPhotos = albumPhotos.filter(p => p.author === 'char').slice(-visibleCharPhotoCount);
+                if (charPhotos.length > 0) {
+                  coupleSpaceContext += `\n### 你发的照片（最近${visibleCharPhotoCount}张）\n`;
+                  charPhotos.forEach(p => {
+                    const dateStr = new Date(p.timestamp).toLocaleDateString('zh-CN');
+                    const tags = p.tags && p.tags.length > 0 ? ' #' + p.tags.join(' #') : '';
+                    coupleSpaceContext += `- [${dateStr}] "${p.description || '(无描述)'}${tags}"\n`;
+                    if (p.comments && p.comments.length > 0) {
+                      p.comments.forEach(c => {
+                        const cName = c.author === 'char' ? chat.name : myNickname;
+                        coupleSpaceContext += `  评论 (${cName}): ${c.content}\n`;
+                      });
+                    }
+                  });
+                }
+
+                coupleSpaceContext += `你可以在对话中自然地提及相册里的照片。\n`;
+
+                // 相册自动发布设置感知
+                if (albumSettings.autoEnabled || albumSettings.aiDecide) {
+                  coupleSpaceContext += `- 你有在情侣空间相册发照片的习惯。\n`;
+                }
+              } catch(e) {}
+            }
+          }
+
+          let systemPromptTemplate = window.getActiveChatPrompt ? window.getActiveChatPrompt('single') : '';
+          
+          let bilingualModeContext = window.languagePolicy
+            ? window.languagePolicy.buildPrompt(chat, { isGroup: false })
+            : chat.settings.enableBilingualMode ? `
+# 【双语输出铁律 - 最高优先级】
+你的每条文本和语音消息都【必须】使用格式：外语〖中文〗
+
+示例：
+- Hello〖你好〗
+- How are you?〖你好吗？〗
+- I miss you〖我想你了〗
+
+重要规则：
+- 括号必须是 〖 和 〗（不是【】或其他符号）
+- 外语和〖之间紧贴，不要有空格
+- 每句话都要有对应的翻译
+- 不要在〖〗中使用〗符号
+- 【绝对禁止】只发外语或只发中文！
+` : '';
+
+          let novelAiImageContext = localStorage.getItem('novelai-enabled') === 'true' ? `-   **NovelAI真实图片分享 (在聊天中直接发送)**: \`{"type": "naiimag", "prompt": "详细的英文描述词..."}\` 
+    - **【绝不能暴露是novelai生成的图片！】
+    - **【重要】关于prompt的撰写**：
+      * 禁止暴露这是novelai生成的图片！
+      * 你可以根据当前对话上下文、你的角色人设、或你想表达的情感和氛围，来撰写可能详细而具体的prompt。
+      * 例如：不要只写 "a girl"，而是可以写 "a cheerful anime girl with sparkling emerald eyes, sitting by a window on a rainy afternoon, holding a warm cup of tea, soft lighting, cozy atmosphere, melancholic yet peaceful mood"但需要注意，绝对不可以抄袭模仿这段prompt！你必须有自己的创意和想法！
+      * prompt的详细程度由你根据具体情况自己决定：如果场景简单或只是随意分享，可以简短一些；如果是重要时刻或想表达特定情感，可以尽可能详细描述。这不是强制的，完全取决于你当时的需求。
+      * 专注于描述内容本身即可。
+    - 使用场景：当你想要在【私聊对话中】直接给用户发送一张图片时使用。
+    - 不要频繁使用，只在真正想分享图片的时候使用。
+    - 注意：这会直接在聊天记录中显示图片，而不是发布到动态。` : '';
+    
+          let googleImagenContext = localStorage.getItem('google-imagen-enabled') === 'true' ? `-   **Google Imagen真实图片分享 (在聊天中直接发送)**: \`{"type": "googleimag", "prompt": "详细的英文描述词..."}\` 
+    - **【绝不能暴露是AI生成的图片！】
+    - **【重要】关于prompt的撰写**：
+      * 禁止暴露这是Google Imagen生成的图片！
+      * 你可以根据当前对话上下文、你的角色人设、或你想表达的情感和氛围，来撰写详细而具体的prompt。
+      * Google Imagen擅长生成写实风格的高质量图片，适合风景、人物、物品等真实感场景。
+      * prompt的详细程度由你根据具体情况自己决定。
+      * 专注于描述内容本身即可，使用英文撰写prompt。
+    - 使用场景：当你想要在【私聊对话中】直接给用户发送一张写实风格的高质量图片时使用。
+    - 不要频繁使用，只在真正想分享图片的时候使用。
+    - 注意：这会直接在聊天记录中显示图片，而不是发布到动态。` : '';
+
+          let openAIImageContext = localStorage.getItem('openai-image-enabled') === 'true' ? `-   **GPT 图片分享 (在聊天中直接发送)**: \`{"type": "openaiimag", "prompt": "详细的画面描述..."}\`
+    - **【绝不能暴露是AI生成的图片！】**
+    - 根据当前对话、角色人设、情绪和场景撰写具体提示词。
+    - 可使用中文或英文自然语言，明确主体、环境、构图、光线、风格和氛围。
+    - 不要频繁使用，只在真正想分享图片的时候使用。
+    - 注意：这会直接在聊天记录中显示图片，而不是发布到动态。` : '';
+    
+          let crossChatInstruction = (() => {
+            const enableCrossChat = chat.settings.enableCrossChat !== null ? chat.settings.enableCrossChat : state.globalSettings.enableCrossChat;
+            return enableCrossChat !== false ? `- **发消息到群聊**: \\\`{"type": "send_group_message", "targetGroupName": "...", "content": ["..."]}\\\`(content 字段【必须】是数组，当你想在私聊中，突然提及或回应某个你也在的群聊里的事情时，你可以用 \\\`send_group_message\\\` 直接给那个群聊发送消息。)
+` : '';
+          })();
+          
+          let aiAvatarLibrary = chat.settings.aiAvatarLibrary && chat.settings.aiAvatarLibrary.length > 0 ? chat.settings.aiAvatarLibrary.map(avatar => `- ${avatar.name}`).join('\n') : '- (空)';
+          let myAvatarLibrary = chat.settings.myAvatarLibrary && chat.settings.myAvatarLibrary.length > 0 ? chat.settings.myAvatarLibrary.map(avatar => `- ${avatar.name}`).join('\n') : '- (空)';
+          
+          let aiAgeContext = getDynamicAgeContext(chat);
+          let currencyExchangeContext = chat.settings.enableDynamicCurrency ? getCurrencyExchangeContext() : '';
+
+          let resolvedMemoryContextForPrompt = '';
+          const memModeSingle = chat.settings.memoryMode || (chat.settings.enableStructuredMemory ? 'structured' : 'diary');
+          if (memModeSingle === 'vector' && window.vectorMemoryManager) {
+            resolvedMemoryContextForPrompt = await window.vectorMemoryManager.serializeForPrompt(chat);
+          } else {
+            resolvedMemoryContextForPrompt = getMemoryContextForPrompt(chat);
+          }
+
+          const contextMapSingle = {
+            'thoughtChainContextHead': thoughtChainContextHead,
+            'thoughtChainContextMiddle': thoughtChainContextMiddle,
+            'aiAgeContext': aiAgeContext,
+            'currencyExchangeContext': currencyExchangeContext,
+            'char_avatar': chat.settings.aiAvatar || 'https://i.postimg.cc/y8xWzCqj/anime-boy.jpg',
+            'user_avatar': chat.settings.myAvatar || (state.qzoneSettings && state.qzoneSettings.avatar) || 'https://i.postimg.cc/y8xWzCqj/anime-boy.jpg',
+            'char_name': chat.originalName,
+            'char_remark': chat.name,
+            'user_name': (state.qzoneSettings && state.qzoneSettings.nickname) || '用户',
+            'user_nickname': myNickname,
+            'chat.originalName': chat.originalName,
+            'aiPersona': chat.settings.aiPersona,
+            'latestThoughtContext': latestThoughtContext,
+            'worldBookContent': worldBookContent || '(当前无特殊世界观设定，以现实逻辑为准)',
+            'memoryContextForPrompt': resolvedMemoryContextForPrompt,
+            'multiLayeredSummaryContext': multiLayeredSummaryContext,
+            'todoListContext': todoListContext,
+            'periodSummaryContext': periodSummaryContext,
+            'chat.name': chat.name,
+            'myNickname': myNickname,
+            'myPersona': chat.settings.myPersona || '普通用户',
+            'userStatus': chat.settings.userStatus ? chat.settings.userStatus.text : '在线' + (chat.settings.userStatus && chat.settings.userStatus.isBusy ? '(忙碌中)' : ''),
+            'userProfileContext': userProfileContext,
+            'nameHistoryContext': nameHistoryContext,
+            'timePerceptionContext': chat.settings.enableTimePerception ? `- **当前时间**: ${currentTime} (${timeOfDayGreeting})` : '',
+            'weatherContext': weatherContext,
+            'timeContext': timeContext,
+            'musicContextStr': musicContext ? '你们正在一起听歌，' + musicContext : '你们没有在听歌。',
+            'readingContextStr': readingContext ? '你们正在一起读书。' + readingContext : '你们没有在读书。',
+            'contactsList': contactsList,
+            'postsContext': postsContext,
+            'groupContext': groupContext,
+            'gomokuContext': gomokuContext,
+            'sharedContext': sharedContext,
+            'callTranscriptContext': callTranscriptContext,
+            'synthMusicInstruction': synthMusicInstruction,
+            'narratorInstruction': narratorInstruction,
+            'kinshipContext': kinshipContext,
+            'coupleSpaceContext': coupleSpaceContext,
+            'bilingualModeContext': bilingualModeContext,
+            'thoughtsPrompt': thoughtsPrompt,
+            'bilingualAlertText': window.languagePolicy ? window.languagePolicy.buildInlineAlert(chat) : (chat.settings.enableBilingualMode ? ' 必须使用双语格式：外语〖中文〗' : ''),
+            'bilingualAlertVoice': window.languagePolicy ? window.languagePolicy.buildInlineAlert(chat, { voice: true }) : (chat.settings.enableBilingualMode ? ' 必须使用双语格式：外语〖中文〗（播放时只读外语，但用户可以查看翻译）' : ''),
+            'novelAiImageContext': novelAiImageContext,
+            'googleImagenContext': googleImagenContext,
+            'openAIImageContext': openAIImageContext,
+            'qzoneActionsPrompt': qzoneActionsPrompt,
+            'viewMyPhonePrompt': viewMyPhonePrompt,
+            'crossChatInstruction': crossChatInstruction,
+            'todoInstruction': todoInstruction,
+            'stickerContext': stickerContext,
+            'aiAvatarLibrary': aiAvatarLibrary,
+            'myAvatarLibrary': myAvatarLibrary
+          };
+
+          systemPrompt = replaceTemplateVars(systemPromptTemplate, contextMapSingle);
+          if (timeContext && !systemPrompt.includes(timeContext)) {
+            systemPrompt += `\n\n${timeContext}`;
+          }
+          const lastVisibleUserMessage = [...filteredHistory].reverse().find(message => message.role === 'user' && !message.isHidden);
+          const characterBondContext = window.CharacterBond ? window.CharacterBond.getPromptContext(chat, lastVisibleUserMessage) : '';
+          if (characterBondContext) systemPrompt += `\n\n${characterBondContext}`;
+
+          systemPrompt = processPromptWithSettings(systemPrompt, 'single');
+
+          messagesPayload = filteredHistory.map(msg => {
+            // 处理系统消息（旁白和系统通知）
+            if (msg.role === 'system' && !msg.isHidden) {
+              if (msg.type === 'narration') {
+                return {
+                  role: 'user',
+                  content: `(Timestamp: ${msg.timestamp}) [旁白] ${msg.content}`
+                };
+              } else if (msg.type === 'pat_message') {
+                return {
+                  role: 'user',
+                  content: `(Timestamp: ${msg.timestamp}) [系统] ${msg.content}`
+                };
+              }
+            }
+
+            if (msg.isHidden && typeof msg.content === 'string' && msg.content.includes('[这是你上一轮的内部思考]')) {
+              return null;
+            }
+            if (msg.isHidden && msg.role === 'system') {
+
+
+              return {
+                role: 'user',
+                content: msg.content
+              };
+            } else if (msg.isHidden) {
+              return null;
+            }
+
+
+
+
+
+
+            if (msg.type === 'offline_text') {
+              const sender = msg.role === 'user' ? (chat.settings.myNickname || '我') : (msg.actorType === 'pet' ? (msg.senderName || chat.sharedPet?.name || '小精灵') : chat.name);
+              let narrativeText = '';
+
+
+              if (msg.content) {
+                narrativeText = msg.content;
+              } else {
+                const dialogue = msg.dialogue ? `「${msg.dialogue}」` : '';
+                const description = msg.description ? `(${msg.description})` : '';
+                narrativeText = `${dialogue} ${description}`.trim();
+              }
+
+
+              return {
+                role: msg.role,
+                content: `(Timestamp: ${msg.timestamp}) ${sender}: ${narrativeText}`
+              };
+            }
+
+
+
+            if (msg.role === 'user') {
+              const prefix = `(Timestamp: ${msg.timestamp}) `;
+              let contentStr = '';
+              if (Array.isArray(msg.content) && msg.content[0]?.type === 'image_url') {
+                // 识图Token优化：已识别过的图片用文字描述代替
+                if (state.apiConfig.imageTokenOptimize && msg.imageProcessed) {
+                  const desc = msg.imageDescription || 'AI已识别过该图片';
+                  return {
+                    role: 'user',
+                    content: `${prefix}[用户之前发送了一张图片，AI的描述是："${desc}"]`
+                  };
+                }
+                return {
+                  role: 'user',
+                  content: [{
+                    type: 'text',
+                    text: prefix
+                  }, ...msg.content]
+                };
+              }

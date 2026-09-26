@@ -1,0 +1,806 @@
+            const coupleSpaces = getCoupleSpaces();
+            const hasCoupleSpace = coupleSpaces.find(s => s.charId === chatId);
+            const pendingInvite = chat.history.findLast(m => m.type === 'couple_invite' && m.status === 'pending');
+            
+            if (!hasCoupleSpace && !pendingInvite) {
+              const inviteMsg = {
+                role: 'assistant',
+                type: 'couple_invite',
+                status: 'pending',
+                senderName: chat.originalName || chat.name,
+                timestamp: messageTimestamp++
+              };
+              chat.history.push(inviteMsg);
+              
+              if (isViewingThisChat) {
+                appendMessage(inviteMsg, chat);
+              }
+            }
+            aiMessage = null;
+            break;
+          }
+          case 'couple_space_unbind': {
+            if (!chat.settings.enableCoupleSpacePrompt) break;
+            
+            const coupleSpaces = getCoupleSpaces();
+            const hasCoupleSpace = coupleSpaces.find(s => s.charId === chatId);
+            
+            if (hasCoupleSpace) {
+              const newSpaces = coupleSpaces.filter(s => s.charId !== chatId);
+              saveCoupleSpaces(newSpaces);
+              
+              if (localStorage.getItem('coupleSpaceLastId') === chatId) {
+                localStorage.removeItem('coupleSpaceLastId');
+              }
+              
+              const myNickname = chat.settings.myNickname || '我';
+              
+              const unbindMsg = {
+                role: 'system',
+                type: 'system_notification',
+                content: `[系统提示："${chat.originalName || chat.name}"主动解除了与"${myNickname}"的情侣空间绑定。]`,
+                timestamp: messageTimestamp++
+              };
+              chat.history.push(unbindMsg);
+              
+              if (isViewingThisChat) {
+                appendMessage(unbindMsg, chat);
+              }
+              
+              // 关闭情侣空间UI（如果处于打开状态）
+              try {
+                if (document.getElementById('couple-space-screen') && document.getElementById('couple-space-screen').classList.contains('active')) {
+                  showCoupleSpaceSelect('list');
+                }
+              } catch(e) {}
+            }
+            
+            aiMessage = null;
+            break;
+          }
+          case 'couple_invite_decision': {
+            const pendingInvite = chat.history.findLast(m => m.type === 'couple_invite' && m.status === 'pending');
+            if (pendingInvite) {
+              const myNickname = chat.settings.myNickname || '我';
+              const isAccept = msgData.decision === 'accept';
+
+              // 更新原始邀请卡片状态
+              pendingInvite.status = isAccept ? 'accepted' : 'rejected';
+
+              // 添加角色的响应卡片
+              const responseCard = {
+                role: 'assistant',
+                type: 'couple_invite_response',
+                decision: isAccept ? 'accept' : 'reject',
+                senderName: chat.originalName || chat.name,
+                timestamp: Date.now()
+              };
+              chat.history.push(responseCard);
+
+              // 添加隐藏系统消息作为上下文
+              const hiddenMsg = {
+                role: 'system',
+                content: isAccept
+                  ? `[系统提示：${chat.name}接受了${myNickname}的邀请，你们已经开启了情侣空间。]`
+                  : `[系统提示：${chat.name}拒绝了${myNickname}的情侣空间邀请。]`,
+                timestamp: Date.now() + 1,
+                isHidden: true
+              };
+              chat.history.push(hiddenMsg);
+
+              // 如果接受，创建情侣空间
+              if (isAccept) {
+                confirmCoupleSpace(chatId);
+              }
+
+              await db.chats.put(chat);
+              renderChatInterface(chatId);
+              renderChatList();
+            }
+            // 这个类型不产生普通消息，跳过
+            aiMessage = null;
+            break;
+          }
+          case 'send_private_message': {
+            // 检查跨聊天消息开关
+            const enableCrossChat = chat.settings.enableCrossChat !== null
+              ? chat.settings.enableCrossChat
+              : state.globalSettings.enableCrossChat;
+            
+            if (enableCrossChat === false) {
+              console.log(`[跨聊天消息] 群聊→私聊功能已关闭，已拦截 send_private_message 指令`);
+              aiMessage = null;
+              continue;
+            }
+
+            const senderOriginalName = msgData.name;
+            const recipientOriginalName = msgData.recipient;
+
+            const userOriginalName = state.qzoneSettings.nickname || '{{user}}';
+            const userNickname = chat.settings.myNickname || '我';
+
+            // 兼容多种写法：接受本名、昵称、"我"、"{{user}}"
+            if (recipientOriginalName === userOriginalName || 
+                recipientOriginalName === userNickname ||
+                recipientOriginalName === '我' ||
+                recipientOriginalName === '{{user}}') {
+
+              const privateChat = Object.values(state.chats).find(c =>
+                !c.isGroup && c.originalName === senderOriginalName
+              );
+
+              if (privateChat) {
+
+                lastPrivateMessagesSent = [];
+
+                const messagesToSend = Array.isArray(msgData.content) ? msgData.content : [msgData.content];
+                let newMessagesCount = 0;
+
+                for (const contentString of messagesToSend) {
+                  if (!contentString || !contentString.trim()) continue;
+
+                  const privateMessage = {
+                    role: 'assistant',
+                    senderName: senderOriginalName,
+                    content: contentString,
+                    timestamp: messageTimestamp++
+                  };
+
+
+                  lastPrivateMessagesSent.push({
+                    chatId: privateChat.id,
+                    timestamp: privateMessage.timestamp
+                  });
+
+                  privateChat.history.push(privateMessage);
+                  newMessagesCount++;
+                }
+
+                if (newMessagesCount > 0) {
+                  if (state.activeChatId !== privateChat.id) {
+                    privateChat.unreadCount = (privateChat.unreadCount || 0) + newMessagesCount;
+                    showNotification(privateChat.id, `${privateChat.name} 发来了 ${newMessagesCount} 条新消息`);
+                  }
+                  await db.chats.put(privateChat);
+                }
+
+                aiMessage = null;
+
+              } else {
+                console.warn(`AI ${senderOriginalName} 尝试发送私信，但未找到其对应的私聊会话。`);
+                aiMessage = null;
+              }
+            } else {
+              console.warn(`AI 尝试发送私信给非用户角色 (${recipientOriginalName})，此功能暂不支持。`);
+              aiMessage = null;
+            }
+
+            continue;
+          }
+          case 'send_group_message': {
+            // 检查跨聊天消息开关
+            const enableCrossChat = chat.settings.enableCrossChat !== null
+              ? chat.settings.enableCrossChat
+              : state.globalSettings.enableCrossChat;
+            
+            if (enableCrossChat === false) {
+              console.log(`[跨聊天消息] 私聊→群聊功能已关闭，已拦截 send_group_message 指令`);
+              aiMessage = null;
+              continue;
+            }
+
+            // 这是从私聊 -> 群聊 的新功能
+            const senderOriginalName = msgData.name || chat.originalName; // 'chat' 是当前的私聊
+            const targetGroupName = msgData.targetGroupName;
+            const messagesToSend = Array.isArray(msgData.content) ? msgData.content : [String(msgData.content)];
+
+            if (!targetGroupName) {
+              console.warn(`AI ${senderOriginalName} 尝试发送群聊消息，但未指定 targetGroupName。`);
+              continue;
+            }
+
+            // 1. 查找目标群聊，并确保AI是该群的成员
+            const targetGroupChat = Object.values(state.chats).find(c =>
+              c.isGroup &&
+              c.name === targetGroupName &&
+              c.members.some(m => m.originalName === senderOriginalName)
+            );
+
+            if (targetGroupChat) {
+              // 2. 找到了群聊，准备发送消息
+              let newMessagesCount = 0;
+              for (const contentString of messagesToSend) {
+                if (!contentString || !contentString.trim()) continue;
+
+                // 3. 创建一个标准群聊AI消息
+                const groupMessage = {
+                  role: 'assistant',
+                  senderName: senderOriginalName, // AI的本名
+                  content: contentString,
+                  timestamp: messageTimestamp++ // 使用主循环的时间戳
+                };
+
+                // 4. 将消息添加到目标群聊的历史记录中
+                targetGroupChat.history.push(groupMessage);
+                newMessagesCount++;
+              }
+
+              if (newMessagesCount > 0) {
+                // 5. 更新群聊的未读状态和通知
+                if (state.activeChatId !== targetGroupChat.id) {
+                  targetGroupChat.unreadCount = (targetGroupChat.unreadCount || 0) + newMessagesCount;
+
+                  // 为了通知，获取AI在该群的群昵称
+                  const member = targetGroupChat.members.find(m => m.originalName === senderOriginalName);
+                  const senderDisplayName = member ? member.groupNickname : senderOriginalName;
+
+                  showNotification(targetGroupChat.id, `${senderDisplayName}: ${messagesToSend[0]}`);
+                }
+
+                // 6. 保存对 *目标群聊* 的更改
+                await db.chats.put(targetGroupChat);
+                state.chats[targetGroupChat.id] = targetGroupChat; // 确保内存状态也更新
+              }
+
+              // 7. 这条消息不应显示在当前的私聊中，所以设置 aiMessage 为 null
+              aiMessage = null;
+
+            } else {
+              console.warn(`AI ${senderOriginalName} 尝试向一个不存在的或TA不在的群聊 "${targetGroupName}" 发送消息。`);
+              // (可选) 可以在私聊中生成一条 "发送失败" 的消息，但目前保持安静
+              aiMessage = null;
+            }
+
+            continue; // 继续处理下一条指令
+          }
+          case 'view_myphone':
+            // 处理查看User手机的请求
+            if (!chat.isGroup && msgData.apps) {
+              const userChat = state.chats[chatId]; // 当前聊天就是User的角色
+              let appsToView = Array.isArray(msgData.apps) ? msgData.apps : [msgData.apps];
+
+              // 如果包含"all"，则查看所有APP
+              if (appsToView.includes('all')) {
+                appsToView = ['qq', 'album', 'taobao', 'amap', 'browser', 'memo', 'diary', 'music', 'app_usage'];
+              }
+
+              let viewResults = [];
+
+              // 遍历要查看的APP
+              for (const app of appsToView) {
+                let appData = null;
+                let appName = '';
+
+                switch (app) {
+                  case 'qq':
+                    appName = 'QQ';
+                    appData = userChat.myPhoneSimulatedQQConversations || [];
+                    if (appData.length > 0) {
+                      const qqSummary = appData.slice(0, 5).map(conv => {
+                        const latestMsg = conv.messages && conv.messages.length > 0
+                          ? conv.messages[conv.messages.length - 1]
+                          : null;
+                        return `- ${conv.name}: ${latestMsg ? latestMsg.content.substring(0, 30) + '...' : '暂无消息'}`;
+                      }).join('\n');
+                      viewResults.push(`**QQ聊天列表** (共${appData.length}个联系人):\n${qqSummary}`);
+                    } else {
+                      viewResults.push(`**QQ聊天列表**: 空的`);
+                    }
+                    break;
+
+                  case 'album':
+                    appName = '相册';
+                    appData = userChat.myPhoneAlbum || [];
+                    if (appData.length > 0) {
+                      const albumSummary = appData.slice(0, 5).map(photo =>
+                        `- ${new Date(photo.timestamp).toLocaleString()}: ${photo.description || '无描述'}`
+                      ).join('\n');
+                      viewResults.push(`**相册** (共${appData.length}张照片):\n${albumSummary}`);
+                    } else {
+                      viewResults.push(`**相册**: 空的`);
+                    }
+                    break;
+
+                  case 'taobao':
+                    appName = '淘宝';
+                    appData = userChat.myPhoneTaobaoHistory || [];
+                    if (appData.length > 0) {
+                      const taobaoSummary = appData.slice(0, 5).map(order =>
+                        `- ${order.productName}: ¥${order.price} (${order.status})`
+                      ).join('\n');
+                      viewResults.push(`**淘宝订单** (共${appData.length}个订单):\n${taobaoSummary}`);
+                    } else {
+                      viewResults.push(`**淘宝订单**: 空的`);
+                    }
+                    break;
+
+                  case 'amap':
+                    appName = '高德地图';
+                    appData = userChat.myPhoneAmapHistory || [];
+                    if (appData.length > 0) {
+                      const amapSummary = appData.slice(0, 5).map(record =>
+                        `- ${new Date(record.timestamp).toLocaleString()}: ${record.location}`
+                      ).join('\n');
+                      viewResults.push(`**高德地图足迹** (共${appData.length}条记录):\n${amapSummary}`);
+                    } else {
+                      viewResults.push(`**高德地图足迹**: 空的`);
+                    }
+                    break;
+
+                  case 'browser':
+                    appName = '浏览器';
+                    appData = userChat.myPhoneBrowserHistory || [];
+                    if (appData.length > 0) {
+                      const browserSummary = appData.slice(0, 5).map(record =>
+                        `- ${new Date(record.timestamp).toLocaleString()}: ${record.title}`
+                      ).join('\n');
+                      viewResults.push(`**浏览器历史** (共${appData.length}条记录):\n${browserSummary}`);
+                    } else {
+                      viewResults.push(`**浏览器历史**: 空的`);
+                    }
+                    break;
+
+                  case 'memo':
+                    appName = '备忘录';
+                    appData = userChat.myPhoneMemos || [];
+                    if (appData.length > 0) {
+                      const memoSummary = appData.slice(0, 5).map(memo =>
+                        `- ${memo.title || '无标题'}: ${memo.content.substring(0, 30)}...`
+                      ).join('\n');
+                      viewResults.push(`**备忘录** (共${appData.length}条):\n${memoSummary}`);
+                    } else {
+                      viewResults.push(`**备忘录**: 空的`);
+                    }
+                    break;
+
+                  case 'diary':
+                    appName = '日记';
+                    appData = userChat.myPhoneDiaries || [];
+                    if (appData.length > 0) {
+                      const diarySummary = appData.slice(0, 3).map(diary =>
+                        `- ${diary.date}: ${diary.content.substring(0, 50)}...`
+                      ).join('\n');
+                      viewResults.push(`**日记** (共${appData.length}篇):\n${diarySummary}`);
+                    } else {
+                      viewResults.push(`**日记**: 空的`);
+                    }
+                    break;
+
+                  case 'music':
+                    appName = '网易云音乐';
+                    appData = userChat.myPhoneMusicPlaylist || [];
+                    if (appData.length > 0) {
+                      const musicSummary = appData.slice(0, 5).map(song =>
+                        `- ${song.title} - ${song.artist}`
+                      ).join('\n');
+                      viewResults.push(`**网易云音乐播放列表** (共${appData.length}首歌):\n${musicSummary}`);
+                    } else {
+                      viewResults.push(`**网易云音乐播放列表**: 空的`);
+                    }
+                    break;
+
+                  case 'app_usage':
+                    appName = 'APP使用记录';
+                    appData = userChat.myPhoneAppUsage || [];
+                    if (appData.length > 0) {
+                      const usageSummary = appData.slice(0, 5).map(record => {
+                        const hours = Math.floor(record.usageTimeMinutes / 60);
+                        const minutes = record.usageTimeMinutes % 60;
+                        let timeString = '';
+                        if (hours > 0) timeString += `${hours}小时`;
+                        if (minutes > 0) timeString += `${minutes}分钟`;
+                        if (!timeString) timeString = '小于1分钟';
+                        return `- ${record.appName} (${record.category || '其他'}): ${timeString}`;
+                      }).join('\n');
+                      viewResults.push(`**APP使用记录** (共${appData.length}条):\n${usageSummary}`);
+                    } else {
+                      viewResults.push(`**APP使用记录**: 空的`);
+                    }
+                    break;
+                }
+              }
+
+              // 将查看结果作为隐藏的系统消息注入到对话中
+              const viewResultMessage = {
+                role: 'system',
+                content: `[系统提示：你查看了${chat.settings.myNickname || '用户'}的手机，以下是真实数据]\n\n${viewResults.join('\n\n')}\n\n[请基于以上真实数据给出你的感想和反应，不要编造内容]`,
+                timestamp: Date.now(),
+                isHidden: true
+              };
+
+              chat.history.push(viewResultMessage);
+              console.log(`📱 AI查看了User手机: ${appsToView.join(', ')}`);
+            }
+            continue;
+          case 'update_thoughts':
+            if (!chat.isGroup) {
+              if (msgData.heartfelt_voice) {
+                chat.heartfeltVoice = String(msgData.heartfelt_voice);
+              }
+              if (msgData.random_jottings) {
+                chat.randomJottings = String(msgData.random_jottings);
+              }
+              
+              // 动态收集自定义心声变量
+              if (!chat.customThoughts) {
+                chat.customThoughts = {};
+              }
+              for (const key in msgData) {
+                if (key !== 'type' && key !== 'heartfelt_voice' && key !== 'random_jottings') {
+                  chat.customThoughts[key] = String(msgData[key]);
+                }
+              }
+
+              if (!Array.isArray(chat.thoughtsHistory)) {
+                chat.thoughtsHistory = [];
+              }
+              
+              const currentThought = {
+                heartfeltVoice: chat.heartfeltVoice,
+                randomJottings: chat.randomJottings,
+                customThoughts: JSON.parse(JSON.stringify(chat.customThoughts)),
+                timestamp: Date.now()
+              };
+              
+              chat.thoughtsHistory.push(currentThought);
+              if (chat.thoughtsHistory.length > 50) {
+                chat.thoughtsHistory.shift();
+              }
+
+              let thoughtForMemory = `[这是你上一轮的内心独白和思考]
+- 心声: ${chat.heartfeltVoice}
+- 散记: ${chat.randomJottings}`;
+
+              // 将自定义心声也加入记忆中
+              if (chat.customThoughts && Object.keys(chat.customThoughts).length > 0) {
+                for (const [key, value] of Object.entries(chat.customThoughts)) {
+                  thoughtForMemory += `\n- ${key}: ${value}`;
+                }
+              }
+
+              const hiddenThoughtMessage = {
+                role: 'system',
+                content: thoughtForMemory,
+                timestamp: Date.now(),
+                isHidden: true
+              };
+
+            }
+            continue;
+          case 'change_user_nickname':
+            if (!chat.isGroup && msgData.new_name) {
+              const newNickname = msgData.new_name.trim();
+              if (newNickname) {
+                chat.settings.myNickname = newNickname;
+
+                const systemMessage = {
+                  role: 'system',
+                  type: 'pat_message',
+                  content: `“${chat.name}” 将对你的称呼修改为 “${newNickname}”`,
+                  timestamp: messageTimestamp++
+                };
+                chat.history.push(systemMessage);
+
+                const hiddenMemoryMessage = {
+                  role: 'system',
+                  content: `[系统提示：你刚刚成功将对用户的称呼修改为了“${newNickname}”。]`,
+                  timestamp: messageTimestamp++,
+                  isHidden: true
+                };
+                chat.history.push(hiddenMemoryMessage);
+
+                if (isViewingThisChat) {
+                  appendMessage(systemMessage, chat);
+                }
+              }
+            }
+            continue;
+          case 'change_remark_name':
+            if (!chat.isGroup && msgData.new_name) {
+              const oldName = chat.name;
+              const newName = msgData.new_name.trim();
+
+              if (newName && newName !== oldName) {
+                if (!chat.nameHistory) {
+                  chat.nameHistory = [];
+                }
+                if (!chat.nameHistory.includes(oldName)) {
+                  chat.nameHistory.push(oldName);
+                }
+
+                chat.name = newName;
+
+                const systemMessage = {
+                  role: 'system',
+                  type: 'pat_message',
+                  content: `“${chat.originalName}” 将备注修改为 “${newName}”`,
+                  timestamp: messageTimestamp++
+                };
+                chat.history.push(systemMessage);
+
+                const hiddenMemoryMessage = {
+                  role: 'system',
+                  content: `[系统提示：你刚刚成功将自己的备注名修改为了“${newName}”。请自然地接受这个新名字，不要对此感到惊讶。]`,
+                  timestamp: messageTimestamp++,
+                  isHidden: true
+                };
+                chat.history.push(hiddenMemoryMessage);
+
+                if (isViewingThisChat) {
+                  appendMessage(systemMessage, chat);
+                  document.getElementById('chat-header-title').textContent = newName;
+                }
+
+                await syncCharacterNameInGroups(chat);
+              }
+            }
+            continue;
+
+          case 'change_avatar': {
+            const avatarName = msgData.name;
+            const foundAvatar = chat.settings.aiAvatarLibrary.find(avatar => avatar.name === avatarName);
+            if (foundAvatar) {
+              chat.settings.aiAvatar = foundAvatar.url;
+
+              const systemNotice = {
+                role: 'system',
+                type: 'pat_message',
+                content: `[${chat.name} 更换了头像]`,
+                timestamp: Date.now()
+              };
+              chat.history.push(systemNotice);
+
+              await syncCharacterAvatarInGroups(chat);
+
+              if (isViewingThisChat) {
+                appendMessage(systemNotice, chat);
+                renderChatInterface(chatId);
+              }
+            }
+            continue;
+          }
+          case 'change_user_avatar': {
+            const avatarName = msgData.name;
+            const foundAvatar = chat.settings.myAvatarLibrary.find(avatar => avatar.name === avatarName);
+            if (foundAvatar) {
+              chat.settings.myAvatar = foundAvatar.url;
+
+              const systemNotice = {
+                role: 'system',
+                type: 'pat_message',
+                content: `[${chat.name} 更换了你的头像]`,
+                timestamp: Date.now()
+              };
+              chat.history.push(systemNotice);
+
+              if (isViewingThisChat) {
+                appendMessage(systemNotice, chat);
+                renderChatInterface(chatId);
+              }
+            }
+            continue;
+          }
+
+          case 'gomoku_move': {
+
+            const x = parseInt(msgData.x);
+            const y = parseInt(msgData.y);
+
+
+            if (!isNaN(x) && !isNaN(y)) {
+              handleAiGomokuMove({
+                x: x,
+                y: y
+              });
+            } else {
+              console.warn("AI的五子棋移动指令包含无效坐标，已忽略:", msgData);
+            }
+            continue;
+          }
+
+          case 'waimai_response':
+            const requestMessageIndex = chat.history.findIndex(m => m.timestamp === msgData.for_timestamp);
+            if (requestMessageIndex > -1) {
+              const originalMsg = chat.history[requestMessageIndex];
+              originalMsg.status = msgData.status;
+              originalMsg.paidBy = msgData.status === 'paid' ? msgData.name : null;
+              if (isViewingThisChat) {
+                const bubble = document.querySelector(`.message-bubble[data-timestamp="${msgData.for_timestamp}"]`);
+                if (bubble) {
+                  bubble.classList.remove('status-pending');
+                  bubble.classList.add(`status-${msgData.status}`);
+                  const userActions = bubble.querySelector('.waimai-user-actions');
+                  if (userActions) userActions.remove();
+                }
+              }
+            }
+            continue;
+
+          case 'qzone_post':
+            const newPost = {
+              type: msgData.postType || 'shuoshuo',
+              content: msgData.content || '',
+              publicText: msgData.publicText || '',
+              hiddenContent: msgData.hiddenContent || '',
+              image_prompt: msgData.image_prompt || '',
+              timestamp: Date.now(),
+              authorId: chatId,
+              authorGroupId: chat.groupId,
+              visibleGroupIds: null
+            };
+
+
+
+            if (msgData.postType === 'naiimag' && msgData.prompt) {
+              try {
+
+                const prompts = Array.isArray(msgData.prompt) ? msgData.prompt.slice(0, 2) : [msgData.prompt];
+                console.log(`📸 动态NovelAI图片生成开始，共${prompts.length}张图片`);
+
+
+                const generatedImageUrls = [];
+
+
+                for (let i = 0; i < prompts.length; i++) {
+                  const aiPrompt = prompts[i];
+                  console.log(`生成第${i + 1}张图片，prompt:`, aiPrompt);
+
+                  if (typeof generateNaiImageFromPrompt === 'function') {
+                    const generatedData = await generateNaiImageFromPrompt(aiPrompt, chat.id);
+                    generatedImageUrls.push(generatedData.imageUrl);
+                    continue;
+                  }
+
+
+                  const naiPrompts = getCharacterNAIPrompts(chat.id);
+
+
+                  const finalPositivePrompt = aiPrompt + ', ' + naiPrompts.positive;
+                  const finalNegativePrompt = naiPrompts.negative;
+
+                  console.log(`📝 使用${naiPrompts.source === 'character' ? '角色专属' : '系统'}提示词配置`);
+                  console.log('最终正面提示词:', finalPositivePrompt);
+                  console.log('最终负面提示词:', finalNegativePrompt);
+
+
+                  const apiKey = localStorage.getItem('novelai-api-key');
+                  const model = localStorage.getItem('novelai-model') || 'nai-diffusion-4-5-full';
+                  const settings = getNovelAISettings();
+
+                  if (!apiKey) {
+                    throw new Error('NovelAI API Key未配置。请在NovelAI设置中填写API Key。');
+                  }
+
+                  const [width, height] = settings.resolution.split('x').map(Number);
+
+
+                  let requestBody;
+
+                  if (model.includes('nai-diffusion-4')) {
+
+                    requestBody = {
+                      input: finalPositivePrompt,
+                      model: model,
+                      action: 'generate',
+                      parameters: {
+                        params_version: 3, // V4必须使用版本3
+                        width: width,
+                        height: height,
+                        scale: settings.cfg_scale,
+                        sampler: settings.sampler,
+                        steps: settings.steps,
+                        seed: settings.seed === -1 ? Math.floor(Math.random() * 9999999999) : settings.seed,
+                        n_samples: 1,
+                        ucPreset: settings.uc_preset,
+                        qualityToggle: settings.quality_toggle,
+                        autoSmea: false,
+                        dynamic_thresholding: false,
+                        controlnet_strength: 1,
+                        legacy: false,
+                        add_original_image: true,
+                        cfg_rescale: 0,
+                        noise_schedule: 'karras', // V4使用karras
+                        legacy_v3_extend: false,
+                        skip_cfg_above_sigma: null,
+                        use_coords: false,
+                        legacy_uc: false,
+                        normalize_reference_strength_multiple: true,
+                        inpaintImg2ImgStrength: 1,
+                        characterPrompts: [],
+
+                        v4_prompt: {
+                          caption: {
+                            base_caption: finalPositivePrompt,
+                            char_captions: []
+                          },
+                          use_coords: false,
+                          use_order: true
+                        },
+
+                        v4_negative_prompt: {
+                          caption: {
+                            base_caption: finalNegativePrompt,
+                            char_captions: []
+                          },
+                          legacy_uc: false
+                        },
+                        negative_prompt: finalNegativePrompt,
+                        deliberate_euler_ancestral_bug: false,
+                        prefer_brownian: true
+
+                      }
+                    };
+                  } else {
+
+                    requestBody = {
+                      input: finalPositivePrompt,
+                      model: model,
+                      action: 'generate',
+                      parameters: {
+                        width: width,
+                        height: height,
+                        scale: settings.cfg_scale,
+                        sampler: settings.sampler,
+                        steps: settings.steps,
+                        seed: settings.seed === -1 ? Math.floor(Math.random() * 9999999999) : settings.seed,
+                        n_samples: 1,
+                        ucPreset: settings.uc_preset,
+                        qualityToggle: settings.quality_toggle,
+                        sm: settings.smea,
+                        sm_dyn: settings.smea_dyn,
+                        dynamic_thresholding: false,
+                        controlnet_strength: 1,
+                        legacy: false,
+                        add_original_image: false,
+                        cfg_rescale: 0,
+                        noise_schedule: 'native',
+                        negative_prompt: finalNegativePrompt
+                      }
+                    };
+                  }
+
+                  console.log('🚀 发送NAI请求:', requestBody);
+
+
+                  let apiUrl;
+
+
+                  if (model.includes('nai-diffusion-4')) {
+
+                    apiUrl = 'https://image.novelai.net/ai/generate-image-stream';
+                  } else {
+
+                    apiUrl = 'https://image.novelai.net/ai/generate-image';
+                  }
+
+                  let corsProxy = settings.cors_proxy;
+
+
+                  if (corsProxy === 'custom') {
+                    corsProxy = settings.custom_proxy_url || '';
+                  }
+
+
+                  if (corsProxy && corsProxy !== '') {
+                    apiUrl = corsProxy + encodeURIComponent(apiUrl);
+                  }
+
+                  const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': 'Bearer ' + apiKey
+                    },
+                    body: JSON.stringify(requestBody)
+                  });
+
+                  console.log('Response status:', response.status);
+                  console.log('Response headers:', [...response.headers.entries()]);
+
+                  if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('API错误响应:', errorText);
+                    throw new Error(`API请求失败 (${response.status}): ${errorText}`);
+                  }
+
+

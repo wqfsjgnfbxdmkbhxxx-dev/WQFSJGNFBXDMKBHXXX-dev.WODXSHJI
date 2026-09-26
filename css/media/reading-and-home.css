@@ -1,0 +1,619 @@
+           /* --- “一起读书”全屏功能样式 优化版 --- */
+
+           /* 1. 修复头部布局，防止标题过长把按钮挤下去 */
+           .reading-header {
+               display: flex;
+               justify-content: space-between;
+               align-items: center;
+               gap: 10px;
+               /* 标题和按钮组之间的间距 */
+               flex-wrap: nowrap;
+               /* 强制不换行 */
+           }
+
+           #reading-title {
+               flex: 1;
+               /* 占据可用空间 */
+               min-width: 0;
+               /* 允许被压缩 */
+               white-space: nowrap;
+               overflow: hidden;
+               text-overflow: ellipsis;
+               /* 标题过长时显示省略号 */
+           }
+
+           .reading-controls {
+               flex-shrink: 0;
+               /* 防止按钮组被压缩 */
+               display: flex;
+               /* 确保内部按钮水平排列 */
+               align-items: center;
+           }
+
+           /* 2. 美化新的全屏/最小化按钮 */
+           #toggle-reading-fullscreen-btn {
+               background: none;
+               border: none;
+               cursor: pointer;
+               color: var(--text-secondary);
+               padding: 4px 8px;
+               /* 调整点击区域 */
+               border-radius: 4px;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               transition: background-color 0.2s;
+           }
+
+           #toggle-reading-fullscreen-btn:hover {
+               background-color: rgba(0, 0, 0, 0.1);
+           }
+
+           /* 3. 当窗口全屏时，切换按钮内的图标显示 */
+           #reading-window.fullscreen #toggle-reading-fullscreen-btn .icon-maximize {
+               display: none;
+           }
+
+           #reading-window.fullscreen #toggle-reading-fullscreen-btn .icon-minimize {
+               display: block;
+           }
+
+           /* 4. 窗口全屏时的核心样式 (与上次相同) */
+           #reading-window.fullscreen {
+               width: 100%;
+               height: 100%;
+               max-width: 100%;
+               max-height: 100%;
+               top: 0 !important;
+               left: 0 !important;
+               border-radius: 0;
+               box-shadow: none;
+               transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+           }
+
+           /* 5. 遮罩层在全屏时的样式 (与上次相同) */
+           #reading-overlay.fullscreen-active {
+               align-items: stretch;
+               justify-content: stretch;
+           }
+
+           /* =========================================== */
+           /* ▼▼▼ 阅读模式全屏/头部修复补丁 ▼▼▼ */
+           /* =========================================== */
+
+           /* 1. 修复全屏状态下的图标切换逻辑 */
+           /* 默认状态：显示最大化图标，隐藏还原图标 */
+           #toggle-reading-fullscreen-btn .icon-maximize {
+               display: block !important;
+           }
+
+           #toggle-reading-fullscreen-btn .icon-minimize {
+               display: none !important;
+           }
+
+           /* 全屏状态：隐藏最大化图标，显示还原图标 */
+           #reading-window.fullscreen #toggle-reading-fullscreen-btn .icon-maximize {
+               display: none !important;
+           }
+
+           #reading-window.fullscreen #toggle-reading-fullscreen-btn .icon-minimize {
+               display: block !important;
+           }
+
+           /* 2. 修复全屏时的头部布局与间距 (解决重叠问题) */
+           #reading-window.fullscreen .reading-header {
+               /* 【核心修复】增加顶部内边距：
+       45px 是避让状态栏的基础高度，
+       env(safe-area-inset-top) 是适配刘海屏/灵动岛
+    */
+               padding-top: calc(45px + env(safe-area-inset-top)) !important;
+               padding-bottom: 15px !important;
+               padding-left: 20px !important;
+               padding-right: 20px !important;
+
+               /* 强制高度自适应 */
+               height: auto !important;
+               min-height: 80px !important;
+               /* 保证有足够的高度 */
+
+               /* 修复背景色：全屏时必须有不透明背景，否则内容会透出来 */
+               background-color: #fff !important;
+               /* 加上底部边框线 */
+               border-bottom: 1px solid var(--border-color) !important;
+
+               /* 确保头部在最上层 */
+               z-index: 10 !important;
+
+               /* 强制且绝对的顶部定位，防止被父级flex影响 */
+               position: absolute !important;
+               top: 0 !important;
+               left: 0 !important;
+               width: 100% !important;
+               box-sizing: border-box !important;
+           }
+
+           /* 3. 暗黑模式适配 */
+           #phone-screen.dark-mode #reading-window.fullscreen .reading-header {
+               background-color: #1c1c1e !important;
+               /* 暗黑模式背景色 */
+               border-bottom-color: #38383a !important;
+           }
+
+           /* 4. 修复全屏时的内容区域，防止被加高的头部遮挡 */
+           #reading-window.fullscreen #reading-content {
+               /* 给内容顶部增加更多的内边距，因为头部变高了 */
+               padding-top: calc(100px + env(safe-area-inset-top)) !important;
+           }
+
+           #reading-display-settings-btn {
+               background: none;
+               border: none;
+               color: var(--text-secondary);
+               padding: 4px 7px;
+               border-radius: 4px;
+               cursor: pointer;
+           }
+
+           #reading-content.reading-theme-paper { background:#f7f0df !important; color:#382f25 !important; }
+           #reading-content.reading-theme-white { background:#fff !important; color:#1c1c1e !important; }
+           #reading-content.reading-theme-dark { background:#171717 !important; color:#dedbd5 !important; }
+
+           .reading-chapter-heading {
+               margin: 8px 0 22px;
+               text-align: center;
+               font-size: 1.35em;
+               line-height: 1.4;
+               font-weight: 650;
+           }
+
+           .reading-structured-paragraph {
+               margin: 0 0 1.05em;
+               white-space: pre-wrap;
+               text-indent: 2em;
+               line-height: 1.8;
+           }
+
+           .reading-comment-button {
+               margin-left: 8px;
+               border: 0;
+               border-radius: 999px;
+               padding: 2px 7px;
+               background: rgba(46,125,50,.1);
+               color: #2e7d32;
+               font-size: .72em;
+               text-indent: 0;
+               cursor: pointer;
+               vertical-align: middle;
+           }
+
+           /* --- iOS 风格通用化适配 (适配外观设置页) --- */
+
+           /* 让两个页面都使用 iOS 背景色 */
+           #api-settings-screen.ios-settings-screen,
+           #wallpaper-screen {
+               background-color: #f2f2f7 !important;
+           }
+
+           #phone-screen.dark-mode #api-settings-screen.ios-settings-screen,
+           #phone-screen.dark-mode #wallpaper-screen {
+               background-color: #000 !important;
+           }
+
+           /* 头部适配 */
+           #wallpaper-screen .header {
+               background-color: #ffffff !important;
+               border-bottom: 0.5px solid rgba(60, 60, 67, 0.08) !important;
+               box-shadow: none !important;
+           }
+
+           #phone-screen.dark-mode #wallpaper-screen .header {
+               background-color: #000 !important;
+           }
+
+           /* 确保外观设置页使用滚动容器样式 */
+           #wallpaper-screen .settings-container {
+               padding: 10px 16px;
+               padding-bottom: calc(20px + env(safe-area-inset-bottom));
+               box-sizing: border-box;
+               overflow-y: auto;
+           }
+
+           /* 壁纸预览图样式优化 (小图模式) */
+           .wallpaper-thumbnail {
+               width: 40px;
+               height: 70px;
+               /* 9:16 比例 */
+               border-radius: 6px;
+               background-color: #eee;
+               background-size: cover;
+               background-position: center;
+               border: 1px solid #d1d1d6;
+               margin-right: 8px;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               font-size: 10px;
+               color: #999;
+               overflow: hidden;
+               text-align: center;
+               line-height: 1.2;
+           }
+
+           #phone-screen.dark-mode .wallpaper-thumbnail {
+               background-color: #2c2c2e;
+               border-color: #3a3a3c;
+           }
+
+           /* 按钮组微调 */
+           .action-btn-group {
+               display: flex;
+               gap: 6px;
+               flex-wrap: wrap;
+           }
+
+           /* ============================================================
+              外观设置项布局重构：自适应防挤压（不够宽度时上下分层，不硬塞）
+              ============================================================ */
+           #wallpaper-screen .settings-item {
+               display: flex;
+               flex-direction: column;
+               align-items: stretch;
+               gap: 12px;
+               padding: 13px 16px;
+               min-height: auto;
+           }
+
+           #wallpaper-screen .settings-item label {
+               font-size: 15px;
+               font-weight: 500;
+           }
+
+           /* 普通开关型项：保持左右对齐，弹性分配 */
+           #wallpaper-screen .settings-item:has(> .toggle-switch) {
+               flex-direction: row;
+               align-items: center;
+               justify-content: space-between;
+           }
+
+           #wallpaper-screen .settings-item:has(> .toggle-switch) > div:first-child {
+               flex: 1;
+               min-width: 0;
+               padding-right: 12px;
+           }
+
+           #wallpaper-screen .settings-item .settings-desc {
+               margin: 4px 0 0 0;
+               font-size: 12px;
+               line-height: 1.4;
+               color: #8e8e93;
+           }
+
+           /* 壁纸与背景类设置项：重构为上下两行布局，防止挤压并加大预览图 */
+           #wallpaper-screen .settings-item:has(.wallpaper-thumbnail),
+           .settings-item:has(.wallpaper-thumbnail) {
+               display: grid !important;
+               grid-template-columns: 1fr auto !important;
+               grid-template-rows: auto auto !important;
+               grid-template-areas: 
+                   "title preview"
+                   "buttons buttons" !important;
+               align-items: center !important;
+               gap: 14px 16px !important;
+               padding: 16px 18px !important;
+               box-sizing: border-box !important;
+           }
+
+           .settings-item:has(.wallpaper-thumbnail) > label {
+               grid-area: title;
+               display: flex;
+               align-items: center;
+               font-size: 15.5px !important;
+               font-weight: 600 !important;
+               margin: 0 !important;
+           }
+
+           .settings-item:has(.wallpaper-thumbnail) .settings-right {
+               display: contents !important;
+           }
+
+           .settings-item:has(.wallpaper-thumbnail) .wallpaper-thumbnail {
+               grid-area: preview;
+               justify-self: end;
+           }
+
+           .settings-item:has(.wallpaper-thumbnail) .action-btn-group {
+               grid-area: buttons;
+               width: 100% !important;
+               display: flex !important;
+               gap: 8px !important;
+           }
+
+           .settings-item:has(.wallpaper-thumbnail) .action-btn-group .settings-mini-btn {
+               flex: 1 1 0 !important;
+               min-width: 0 !important;
+               height: 36px !important;
+               padding: 0 10px !important;
+               display: inline-flex !important;
+               align-items: center !important;
+               justify-content: center !important;
+               font-size: 13.5px !important;
+               font-weight: 500 !important;
+               border-radius: 8px !important;
+               background-color: #f2f2f7 !important;
+               border: 1px solid rgba(0, 0, 0, 0.08) !important;
+               box-sizing: border-box !important;
+               cursor: pointer;
+               transition: background-color 0.15s, transform 0.1s;
+           }
+
+           .settings-item:has(.wallpaper-thumbnail) .action-btn-group .settings-mini-btn:active {
+               background-color: #e5e5ea !important;
+               transform: scale(0.98);
+           }
+
+           /* 重置按钮采用醒目的柔和危险色提示 */
+           .settings-item:has(.wallpaper-thumbnail) .action-btn-group .settings-mini-btn[id*="reset"] {
+               color: #ff3b30 !important;
+               border-color: rgba(255, 59, 48, 0.25) !important;
+               background-color: rgba(255, 59, 48, 0.05) !important;
+           }
+
+           .settings-item:has(.wallpaper-thumbnail) .action-btn-group .settings-mini-btn[id*="reset"]:active {
+               background-color: rgba(255, 59, 48, 0.15) !important;
+           }
+
+           /* 暗黑模式适配 */
+           #phone-screen.dark-mode .settings-item:has(.wallpaper-thumbnail) .action-btn-group .settings-mini-btn {
+               background-color: #2c2c2e !important;
+               border-color: rgba(255, 255, 255, 0.1) !important;
+               color: #fff !important;
+           }
+
+           #phone-screen.dark-mode .settings-item:has(.wallpaper-thumbnail) .action-btn-group .settings-mini-btn:active {
+               background-color: #3a3a3c !important;
+           }
+
+           #phone-screen.dark-mode .settings-item:has(.wallpaper-thumbnail) .action-btn-group .settings-mini-btn[id*="reset"] {
+               color: #ff453a !important;
+               border-color: rgba(255, 69, 58, 0.3) !important;
+               background-color: rgba(255, 69, 58, 0.12) !important;
+           }
+
+           /* 外观预设 / CSS 预设行：上下分层，下拉框占据一行或舒展对齐 */
+           #wallpaper-screen .settings-item:has(#appearance-preset-select),
+           #wallpaper-screen .settings-item:has(#css-preset-select) {
+               flex-direction: column;
+               align-items: stretch;
+               gap: 10px;
+           }
+
+           #wallpaper-screen .settings-item:has(#appearance-preset-select) .settings-right,
+           #wallpaper-screen .settings-item:has(#css-preset-select) .settings-right {
+               width: 100%;
+               margin-left: 0;
+               display: flex;
+               align-items: center;
+               gap: 8px;
+           }
+
+           #wallpaper-screen #appearance-preset-select,
+           #wallpaper-screen #css-preset-select {
+               flex: 1;
+               min-width: 0;
+               height: 34px;
+               background-color: #f2f2f7;
+               border: 1px solid #e5e5ea;
+               border-radius: 8px;
+               padding: 0 10px;
+               font-size: 14px;
+               color: #333;
+               text-align: left !important;
+           }
+
+           #phone-screen.dark-mode #wallpaper-screen #appearance-preset-select,
+           #phone-screen.dark-mode #wallpaper-screen #css-preset-select {
+               background-color: #2c2c2e;
+               border-color: #3a3a3c;
+               color: #fff;
+           }
+
+           #wallpaper-screen .settings-item:has(#appearance-preset-select) .settings-mini-btn,
+           #wallpaper-screen .settings-item:has(#css-preset-select) .settings-mini-btn {
+               height: 34px;
+               padding: 0 12px;
+               flex-shrink: 0;
+           }
+
+           /* 隐藏的 Input 保持隐藏 */
+           .hidden-input {
+               display: none !important;
+           }
+
+           /* 图标网格在白色卡片内的适配 */
+           .settings-icon-grid {
+               display: grid;
+               grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+               gap: 15px;
+               padding: 10px 0;
+           }
+
+           .settings-icon-grid .icon-setting-item {
+               display: flex;
+               flex-direction: column;
+               align-items: center;
+               gap: 6px;
+           }
+
+           .settings-icon-grid .icon-preview {
+               width: 50px;
+               height: 50px;
+               border-radius: 12px;
+               box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+               border: 1px solid rgba(0, 0, 0, 0.1);
+           }
+
+           /* 拖拽排序区域适配 */
+           #button-order-editor {
+               background-color: transparent !important;
+               /* 移除原有的灰色背景 */
+               border: none !important;
+               padding: 0 !important;
+               display: flex;
+               flex-wrap: wrap;
+               gap: 8px;
+           }
+
+           .draggable-button-item {
+               background-color: #f2f2f7;
+               border: 1px solid #e5e5ea;
+               border-radius: 8px;
+               padding: 6px 10px;
+           }
+
+           #phone-screen.dark-mode .draggable-button-item {
+               background-color: #2c2c2e;
+               border-color: #3a3a3c;
+           }
+
+           /* 锁屏密码输入框适配 */
+           #lock-screen-password-input {
+               letter-spacing: 8px !important;
+               font-weight: bold !important;
+               font-size: 20px !important;
+               text-align: center !important;
+               background-color: #f2f2f7 !important;
+               border-radius: 8px;
+               height: 40px;
+           }
+
+           #phone-screen.dark-mode #lock-screen-password-input {
+               background-color: #2c2c2e !important;
+           }
+
+           /* 文本域适配 */
+           #global-css-input {
+               font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+               font-size: 12px;
+               background-color: #f2f2f7;
+               border: none;
+               border-radius: 8px;
+               padding: 10px;
+               min-height: 100px;
+           }
+
+           #phone-screen.dark-mode #global-css-input {
+               background-color: #2c2c2e;
+               color: #fff;
+           }
+
+           /* --- 优化：壁纸预览图样式 (加宽加大，告别过窄缝隙感) --- */
+           .wallpaper-thumbnail {
+               width: 58px !important;
+               height: 88px !important;
+               border-radius: 10px !important;
+               background-color: #f7f7f9 !important;
+               background-size: cover !important;
+               background-position: center !important;
+               border: 1.5px solid rgba(0, 0, 0, 0.1) !important;
+               box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+               margin: 0 !important;
+               display: flex !important;
+               align-items: center !important;
+               justify-content: center !important;
+               font-size: 11px !important;
+               color: #8e8e93 !important;
+               overflow: hidden !important;
+               text-align: center !important;
+               line-height: 1.3 !important;
+               padding: 4px !important;
+               box-sizing: border-box !important;
+               flex-shrink: 0 !important;
+           }
+
+           /* 暗黑模式适配 */
+           #phone-screen.dark-mode .wallpaper-thumbnail {
+               background-color: #2c2c2e !important;
+               border-color: rgba(255, 255, 255, 0.15) !important;
+               box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+               color: #98989d !important;
+           }
+
+           /* 天气设置专用样式 - 保持原生风格 */
+           .weather-input-group {
+               display: flex;
+               align-items: center;
+               gap: 8px;
+               margin-top: 8px;
+               width: 100%;
+           }
+
+           .weather-input {
+               flex: 1;
+               /* 让输入框平分宽度 */
+               background-color: #f2f2f7;
+               /* 与原生输入框背景一致 */
+               border: none;
+               border-radius: 6px;
+               padding: 8px 10px;
+               font-size: 14px;
+               color: #333;
+               outline: none;
+               min-width: 0;
+               /* 防止溢出 */
+           }
+
+           .weather-result-text {
+               font-size: 12px;
+               color: #8a8a8a;
+               margin-top: 6px;
+               text-align: left;
+               /* 左对齐看起来更整齐 */
+               padding-left: 2px;
+           }
+
+           /* 暗黑模式适配 */
+           #phone-screen.dark-mode .weather-input {
+               background-color: #3a3a3c;
+               color: #fff;
+           }
+
+           /* --- 主屏幕第二页布局调整 --- */
+           #page-2-app-container {
+               display: grid;
+               grid-template-columns: 155px 1fr;
+               /* 保持原来的列宽比例 */
+               gap: 15px;
+               width: 100%;
+               padding-top: 20px;
+               align-items: start;
+           }
+
+           .left-column-stack {
+               display: flex;
+               flex-direction: column;
+               gap: 15px;
+               /* 组件和下方App的间距 */
+           }
+
+           .left-app-grid {
+               display: grid;
+               grid-template-columns: repeat(2, 1fr);
+               /* 左侧下方也是两列 */
+               gap: 15px;
+               justify-items: center;
+           }
+
+           /* 支付宝图标专用样式 */
+           .alipay-icon-bg {
+               background-color: #1677ff;
+               /* 支付宝蓝 */
+               display: flex;
+               align-items: center;
+               justify-content: center;
+           }
+
+           .alipay-icon-bg img {
+               width: 80%;
+               height: 80%;
+               object-fit: contain;
+           }

@@ -1,0 +1,427 @@
+                      <button class="settings-mini-btn" onclick="document.getElementById('myphone-lock-wallpaper-input').click()">本地</button>
+                      <button id="myphone-upload-lock-wallpaper-url-btn" class="settings-mini-btn">URL</button>
+                      <button id="myphone-reset-lock-wallpaper-btn" class="settings-mini-btn" style="color: var(--danger-color, #ff3b30); border-color: rgba(255,59,48,0.3);">重置</button>
+                    </div>
+                    <input type="file" id="myphone-lock-wallpaper-input" accept="image/*" style="display: none;">
+                  </div>
+                </div>
+                
+                <!-- 字体大小 -->
+                <div class="settings-item">
+                    <label>字体大小</label>
+                    <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                        <input type="range" id="watermark-font-size" min="12" max="48" step="2" value="20" style="flex: 1;">
+                        <span id="watermark-font-size-display" style="min-width: 40px; text-align: right; font-size: 14px;">20px</span>
+                    </div>
+                </div>
+                
+                <!-- 字体选择 -->
+                <div class="settings-item">
+                    <label>字体</label>
+                    <select id="watermark-font-family" class="settings-select" style="padding: 8px; border: 1px solid #ddd; border-radius: 6px; min-width: 150px;">
+                        <option value="Arial, sans-serif">Arial</option>
+                        <option value="'Microsoft YaHei', sans-serif" selected>微软雅黑</option>
+                        <option value="'SimSun', serif">宋体</option>
+                        <option value="'KaiTi', serif">楷体</option>
+                        <option value="'Courier New', monospace">Courier New</option>
+                        <option value="Georgia, serif">Georgia</option>
+                        <option value="'Comic Sans MS', cursive">Comic Sans</option>
+                    </select>
+                </div>
+                
+                <!-- 预览按钮 -->
+                <div class="settings-item">
+                    <label></label>
+                <button id="watermark-preview-btn" class="primary-btn" style="padding: 8px 16px; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                    预览水印效果
+                </button>
+                </div>
+                
+                <div style="font-size: 12px; color: #666; margin-top: 10px; padding: 10px; background: #f5f5f5; border-radius: 6px;">
+                    💡 提示：开启后，使用系统截图功能时会自动显示水印。水印仅用于截图，不影响正常使用。
+                </div>
+            </div>
+        </div>
+
+        <!-- 后台保活 -->
+        <div class="settings-header" data-api-category="notify">后台保活</div>
+        <div class="settings-section">
+            <div class="settings-item reply-guardian-setting-row">
+                <label>
+                    <span style="display: block;">回复守护</span>
+                    <span class="reply-guardian-setting-note">保存回复任务并在页面被暂停或重载后提供恢复。</span>
+                </label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="reply-guardian-enabled-switch">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="settings-item reply-guardian-setting-row">
+                <label>
+                    <span style="display: block;">回复完成通知</span>
+                    <span class="reply-guardian-setting-note">仅在已开启系统通知且已授权时发送，不会额外索取权限。</span>
+                </label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="reply-guardian-notification-switch">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="settings-item reply-guardian-diagnostic-row">
+                <div class="reply-guardian-diagnostic-copy">
+                    <label>当前保护能力</label>
+                    <span id="reply-guardian-capability-summary">检测中...</span>
+                    <span id="reply-guardian-task-summary">暂无待恢复回复</span>
+                </div>
+                <button id="reply-guardian-refresh-btn" class="settings-mini-btn" type="button">重新检测</button>
+            </div>
+
+            <div class="settings-item" style="display: flex !important; flex-direction: column !important; align-items: flex-start !important; gap: 12px !important;">
+                <label>
+                    <span style="display: block;">无声智能保活 (双平台适配)</span>
+                    <span style="font-size: 12px; color: var(--text-secondary); display: block; margin-top: 4px;">不播放音频，通过智能调度与快速恢复降低被杀概率。</span>
+                </label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="smart-keep-alive-switch">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="settings-item" style="display: flex !important; flex-direction: column !important; align-items: flex-start !important; gap: 12px !important;">
+                <label>
+                    <span style="display: block;">启用音频保活</span>
+                    <span style="font-size: 12px; color: var(--text-secondary); display: block; margin-top: 4px;">通过播放静音音频防止浏览器和PWA被手机系统后台杀掉。</span>
+                </label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="background-keep-alive-switch">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="settings-item" id="keep-alive-status" style="display:none;">
+                <label>保活状态</label>
+                <div class="settings-right">
+                    <span id="keep-alive-status-text" style="color: #999;">未启用</span>
+                </div>
+            </div>
+            
+            <!-- 保活音频控制按钮 -->
+            <div class="settings-item" id="keep-alive-audio-btn-container" style="display:none;">
+                <label>保活音频</label>
+                <button id="keep-alive-audio-btn" class="primary-btn" style="padding: 8px 16px; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                    配置保活音频
+                </button>
+            </div>
+            
+            <!-- 保活音频播放器面板（守护甜心/游戏机风格） -->
+            <div id="keep-alive-audio-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 240, 245, 0.4); backdrop-filter: blur(5px); z-index: 10000; justify-content: center; align-items: center;">
+                <div class="sc-player-device">
+                    <div class="sc-pattern"></div>
+                    <div class="sc-content">
+                        <!-- Header -->
+                        <div class="sc-header">
+                            <div class="sc-title-badge">KEEP ALIVE</div>
+                            <div class="sc-win-actions">
+                                <button id="keep-alive-audio-minimize" class="sc-win-btn sc-btn-min" title="最小化">
+                                    <svg width="12" height="2" viewBox="0 0 12 2" fill="none"><rect width="12" height="2" rx="1" fill="white"/></svg>
+                                </button>
+                                <button id="keep-alive-audio-close" class="sc-win-btn sc-btn-close" title="关闭">
+                                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 2L10 10M10 2L2 10" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Screen Area -->
+                        <div class="sc-screen">
+                            <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                                <span class="sc-screen-label">AUDIO VISUALIZER</span>
+                                <span class="sc-screen-label" style="color: #ccc;">● REC</span>
+                            </div>
+                            <div class="sc-visualizer-mock">
+                                <div class="sc-bar"></div><div class="sc-bar"></div><div class="sc-bar"></div><div class="sc-bar"></div><div class="sc-bar"></div>
+                            </div>
+                            <div class="sc-audio-wrapper">
+                                <audio id="keep-alive-audio-player" controls loop>
+                                    您的浏览器不支持音频播放。
+                                </audio>
+                            </div>
+                        </div>
+
+                        <!-- Controls Panel -->
+                        <div class="sc-control-panel">
+                            <!-- File Upload -->
+                            <div class="sc-input-row">
+                                <label for="keep-alive-audio-file" class="sc-file-label">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                                    </svg>
+                                    上传本地音频
+                                </label>
+                                <input type="file" id="keep-alive-audio-file" accept="audio/*" style="display:none">
+                            </div>
+
+                            <!-- URL Load -->
+                            <div class="sc-input-row sc-url-group">
+                                <input type="text" id="keep-alive-audio-url" class="sc-url-input" placeholder="输入音频URL...">
+                                <button id="keep-alive-audio-load-url" class="sc-load-btn">加载</button>
+                            </div>
+                            <div class="sc-input-row sc-audio-secondary-actions">
+                                <button id="keep-alive-audio-default" class="sc-secondary-btn" type="button">使用内置静音</button>
+                                <button id="keep-alive-audio-test" class="sc-secondary-btn" type="button">测试播放</button>
+                            </div>
+                            <div id="keep-alive-audio-source-status" class="sc-audio-source-status">尚未选择音频</div>
+                        </div>
+
+                        <!-- Footer Hint -->
+                        <div class="sc-hint">
+                            <div class="sc-hint-icon">!</div>
+                            <span>自动循环播放 • 后台保活中</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="settings-desc">
+            开启后会使用静默音频和定时任务等技术保持应用在后台持续运行，减少被系统清理的概率。
+        </div>
+
+        <!-- 系统级通知 -->
+        <div class="settings-header" data-api-category="notify">系统级通知 <span style="font-size: 12px; color: #999; margin-left: 10px;">v2.1.8</span></div>
+        <div class="settings-section">
+            <!-- 1. 主开关 -->
+            <div class="settings-item">
+                <label>启用系统级通知</label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="system-notification-enabled-switch">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <!-- 权限状态显示 -->
+            <div class="settings-item" id="notification-permission-status" style="display:none;">
+                <label>通知权限状态</label>
+                <div class="settings-right">
+                    <span id="permission-status-text" style="color: #999;">未请求</span>
+                </div>
+            </div>
+            
+            <!-- 详细设置区域（主开关开启后显示） -->
+            <div id="system-notification-details" style="display:none;">
+                
+                <!-- 2. 应用名称 -->
+                <div class="settings-item">
+                    <label>应用显示名称</label>
+                    <div class="settings-right">
+                        <input type="text" id="system-notification-app-name" placeholder="EPhone" maxlength="20">
+                    </div>
+                </div>
+                
+                <!-- 3. 测试通知按钮 -->
+                <button class="settings-full-btn" id="test-system-notification-btn">
+                     发送测试通知
+                </button>
+                
+                <!-- 3.5 调试按钮 -->
+                <button class="settings-full-btn" id="debug-system-notification-btn" style="background: #ff9500;">
+                    调试系统通知
+                </button>
+                
+                <!-- 4. 服务器推送（高级） -->
+                <div class="settings-item">
+                    <label>启用服务器推送（高级）</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="push-server-enabled-switch">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                
+                <div id="push-server-details" style="display:none;">
+                    <div class="settings-item">
+                        <label>推送服务器地址</label>
+                        <div class="settings-right">
+                            <input type="text" id="push-server-url" placeholder="https://your-push-server.com">
+                        </div>
+                    </div>
+                    
+                    <div class="settings-item">
+                        <label>API 密钥（可选）</label>
+                        <div class="settings-right">
+                            <input type="text" id="push-server-api-key" placeholder="your-api-key">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 5. 消息震动 -->
+                <div class="settings-item">
+                    <label>消息震动</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="notification-vibration-enabled-switch">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                
+                <div id="vibration-pattern-selector" style="display:none;">
+                    <div class="settings-item">
+                        <label>震动模式</label>
+                        <div class="settings-right">
+                            <select id="vibration-pattern-select">
+                                <option value="short">短震（1次）</option>
+                                <option value="medium">中震（2次）</option>
+                                <option value="long">长震（3次）</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                
+                <!-- 7. 提示音 -->
+                <div class="settings-item">
+                    <label>自定义提示音</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="notification-sound-enabled-switch">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                
+                <div id="notification-sound-details" style="display:none;">
+                    <div class="settings-item">
+                        <label>使用全局提示音</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="use-global-sound-switch" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    
+                    <div id="custom-sound-input-wrapper" style="display:none;">
+                        <div class="settings-item">
+                            <label>自定义提示音 URL</label>
+                            <div class="settings-right">
+                                <input type="text" id="custom-notification-sound-url" placeholder="https://...">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 8. 在聊天页面也发送系统级通知 -->
+                <div class="settings-item">
+                    <label>
+                        <span style="display: block;">在聊天页面也发送通知</span>
+                        <span style="font-size: 12px; color: var(--text-secondary); display: block; margin-top: 4px;"></span>
+                    </label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="notify-in-chat-page-switch">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                
+                <!-- 9. 禁用内部弹窗 -->
+                <div class="settings-item">
+                    <label>
+                        <span style="display: block;">仅系统级通知</span>
+                        <span style="font-size: 12px; color: var(--text-secondary); display: block; margin-top: 4px;">开启后只显示系统级通知，不显示应用内弹窗</span>
+                    </label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="disable-internal-notification-switch">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                
+            </div>
+        </div>
+        <div class="settings-desc">
+            系统级通知会在设备通知中心显示，支持横幅弹窗。需要授予通知权限。
+        </div>
+
+        <!-- 数据管理：存储与空间清理 -->
+        <div class="settings-header" data-api-category="data">存储与缓存清理</div>
+        <div class="settings-section">
+            <!-- 图片占用 + 压缩按钮 (同一行) -->
+            <div class="settings-item">
+                <label style="flex-shrink: 0;">本地图片占用</label>
+                <div class="data-row-right">
+                    <span id="total-image-size-display">计算中...</span>
+                    <button id="compress-images-btn" class="settings-mini-btn">压缩</button>
+                </div>
+            </div>
+            
+            <button class="settings-full-btn" id="view-data-distribution-btn" data-lang-key="apiViewDataDistributionBtn">查看数据分布</button>
+            <button class="settings-full-btn" id="cleanup-data-btn">清理冗余数据</button>
+            <button class="settings-full-btn" id="clear-chat-images-btn">清空聊天的本地图片</button>
+            <button class="settings-full-btn" id="clear-chat-html-btn">清空聊天的HTML内容</button>
+            <button class="settings-full-btn" id="clear-api-history-btn">清空所有API历史记录</button>
+            <button class="settings-full-btn" id="clear-stickers-btn">一键清空表情包</button>
+        </div>
+
+        <!-- 数据管理：备份与恢复 -->
+        <div class="settings-header" data-api-category="data">数据备份与迁移</div>
+        <div class="settings-section">
+            <button class="settings-full-btn" id="export-data-btn" data-lang-key="apiExportDataBtn">导出所有数据</button>
+            <button class="settings-full-btn" id="import-btn" data-lang-key="apiImportDataBtn">导入备份文件</button>
+            <button class="settings-full-btn" id="advanced-export-btn">高级导出导入</button>
+            <button class="settings-full-btn" id="advanced-import-btn">导入分类备份</button>
+            <input id="advanced-import-input" type="file" accept="application/json" hidden>
+            <input id="import-data-input" type="file" accept="application/json" hidden>
+        </div>
+
+        <!-- 数据管理：高级维护与重置 -->
+        <div class="settings-header" data-api-category="data">高级维护与重置</div>
+        <div class="settings-section">
+            <div class="settings-item">
+                <label>持久化存储保护</label>
+                <div class="settings-right">
+                    <button id="check-storage-persistence-btn" class="settings-mini-btn">检查状态</button>
+                </div>
+            </div>
+            <div id="storage-persistence-info" style="display:none; padding: 10px 15px; font-size: 13px; color: #666; line-height: 1.6;"></div>
+            
+            <button class="settings-full-btn" id="check-and-fix-data-btn">数据检查与修复</button>
+            <button class="settings-full-btn" id="clear-specific-data-btn">高级数据清理向导</button>
+            <button class="settings-full-btn" id="emergency-reset-appearance-btn" style="color: #ff9500;">重置当前外观</button>
+            <button class="settings-full-btn" id="delete-world-books-btn" style="color: #ff3b30;">删除世界书</button>
+            <button class="settings-full-btn" id="factory-reset-btn" style="color: #ff3b30;">初始化所有内容 (慎用)</button>
+        </div>
+        
+        <!-- 检查更新 -->
+        <div class="settings-header" data-api-category="system">应用更新</div>
+        <div class="settings-section">
+            <div class="settings-item">
+                <label>检查并更新到最新版本</label>
+                <div class="settings-right">
+                    <button id="check-update-btn" class="settings-mini-btn" onclick="ForceUpdater.checkUpdate()">检查更新</button>
+                </div>
+            </div>
+            <div class="settings-item">
+                <label>查看更新日志</label>
+                <div class="settings-right">
+                    <button class="settings-mini-btn" onclick="window.open('update-log.html', '_blank', 'width=800,height=600')">查看日志</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 许愿/反馈 -->
+        <div class="settings-header" data-api-category="data">许愿 / 反馈</div>
+        <div class="settings-section">
+            <div class="settings-tip-wrapper">
+                <div class="settings-tip-content">
+                    <strong>注意：</strong>匿名反馈作者无法回复你，你也收不到回复通知。如需作者回复，请使用下方「公开反馈」。
+                </div>
+            </div>
+            <div class="settings-item">
+                <label>匿名许愿 / 反馈</label>
+                <div class="settings-right">
+                    <a href="javascript:void(0)" onclick="showCustomAlert('功能暂时关闭', '许愿/反馈功能暂时关闭，后续可能会重新开放，敬请期待！')" class="settings-mini-btn" style="text-decoration: none; color: inherit;">前往</a>
+                </div>
+            </div>
+            <div class="settings-item">
+                <label>公开反馈（可收到回复）</label>
+                <div class="settings-right">
+                    <a href="javascript:void(0)" onclick="showCustomAlert('功能暂时关闭', '许愿/反馈功能暂时关闭，后续可能会重新开放，敬请期待！')" class="settings-mini-btn" style="text-decoration: none; color: inherit;">前往</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部垫高 -->
+        <div style="height: 60px;"></div>
+      </div>
+    </div>

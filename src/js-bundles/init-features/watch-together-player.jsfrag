@@ -1,0 +1,1155 @@
+    // ========== 一起看电影功能 ==========
+    let watchTogetherState = {
+      isActive: false,
+      chatId: null,
+      videoUrl: null,
+      mode: 'online', // 默认线上模式
+      captureInterval: 5,
+      speechApi: 'none', // 默认不识别
+      whisperKey: '',
+      whisperUrl: 'https://api.openai.com/v1/audio/transcriptions',
+      maxScreenshots: 10, // 记住历史截图数量
+      maxAudios: 10, // 记住历史声音数量
+      maxMessages: 20, // 记住最近对话条数
+      messages: [],
+      captureTimer: null,
+      speechRecognition: null,
+      audioContext: null,
+      mediaRecorder: null,
+      audioChunks: [],
+      corsWarningShown: false, // 跨域警告是否已显示
+      hlsInstance: null, // HLS.js 实例
+      isStopping: false
+    };
+    window.watchTogetherState = watchTogetherState;
+
+    function ensureWatchTogetherFloatingHost() {
+      const phone = document.getElementById('phone-screen');
+      const shell = document.getElementById('watch-together-pip-shell');
+      const bar = document.getElementById('watch-together-pip-bar');
+      if (!phone) return;
+      if (shell?.parentElement !== phone) phone.appendChild(shell);
+      if (bar?.parentElement !== phone) phone.appendChild(bar);
+    }
+
+    // 浮窗生命周期参考并独立改写自 yxlforever/YYY ece2d6b 的播放器资源治理思路。
+    function restoreWatchTogetherFromFloating() {
+      ensureWatchTogetherFloatingHost();
+      const shell = document.getElementById('watch-together-pip-shell');
+      const bar = document.getElementById('watch-together-pip-bar');
+      const video = document.getElementById('watch-together-video');
+      const videoContainer = document.getElementById('watch-together-video-container');
+      const placeholder = document.getElementById('watch-together-placeholder');
+      const modal = document.getElementById('watch-together-modal');
+      if (video && videoContainer && video.parentElement !== videoContainer) {
+        videoContainer.insertBefore(video, placeholder);
+      }
+      shell?.classList.remove('is-visible');
+      shell?.setAttribute('aria-hidden', 'true');
+      bar?.classList.remove('is-visible');
+      if (watchTogetherState.isActive && !watchTogetherState.isStopping) modal?.classList.add('visible');
+    }
+
+    function closeWatchTogetherFloatingPlayer() {
+      const shell = document.getElementById('watch-together-pip-shell');
+      const bar = document.getElementById('watch-together-pip-bar');
+      shell?.classList.remove('is-visible');
+      shell?.setAttribute('aria-hidden', 'true');
+      bar?.classList.remove('is-visible');
+      if (document.pictureInPictureElement === document.getElementById('watch-together-video')) {
+        document.exitPictureInPicture?.().catch(() => {});
+      }
+      restoreWatchTogetherFromFloating();
+      document.getElementById('watch-together-modal')?.classList.remove('visible');
+    }
+
+    async function showWatchTogetherFloatingPlayer() {
+      if (!watchTogetherState.isActive || watchTogetherState.isStopping) return false;
+      ensureWatchTogetherFloatingHost();
+      const shell = document.getElementById('watch-together-pip-shell');
+      const bar = document.getElementById('watch-together-pip-bar');
+      const video = document.getElementById('watch-together-video');
+      const body = document.getElementById('watch-together-pip-body');
+      const placeholder = document.getElementById('watch-together-pip-placeholder');
+      const modal = document.getElementById('watch-together-modal');
+      if (!shell || !bar || !video || !body || !modal) return false;
+
+      const title = state.chats[watchTogetherState.chatId]?.name || '正在一起看';
+      const titleElement = document.getElementById('watch-together-pip-title');
+      if (titleElement) titleElement.textContent = `与 ${title} 一起看`;
+      bar.textContent = `与 ${title} 一起看`;
+
+      if ('mediaSession' in navigator && typeof MediaMetadata === 'function') {
+        try {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: '一起看电影',
+            artist: `与 ${title} 一起看`
+          });
+        } catch (error) {
+          console.info('[一起看电影] 当前环境不支持设置媒体信息:', error);
+        }
+      }
+
+      if (video.readyState > 0) {
+        try {
+          if (document.pictureInPictureEnabled && video.requestPictureInPicture) {
+            await video.requestPictureInPicture();
+            modal.classList.remove('visible');
+            return false;
+          }
+          if (typeof video.webkitSetPresentationMode === 'function') {
+            video.webkitSetPresentationMode('picture-in-picture');
+            modal.classList.remove('visible');
+            return false;
+          }
+        } catch (error) {
+          console.info('[一起看电影] 原生画中画不可用，使用应用内悬浮播放器:', error);
+        }
+      }
+
+      if (video.parentElement !== body) body.insertBefore(video, placeholder);
+      shell.classList.add('is-visible');
+      shell.setAttribute('aria-hidden', 'false');
+      bar.classList.remove('is-visible');
+      modal.classList.remove('visible');
+      return false;
+    }
+
+    function collapseWatchTogetherFloatingPlayer() {
+      const shell = document.getElementById('watch-together-pip-shell');
+      const bar = document.getElementById('watch-together-pip-bar');
+      shell?.classList.remove('is-visible');
+      shell?.setAttribute('aria-hidden', 'true');
+      if (watchTogetherState.isActive) bar?.classList.add('is-visible');
+    }
+
+    function bindWatchTogetherFloatingDrag() {
+      ensureWatchTogetherFloatingHost();
+      const shell = document.getElementById('watch-together-pip-shell');
+      const handle = document.getElementById('watch-together-pip-drag-handle');
+      const phone = document.getElementById('phone-screen');
+      if (!shell || !handle || !phone || handle.dataset.dragBound === '1') return;
+      handle.dataset.dragBound = '1';
+      handle.addEventListener('pointerdown', event => {
+        if (event.target.closest('button')) return;
+        const shellRect = shell.getBoundingClientRect();
+        const phoneRect = phone.getBoundingClientRect();
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const startLeft = shellRect.left - phoneRect.left;
+        const startTop = shellRect.top - phoneRect.top;
+        handle.setPointerCapture?.(event.pointerId);
+        const move = moveEvent => {
+          const maxLeft = Math.max(8, phoneRect.width - shellRect.width - 8);
+          const maxTop = Math.max(8, phoneRect.height - shellRect.height - 8);
+          const left = Math.min(maxLeft, Math.max(8, startLeft + moveEvent.clientX - startX));
+          const top = Math.min(maxTop, Math.max(8, startTop + moveEvent.clientY - startY));
+          shell.style.left = `${left}px`;
+          shell.style.top = `${top}px`;
+          shell.style.transform = 'none';
+        };
+        const finish = () => {
+          handle.removeEventListener('pointermove', move);
+          handle.removeEventListener('pointerup', finish);
+          handle.removeEventListener('pointercancel', finish);
+        };
+        handle.addEventListener('pointermove', move);
+        handle.addEventListener('pointerup', finish);
+        handle.addEventListener('pointercancel', finish);
+      });
+    }
+
+    window.showWatchTogetherFloatingPlayer = showWatchTogetherFloatingPlayer;
+    window.restoreWatchTogetherFromFloating = restoreWatchTogetherFromFloating;
+    window.closeWatchTogetherFloatingPlayer = closeWatchTogetherFloatingPlayer;
+
+    // 打开观影界面
+    document.getElementById('open-watch-together-btn')?.addEventListener('click', () => {
+      if (!state.activeChatId) {
+        alert('请先选择一个聊天对象！');
+        return;
+      }
+      const chat = state.chats[state.activeChatId];
+      if (chat.isGroup) {
+        alert('一起看电影功能仅支持单人聊天！');
+        return;
+      }
+
+      if (watchTogetherState.isActive) {
+        restoreWatchTogetherFromFloating();
+        return;
+      }
+
+      watchTogetherState.isActive = true;
+      watchTogetherState.chatId = state.activeChatId;
+      watchTogetherState.messages = [];
+
+      document.getElementById('watch-together-modal').classList.add('visible');
+      document.getElementById('watch-together-chat-name').textContent = chat.name;
+
+      // 加载保存的设置
+      if (chat.watchTogetherSettings) {
+        watchTogetherState.mode = chat.watchTogetherSettings.mode || 'online';
+        watchTogetherState.captureInterval = chat.watchTogetherSettings.captureInterval || 5;
+        watchTogetherState.speechApi = chat.watchTogetherSettings.speechApi || 'none';
+        watchTogetherState.whisperKey = chat.watchTogetherSettings.whisperKey || '';
+        watchTogetherState.whisperUrl = chat.watchTogetherSettings.whisperUrl || 'https://api.openai.com/v1/audio/transcriptions';
+        watchTogetherState.maxScreenshots = chat.watchTogetherSettings.maxScreenshots || 10;
+        watchTogetherState.maxAudios = chat.watchTogetherSettings.maxAudios || 10;
+        watchTogetherState.maxMessages = chat.watchTogetherSettings.maxMessages || 20;
+      }
+
+      // 使聊天框可拖动
+      setTimeout(() => {
+        const chatFloat = document.getElementById('watch-together-chat-float');
+        makeDraggable(chatFloat, document.getElementById('watch-together-chat-header'));
+        
+        // 恢复保存的位置
+        if (chat.watchTogetherSettings && chat.watchTogetherSettings.position) {
+          chatFloat.style.top = chat.watchTogetherSettings.position.top;
+          chatFloat.style.left = chat.watchTogetherSettings.position.left;
+          chatFloat.style.transform = '';
+        }
+      }, 100);
+
+      renderWatchTogetherMessages();
+      bindWatchTogetherFloatingDrag();
+    });
+
+    // 关闭观影界面
+    document.getElementById('close-watch-together-btn')?.addEventListener('click', () => {
+      stopWatchTogether();
+    });
+
+    document.getElementById('watch-together-pip-btn')?.addEventListener('click', showWatchTogetherFloatingPlayer);
+    document.getElementById('watch-together-pip-back-btn')?.addEventListener('click', restoreWatchTogetherFromFloating);
+    document.getElementById('watch-together-pip-collapse-btn')?.addEventListener('click', collapseWatchTogetherFloatingPlayer);
+    document.getElementById('watch-together-pip-bar')?.addEventListener('click', showWatchTogetherFloatingPlayer);
+    document.getElementById('watch-together-video')?.addEventListener('leavepictureinpicture', () => {
+      if (watchTogetherState.isActive && !watchTogetherState.isStopping) restoreWatchTogetherFromFloating();
+    });
+
+    // 上传按钮
+    document.getElementById('watch-together-upload-btn')?.addEventListener('click', () => {
+      document.getElementById('watch-together-upload-modal').classList.add('visible');
+    });
+
+    // 本地上传
+    document.getElementById('watch-together-upload-local')?.addEventListener('click', () => {
+      document.getElementById('watch-together-file-input').click();
+      document.getElementById('watch-together-upload-modal').classList.remove('visible');
+    });
+
+    // URL上传
+    document.getElementById('watch-together-upload-url')?.addEventListener('click', () => {
+      document.getElementById('watch-together-upload-modal').classList.remove('visible');
+      document.getElementById('watch-together-url-modal').classList.add('visible');
+    });
+
+    // 在线搜索
+    const searchOnlineBtn = document.getElementById('watch-together-search-online');
+    if (searchOnlineBtn) {
+      searchOnlineBtn.addEventListener('click', () => {
+        console.log('点击了在线搜索按钮');
+        document.getElementById('watch-together-upload-modal').classList.remove('visible');
+        document.getElementById('watch-together-search-modal').classList.add('visible');
+      });
+    } else {
+      console.error('找不到在线搜索按钮');
+    }
+
+    // 取消上传
+    document.getElementById('cancel-watch-together-upload-btn')?.addEventListener('click', () => {
+      document.getElementById('watch-together-upload-modal').classList.remove('visible');
+    });
+
+    // 文件选择
+    document.getElementById('watch-together-file-input')?.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        loadWatchTogetherVideo(file);
+      }
+    });
+
+    // URL确认
+    document.getElementById('confirm-watch-together-url-btn')?.addEventListener('click', () => {
+      const url = document.getElementById('watch-together-url-input').value.trim();
+      if (url) {
+        loadWatchTogetherVideoFromUrl(url);
+        document.getElementById('watch-together-url-modal').classList.remove('visible');
+        document.getElementById('watch-together-url-input').value = '';
+      }
+    });
+
+    // 取消URL
+    document.getElementById('cancel-watch-together-url-btn')?.addEventListener('click', () => {
+      document.getElementById('watch-together-url-modal').classList.remove('visible');
+    });
+
+    // 取消搜索
+    const cancelSearchBtn = document.getElementById('cancel-watch-together-search-btn');
+    if (cancelSearchBtn) {
+      cancelSearchBtn.addEventListener('click', () => {
+        document.getElementById('watch-together-search-modal').classList.remove('visible');
+      });
+    }
+
+    // 搜索按钮
+    const searchBtn = document.getElementById('watch-together-search-btn');
+    if (searchBtn) {
+      searchBtn.addEventListener('click', () => {
+        const keyword = document.getElementById('watch-together-search-input').value.trim();
+        if (keyword) {
+          searchMovies(keyword);
+        }
+      });
+    }
+
+    // 搜索框回车
+    const watchTogetherSearchInput = document.getElementById('watch-together-search-input');
+    if (watchTogetherSearchInput) {
+      watchTogetherSearchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          const keyword = e.target.value.trim();
+          if (keyword) {
+            searchMovies(keyword);
+          }
+        }
+      });
+    }
+
+    // 播放列表按钮
+    document.getElementById('watch-together-playlist-btn')?.addEventListener('click', () => {
+      openPlaylist();
+    });
+
+    // 关闭播放列表
+    document.getElementById('close-watch-together-playlist-btn')?.addEventListener('click', () => {
+      document.getElementById('watch-together-playlist-modal').classList.remove('visible');
+    });
+
+    document.getElementById('cancel-watch-together-playlist-btn')?.addEventListener('click', () => {
+      document.getElementById('watch-together-playlist-modal').classList.remove('visible');
+    });
+
+    // 保存视频到播放列表
+    document.getElementById('confirm-save-video-btn')?.addEventListener('click', () => {
+      saveVideoToPlaylist();
+    });
+
+    document.getElementById('cancel-save-video-btn')?.addEventListener('click', () => {
+      document.getElementById('watch-together-save-video-modal').classList.remove('visible');
+    });
+
+    // 设置按钮
+    document.getElementById('watch-together-settings-btn')?.addEventListener('click', () => {
+      loadWatchTogetherSettings();
+      document.getElementById('watch-together-settings-modal').classList.add('visible');
+    });
+
+    // 语音API选择
+    document.getElementById('watch-together-speech-api-select')?.addEventListener('change', (e) => {
+      const whisperConfig = document.getElementById('watch-together-whisper-config');
+      whisperConfig.style.display = e.target.value === 'whisper' ? 'block' : 'none';
+    });
+
+    // 保存设置
+    document.getElementById('save-watch-together-settings-btn')?.addEventListener('click', () => {
+      saveWatchTogetherSettings();
+      document.getElementById('watch-together-settings-modal').classList.remove('visible');
+    });
+
+    // 取消设置
+    document.getElementById('cancel-watch-together-settings-btn')?.addEventListener('click', () => {
+      document.getElementById('watch-together-settings-modal').classList.remove('visible');
+    });
+
+    // 重置位置按钮
+    document.getElementById('reset-watch-together-position-btn')?.addEventListener('click', () => {
+      const chat = state.chats[watchTogetherState.chatId];
+      if (!chat) return;
+      
+      // 清除保存的位置
+      if (chat.watchTogetherSettings) {
+        delete chat.watchTogetherSettings.position;
+        db.chats.put(chat);
+      }
+      
+      // 重置对话框到默认位置（居中）
+      const chatFloat = document.getElementById('watch-together-chat-float');
+      if (chatFloat) {
+        chatFloat.style.top = '50%';
+        chatFloat.style.left = '50%';
+        chatFloat.style.transform = 'translate(-50%, -50%)';
+      }
+      
+      alert('对话框位置已重置到默认位置！');
+    });
+
+    // 聊天框收起/展开
+    document.getElementById('watch-together-chat-toggle')?.addEventListener('click', () => {
+      const chatFloat = document.getElementById('watch-together-chat-float');
+      const isMinimized = chatFloat.classList.contains('minimized');
+
+      if (isMinimized) {
+        chatFloat.classList.remove('minimized');
+        document.getElementById('watch-together-chat-toggle').textContent = '-';
+      } else {
+        chatFloat.classList.add('minimized');
+        document.getElementById('watch-together-chat-toggle').textContent = '+';
+      }
+    });
+
+    // 发送消息
+    document.getElementById('watch-together-chat-send')?.addEventListener('click', () => {
+      sendWatchTogetherUserMessage();
+    });
+
+    // 调用API
+    document.getElementById('watch-together-call-api-btn')?.addEventListener('click', () => {
+      callWatchTogetherAPI();
+    });
+
+    // 回车发送
+    document.getElementById('watch-together-chat-input')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendWatchTogetherUserMessage();
+      }
+    });
+
+    // 加载视频（本地文件）
+    function loadWatchTogetherVideo(file, skipSavePrompt = false) {
+      const video = document.getElementById('watch-together-video');
+      const placeholder = document.getElementById('watch-together-placeholder');
+
+      const url = URL.createObjectURL(file);
+      video.src = url;
+      video.style.display = 'block';
+      placeholder.style.display = 'none';
+
+      watchTogetherState.videoUrl = url;
+      watchTogetherState.corsWarningShown = false; // 重置跨域警告
+
+      // 存储当前视频信息，用于保存到播放列表
+      watchTogetherState.currentVideoFile = file;
+      watchTogetherState.currentVideoUrl = null;
+
+      // 开始监听
+      startWatchTogetherMonitoring();
+
+      addWatchTogetherSystemMessage('视频已加载，开始观看');
+
+      // 提示用户是否保存到播放列表
+      if (!skipSavePrompt) {
+        setTimeout(() => {
+          promptSaveVideoToPlaylist(file.name);
+        }, 1000);
+      }
+    }
+
+    // 加载视频（URL）
+    function loadWatchTogetherVideoFromUrl(url, skipSavePrompt = false) {
+      const video = document.getElementById('watch-together-video');
+      const placeholder = document.getElementById('watch-together-placeholder');
+
+      // 销毁之前的 HLS 实例
+      if (watchTogetherState.hlsInstance) {
+        watchTogetherState.hlsInstance.destroy();
+        watchTogetherState.hlsInstance = null;
+      }
+
+      video.style.display = 'block';
+      placeholder.style.display = 'none';
+
+      watchTogetherState.videoUrl = url;
+      watchTogetherState.corsWarningShown = false;
+      watchTogetherState.currentVideoFile = null;
+      watchTogetherState.currentVideoUrl = url;
+
+      const isHls = /\.m3u8(\?|$)/i.test(url);
+
+      if (isHls && typeof Hls !== 'undefined' && Hls.isSupported()) {
+        // Android / Chrome 等不原生支持 HLS 的浏览器，用 hls.js
+        const hls = new Hls({
+          xhrSetup: function(xhr) {
+            // 不设置 withCredentials，避免 CORS 问题
+          }
+        });
+        hls.loadSource(url);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          video.play().catch(() => {});
+        });
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            console.error('[一起看电影] HLS 致命错误:', data.type, data.details);
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+              addWatchTogetherSystemMessage('视频加载失败，尝试重新连接...');
+              hls.startLoad();
+            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+              addWatchTogetherSystemMessage('媒体解码错误，尝试恢复...');
+              hls.recoverMediaError();
+            } else {
+              addWatchTogetherSystemMessage('视频播放失败，该播放源可能不可用');
+              hls.destroy();
+              watchTogetherState.hlsInstance = null;
+            }
+          }
+        });
+        watchTogetherState.hlsInstance = hls;
+        // hls.js 管理 crossOrigin，不需要手动设置
+        video.removeAttribute('crossorigin');
+      } else if (isHls && video.canPlayType('application/vnd.apple.mpegurl')) {
+        // iOS Safari 原生支持 HLS
+        video.src = url;
+        video.addEventListener('loadedmetadata', () => {
+          video.play().catch(() => {});
+        }, { once: true });
+      } else {
+        // 普通视频文件（mp4 等）
+        video.crossOrigin = 'anonymous';
+        video.src = url;
+
+        // 如果设置 crossOrigin 后加载失败，去掉 crossOrigin 重试
+        video.onerror = () => {
+          if (video.crossOrigin) {
+            console.warn('[一起看电影] 跨域加载失败，去掉 crossOrigin 重试');
+            video.removeAttribute('crossorigin');
+            video.src = url;
+            video.onerror = null; // 避免无限重试
+          }
+        };
+      }
+
+      // 开始监听
+      startWatchTogetherMonitoring();
+
+      addWatchTogetherSystemMessage('视频已加载，开始观看');
+
+      // 提示用户是否保存到播放列表
+      if (!skipSavePrompt) {
+        setTimeout(() => {
+          const urlParts = url.split('/');
+          const fileName = urlParts[urlParts.length - 1] || '在线视频';
+          promptSaveVideoToPlaylist(fileName);
+        }, 1000);
+      }
+    }
+
+    // ========== 播放列表功能 ==========
+
+    // 提示保存视频到播放列表
+    async function promptSaveVideoToPlaylist(defaultName) {
+      const result = await showCustomConfirm('保存到播放列表', '是否将当前视频保存到播放列表？');
+      if (result) {
+        openSaveVideoModal(defaultName);
+      }
+    }
+
+    // 打开保存视频对话框
+    function openSaveVideoModal(defaultName) {
+      const input = document.getElementById('watch-together-video-name-input');
+      input.value = defaultName.replace(/\.[^/.]+$/, ''); // 移除文件扩展名
+      document.getElementById('watch-together-save-video-modal').classList.add('visible');
+      input.focus();
+    }
+
+    // 保存视频到播放列表
+    async function saveVideoToPlaylist() {
+      const name = document.getElementById('watch-together-video-name-input').value.trim();
+      if (!name) {
+        await showCustomAlert('提示', '请输入视频名称');
+        return;
+      }
+
+      const videoData = {
+        name: name,
+        timestamp: Date.now()
+      };
+
+      // 保存视频文件或URL
+      if (watchTogetherState.currentVideoFile) {
+        // 本地文件 - 转为base64存储
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          videoData.data = e.target.result;
+          videoData.type = 'file';
+          await db.watchTogetherPlaylist.add(videoData);
+          await showCustomAlert('成功', '视频已保存到播放列表');
+          document.getElementById('watch-together-save-video-modal').classList.remove('visible');
+        };
+        reader.readAsDataURL(watchTogetherState.currentVideoFile);
+      } else if (watchTogetherState.currentVideoUrl) {
+        // URL
+        videoData.data = watchTogetherState.currentVideoUrl;
+        videoData.type = 'url';
+        await db.watchTogetherPlaylist.add(videoData);
+        await showCustomAlert('成功', '视频已保存到播放列表');
+        document.getElementById('watch-together-save-video-modal').classList.remove('visible');
+      } else {
+        await showCustomAlert('错误', '未找到视频数据');
+      }
+    }
+
+    // 打开播放列表
+    async function openPlaylist() {
+      await renderPlaylist();
+      document.getElementById('watch-together-playlist-modal').classList.add('visible');
+    }
+
+    // 渲染播放列表
+    async function renderPlaylist() {
+      const listEl = document.getElementById('watch-together-playlist-list');
+      const videos = await db.watchTogetherPlaylist.orderBy('timestamp').reverse().toArray();
+
+      if (videos.length === 0) {
+        listEl.innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">暂无视频，上传视频后可保存到列表</p>';
+        return;
+      }
+
+      listEl.innerHTML = videos.map(video => `
+        <div class="playlist-item" data-id="${video.id}">
+          <div class="playlist-item-info">
+            <div class="playlist-item-name">${video.name}</div>
+            <div class="playlist-item-time">${new Date(video.timestamp).toLocaleString()}</div>
+            <div class="playlist-item-type">${video.type === 'file' ? '本地文件' : '在线视频'}</div>
+          </div>
+          <div class="playlist-item-actions">
+            <button class="playlist-play-btn" onclick="playFromPlaylist(${video.id})">播放</button>
+            <button class="playlist-delete-btn" onclick="deleteFromPlaylist(${video.id})">删除</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // 从播放列表播放视频
+    window.playFromPlaylist = async function (id) {
+      const video = await db.watchTogetherPlaylist.get(id);
+      if (!video) {
+        await showCustomAlert('错误', '未找到视频');
+        return;
+      }
+
+      document.getElementById('watch-together-playlist-modal').classList.remove('visible');
+
+      if (video.type === 'file') {
+        // 从base64恢复文件
+        const response = await fetch(video.data);
+        const blob = await response.blob();
+        const file = new File([blob], video.name, { type: blob.type });
+        loadWatchTogetherVideo(file, true);
+      } else if (video.type === 'url') {
+        loadWatchTogetherVideoFromUrl(video.data, true);
+      }
+    };
+
+    // 从播放列表删除视频
+    window.deleteFromPlaylist = async function (id) {
+      const confirmed = await showCustomConfirm('确认删除', '确定要从播放列表中删除这个视频吗？');
+      if (confirmed) {
+        await db.watchTogetherPlaylist.delete(id);
+        await renderPlaylist();
+      }
+    };
+
+    // ========== 播放列表功能结束 ==========
+
+    // 开始监听（截图+语音识别）
+    function startWatchTogetherMonitoring() {
+      const video = document.getElementById('watch-together-video');
+
+      // 启动语音识别（如果启用）
+      if (watchTogetherState.speechApi === 'whisper') {
+        // 初始化音频上下文
+        if (!watchTogetherState.audioContext) {
+          watchTogetherState.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        // 创建音频源
+        const source = watchTogetherState.audioContext.createMediaElementSource(video);
+        const destination = watchTogetherState.audioContext.createMediaStreamDestination();
+        source.connect(destination);
+        source.connect(watchTogetherState.audioContext.destination);
+
+        // 启动 Whisper 录音
+        startWhisperRecording(destination.stream);
+      } else if (watchTogetherState.speechApi === 'none') {
+        console.log('已禁用语音识别');
+      }
+
+      // 启动截图定时器
+      startCaptureTimer();
+    }
+
+    // Whisper录音
+    function startWhisperRecording(stream) {
+      if (!MediaRecorder.isTypeSupported('audio/webm')) {
+        console.warn('浏览器不支持MediaRecorder');
+        return;
+      }
+
+      const mediaRecorder = new MediaRecorder(stream);
+      watchTogetherState.mediaRecorder = mediaRecorder;
+      watchTogetherState.audioChunks = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        watchTogetherState.audioChunks.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(watchTogetherState.audioChunks, { type: 'audio/webm' });
+        watchTogetherState.audioChunks = [];
+
+        // 发送到Whisper API
+        const transcript = await transcribeWithWhisper(audioBlob);
+        if (transcript) {
+          addWatchTogetherContextMessage('语音识别', transcript);
+        }
+
+        // 继续录制
+        if (watchTogetherState.isActive && watchTogetherState.mediaRecorder) {
+          watchTogetherState.audioChunks = [];
+          watchTogetherState.mediaRecorder.start();
+          setTimeout(() => {
+            if (watchTogetherState.mediaRecorder && watchTogetherState.mediaRecorder.state === 'recording') {
+              watchTogetherState.mediaRecorder.stop();
+            }
+          }, watchTogetherState.captureInterval * 1000);
+        }
+      };
+
+      mediaRecorder.start();
+      setTimeout(() => {
+        if (mediaRecorder.state === 'recording') {
+          mediaRecorder.stop();
+        }
+      }, watchTogetherState.captureInterval * 1000);
+    }
+
+    // Whisper API转录
+    async function transcribeWithWhisper(audioBlob) {
+      try {
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'audio.webm');
+        formData.append('model', 'whisper-1');
+
+        const response = await fetch(watchTogetherState.whisperUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${watchTogetherState.whisperKey}`
+          },
+          body: formData
+        });
+
+        if (!response.ok) {
+          throw new Error('Whisper API调用失败');
+        }
+
+        const data = await response.json();
+        return data.text;
+      } catch (error) {
+        console.error('Whisper转录失败:', error);
+        return null;
+      }
+    }
+
+    // 启动截图定时器
+    function startCaptureTimer() {
+      if (watchTogetherState.captureTimer) {
+        clearInterval(watchTogetherState.captureTimer);
+      }
+
+      watchTogetherState.captureTimer = setInterval(() => {
+        captureVideoFrame();
+      }, watchTogetherState.captureInterval * 1000);
+    }
+
+    // 截取视频画面
+    function captureVideoFrame() {
+      const video = document.getElementById('watch-together-video');
+      if (!video || video.paused) return;
+
+      // 检查视频尺寸
+      if (!video.videoWidth || !video.videoHeight) {
+        console.warn('视频尺寸无效，跳过本次截图');
+        return;
+      }
+
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+
+        const imageData = canvas.toDataURL('image/jpeg', 0.6);
+        const currentTime = formatVideoTime(video.currentTime);
+
+        console.log(`✅ 视频截图已捕获: ${currentTime}, 大小: ${(imageData.length / 1024).toFixed(2)}KB`);
+        addWatchTogetherContextMessage('视频截图', `[${currentTime}]`, imageData);
+      } catch (error) {
+        console.error('❌ 视频截图失败（可能是跨域限制）:', error.message);
+        // 如果是第一次失败，给用户提示
+        if (!watchTogetherState.corsWarningShown) {
+          watchTogetherState.corsWarningShown = true;
+          addWatchTogetherSystemMessage('⚠️ 视频截图功能受限，该视频源不支持内容识别');
+        }
+      }
+    }
+
+    // 格式化时间
+    function formatVideoTime(seconds) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = Math.floor(seconds % 60);
+
+      if (h > 0) {
+        return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+      } else {
+        return `${m}:${s.toString().padStart(2, '0')}`;
+      }
+    }
+
+    // 添加系统消息
+    function addWatchTogetherSystemMessage(text) {
+      const messagesDiv = document.getElementById('watch-together-chat-messages');
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'watch-together-system-message';
+      msgDiv.textContent = text;
+      messagesDiv.appendChild(msgDiv);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // 添加上下文消息（不显示，但会发给AI）
+    function addWatchTogetherContextMessage(type, content, imageData = null) {
+      watchTogetherState.messages.push({
+        role: 'system',
+        type: type,
+        content: content,
+        imageData: imageData,
+        timestamp: Date.now()
+      });
+
+      // 根据类型清理超出限制的历史记录
+      if (type === '视频截图') {
+        const screenshots = watchTogetherState.messages.filter(m => m.role === 'system' && m.type === '视频截图');
+        if (screenshots.length > watchTogetherState.maxScreenshots) {
+          // 找到最旧的截图并删除
+          const oldestScreenshot = screenshots[0];
+          const index = watchTogetherState.messages.indexOf(oldestScreenshot);
+          if (index !== -1) {
+            watchTogetherState.messages.splice(index, 1);
+          }
+        }
+      } else if (type === '语音识别') {
+        const audios = watchTogetherState.messages.filter(m => m.role === 'system' && m.type === '语音识别');
+        if (audios.length > watchTogetherState.maxAudios) {
+          // 找到最旧的语音并删除
+          const oldestAudio = audios[0];
+          const index = watchTogetherState.messages.indexOf(oldestAudio);
+          if (index !== -1) {
+            watchTogetherState.messages.splice(index, 1);
+          }
+        }
+      }
+
+      // 限制对话消息数量（用户和助手的消息）
+      const dialogMessages = watchTogetherState.messages.filter(m => m.role === 'user' || m.role === 'assistant');
+      if (dialogMessages.length > watchTogetherState.maxMessages) {
+        // 找到最旧的对话消息并删除
+        const oldestDialog = dialogMessages[0];
+        const index = watchTogetherState.messages.indexOf(oldestDialog);
+        if (index !== -1) {
+          watchTogetherState.messages.splice(index, 1);
+        }
+      }
+    }
+
+    // 发送用户消息（不调用API）
+    function sendWatchTogetherUserMessage() {
+      const input = document.getElementById('watch-together-chat-input');
+      const text = input.value.trim();
+
+      if (!text) return;
+
+      input.value = '';
+
+      // 添加用户消息
+      watchTogetherState.messages.push({
+        role: 'user',
+        content: text,
+        timestamp: Date.now()
+      });
+
+      // 清理超出限制的对话消息
+      const dialogMessages = watchTogetherState.messages.filter(m => m.role === 'user' || m.role === 'assistant');
+      if (dialogMessages.length > watchTogetherState.maxMessages) {
+        const oldestDialog = dialogMessages[0];
+        const index = watchTogetherState.messages.indexOf(oldestDialog);
+        if (index !== -1) {
+          watchTogetherState.messages.splice(index, 1);
+        }
+      }
+
+      renderWatchTogetherMessages();
+    }
+
+    // 调用API
+    async function callWatchTogetherAPI() {
+      if (!watchTogetherState.isActive) return;
+
+      const chat = state.chats[watchTogetherState.chatId];
+      const video = document.getElementById('watch-together-video');
+      const isOnlineMode = watchTogetherState.mode === 'online';
+
+      // 禁用按钮
+      document.getElementById('watch-together-call-api-btn').disabled = true;
+      document.getElementById('watch-together-chat-send').disabled = true;
+
+      // 显示"正在输入中"
+      const chatNameElement = document.getElementById('watch-together-chat-name');
+      const originalName = chatNameElement.textContent;
+      chatNameElement.textContent = '正在输入中...';
+
+      try {
+        const { proxyUrl, apiKey, model } = state.apiConfig;
+        if (!proxyUrl || !apiKey || !model) {
+          alert('请先在API设置中配置反代地址、密钥并选择模型。');
+          return;
+        }
+
+        const currentTime = video.currentTime ? formatVideoTime(video.currentTime) : '0:00';
+        const now = new Date();
+        const selectedTimeZone = chat.settings.timeZone || 'Asia/Shanghai';
+        const currentDateTime = now.toLocaleString('zh-CN', {
+          timeZone: selectedTimeZone,
+          dateStyle: 'full',
+          timeStyle: 'short'
+        });
+
+        // 构建基础系统提示词
+        let basePrompt = `# 核心任务
+你正在和用户一起观看视频。当前时间：${currentDateTime}，视频播放时间：${currentTime}。
+
+# 你的角色设定
+${chat.settings.aiPersona}
+
+# 用户的角色
+${chat.settings.myPersona || '普通用户'}
+`;
+
+        // 世界书
+        let worldBookContent = '';
+        let allWorldBookIds = [...(chat.settings.linkedWorldBookIds || [])];
+        state.worldBooks.forEach(wb => {
+          if (wb.isGlobal && !allWorldBookIds.includes(wb.id)) {
+            allWorldBookIds.push(wb.id);
+          }
+        });
+
+        if (allWorldBookIds.length > 0) {
+          const linkedContents = allWorldBookIds.map(bookId => {
+            const worldBook = state.worldBooks.find(wb => wb.id === bookId);
+            if (!worldBook || !Array.isArray(worldBook.content)) return '';
+
+            const formattedEntries = worldBook.content
+              .filter(entry => entry.enabled !== false)
+              .map(entry => {
+                let entryString = `\n### 条目: ${entry.comment || '无备注'}\n`;
+                entryString += `**内容:**\n${entry.content}`;
+                return entryString;
+              }).join('');
+
+            return formattedEntries ? `\n\n## 世界书: ${worldBook.name}\n${formattedEntries}` : '';
+          }).filter(Boolean).join('');
+
+          if (linkedContents) {
+            worldBookContent = `# 世界书设定 (最高优先级)
+以下内容是你所在世界的基础设定，你必须严格遵守。
+${linkedContents}
+`;
+          }
+        }
+
+        // 长期记忆
+        let longTermMemoryContext = '';
+        const activeMemoryText = getMemoryContextForPrompt(chat);
+        if (activeMemoryText) {
+          longTermMemoryContext = `\n# 长期记忆 (最高优先级)\n`;
+          longTermMemoryContext += activeMemoryText;
+          longTermMemoryContext += '\n';
+        }
+
+        // 挂载聊天记录
+        let linkedMemoryContext = '';
+        const memoryCount = chat.settings.linkedMemoryCount || 10;
+        if (chat.settings.linkedMemoryChatIds && chat.settings.linkedMemoryChatIds.length > 0) {
+          const idsToMount = chat.settings.linkedMemoryChatIds.filter(id => id !== watchTogetherState.chatId);
+
+          if (idsToMount.length > 0) {
+            linkedMemoryContext += `\n# 参考记忆 (其他聊天的记忆)\n`;
+
+            for (const id of idsToMount) {
+              const linkedChat = state.chats[id];
+              if (!linkedChat) continue;
+
+              const prefix = linkedChat.isGroup ? '[群聊]' : '[私聊]';
+              linkedMemoryContext += `\n## ${prefix}"${linkedChat.name}"的记忆:\n`;
+
+              const recentHistory = linkedChat.history.slice(-memoryCount);
+              const filteredHistory = recentHistory.filter(msg => !String(msg.content).includes('已被用户删除'));
+
+              if (filteredHistory.length > 0) {
+                filteredHistory.forEach(msg => {
+                  const sender = msg.role === 'user' ? (linkedChat.settings.myNickname || '我') : (msg.senderName || linkedChat.name);
+                  let contentText = String(msg.content);
+                  if (msg.type === 'ai_image' || msg.type === 'user_photo') {
+                    contentText = `[发送了一张图片，描述为：${msg.content}]`;
+                  } else if (msg.type === 'voice_message') {
+                    contentText = `[发送了一条语音，内容是：${msg.content}]`;
+                  }
+                  linkedMemoryContext += `${sender}: ${contentText}\n`;
+                });
+              } else {
+                linkedMemoryContext += "(暂无记录)\n";
+              }
+            }
+          }
+        }
+
+        // 视频内容上下文
+        let videoContext = '\n# 视频内容\n';
+
+        // 最近的语音识别内容
+        const recentSpeech = watchTogetherState.messages
+          .filter(m => m.role === 'system' && m.type === '语音识别')
+          .slice(-watchTogetherState.maxAudios);
+
+        if (recentSpeech.length > 0) {
+          videoContext += '## 视频中的对话（最近听到的）:\n';
+          recentSpeech.forEach(s => {
+            videoContext += `- ${s.content}\n`;
+          });
+        }
+
+        // 最近的截图
+        const recentScreenshots = watchTogetherState.messages
+          .filter(m => m.role === 'system' && m.type === '视频截图')
+          .slice(-watchTogetherState.maxScreenshots);
+
+        if (recentScreenshots.length > 0) {
+          videoContext += '\n## 视频画面（最近截图）:\n';
+          recentScreenshots.forEach(s => {
+            videoContext += `- ${s.content}\n`;
+          });
+        }
+
+        // 组合完整系统提示
+        let systemPrompt = basePrompt + worldBookContent + longTermMemoryContext + linkedMemoryContext + videoContext;
+
+        // 根据模式添加格式指令
+        if (isOnlineMode) {
+          // 线上模式：使用JSON数组格式（和单聊一样）
+          systemPrompt += `
+# 【【【线上聊天模式 - 最高优先级铁律】】】
+
+## 核心规则：
+1. **这是真实的在线文字聊天**，就像QQ、微信一样。
+2. **【绝对禁止】任何形式的"线下描写"**：
+   - 禁止描写动作（如：*笑了笑*、*点点头*）
+   - 禁止描写表情（如：她微笑着、他皱了皱眉）
+   - 禁止描写环境（如：阳光洒在窗台上）
+   - 禁止使用任何标点符号来表示动作（如：*、（）、【】等）
+3. **你只能打字**，就像真人在手机上聊天一样。
+4. 你可以用表情符号、网络用语、口语化表达，但**绝对不能**有任何"旁白"或"场景描写"。
+
+## 输出格式铁律：
+你的回复【必须】是一个JSON数组，数组中的每个元素代表你发送的一条消息。
+
+### 可用的消息类型：
+- **纯文字消息**: \`{"type": "text", "content": "你要打的字"}\`
+
+### 正确示例：
+\`\`\`json
+[
+  {"type": "text", "content": "哇这个镜头好美啊！"},
+  {"type": "text", "content": "你注意到刚才那个细节了吗"},
+  {"type": "text", "content": "我好喜欢这段"}
+]
+\`\`\`
+
+### 错误示例（绝对禁止）：
+❌ \`{"type": "text", "content": "*笑了笑* 确实很不错呢"}\`  
+❌ \`{"type": "text", "content": "（歪头思考）嗯...这个地方..."}\`  
+❌ \`{"type": "text", "content": "她露出了开心的笑容：这个..."}\`  
+
+现在，请像真人在手机上聊天一样，纯文字打字回复用户。可以发多条消息。
+`;
+        } else {
+          // 线下模式：单条文本
+          systemPrompt += `
+# 你的任务
+请根据以上所有信息，结合视频内容自然地回复用户。你的回复必须符合你的人设，并体现出对视频内容的理解。
+直接回复文本即可，不需要JSON格式。
+`;
+        }
+
+        // 构建消息历史
+        const maxMemory = watchTogetherState.maxMessages || 20;
+        const historyMessages = watchTogetherState.messages
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .slice(-maxMemory)
+          .map(m => ({
+            role: m.role,
+            content: m.content
+          }));
+
+        // 获取最新截图
+        const latestScreenshot = watchTogetherState.messages
+          .filter(m => m.role === 'system' && m.type === '视频截图' && m.imageData)
+          .slice(-1)[0];
+
+        // 如果有截图，把它附加到最后一条用户消息上（类似视频通话的方式）
+        if (latestScreenshot && historyMessages.length > 0) {
+          const lastUserMsgIndex = historyMessages.map((m, i) => m.role === 'user' ? i : -1).filter(i => i >= 0).pop();
+
+          if (lastUserMsgIndex !== undefined) {
+            const lastUserMsg = historyMessages[lastUserMsgIndex];
+            // 将文本消息转换为多模态消息
+            historyMessages[lastUserMsgIndex] = {
+              role: 'user',
+              content: [
+                { type: 'text', text: typeof lastUserMsg.content === 'string' ? lastUserMsg.content : '用户消息' },
+                { type: 'image_url', image_url: { url: latestScreenshot.imageData } }
+              ]
+            };
+            console.log(`📸 已将视频截图附加到用户消息: ${latestScreenshot.content}`);
+          }
+        } else if (latestScreenshot && historyMessages.length === 0) {
+          // 如果没有历史消息，把截图作为第一条用户消息
+          historyMessages.push({
+            role: 'user',
+            content: [
+              { type: 'text', text: `当前视频画面 ${latestScreenshot.content}` },
+              { type: 'image_url', image_url: { url: latestScreenshot.imageData } }
+            ]
+          });
+          console.log(`📸 已将视频截图作为首条消息发送: ${latestScreenshot.content}`);
+        } else {
+          console.log('📭 暂无视频截图可发送');
+        }
+
+        const messagesPayload = [
+          { role: 'system', content: systemPrompt },
+          ...historyMessages
+        ];
+
+        // 调用API
+        const apiResponse = await fetch(`${proxyUrl}/v1/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },

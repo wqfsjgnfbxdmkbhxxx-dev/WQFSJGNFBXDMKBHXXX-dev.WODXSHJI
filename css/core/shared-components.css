@@ -1,0 +1,355 @@
+/*
+ * Shared UI components that were historically stored in settings-font.css.
+ * Keep these styles independent from the font-settings screen so that future
+ * font UI rewrites cannot remove unrelated chat, call, finance, or social UI.
+ */
+
+/* Reply preview and quoted messages */
+#reply-preview-bar {
+    display: none;
+    padding: 8px 12px;
+    margin: 0 8px 8px;
+    background-color: rgba(0, 0, 0, 0.05);
+    border-left: 3px solid var(--accent-color);
+    border-radius: 6px;
+    position: relative;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+#phone-screen.dark-mode #reply-preview-bar {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.reply-preview-content .sender {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.reply-preview-content .text {
+    display: block;
+    max-width: 95%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#cancel-reply-btn {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: rgba(0, 0, 0, 0.1);
+    font-size: 14px;
+    line-height: 20px;
+    text-align: center;
+    cursor: pointer;
+}
+
+.quoted-message {
+    padding: 6px 10px;
+    margin-bottom: 6px;
+    background-color: rgba(0, 0, 0, 0.04);
+    border-left: 2px solid var(--accent-color);
+    border-radius: 4px;
+    font-size: 0.9em;
+    opacity: 0.8;
+}
+
+#phone-screen.dark-mode .quoted-message {
+    background-color: rgba(255, 255, 255, 0.08);
+    border-left-color: #a0cff1;
+}
+
+.quoted-message .quoted-sender {
+    font-weight: 600;
+    color: var(--accent-color);
+}
+
+#phone-screen.dark-mode .quoted-message .quoted-sender {
+    color: #a0cff1;
+}
+
+.quoted-message .quoted-content {
+    display: block;
+    color: var(--text-secondary);
+    white-space: normal;
+    word-break: break-word;
+}
+
+/* Transfer action modal */
+.transfer-actions-content {
+    width: 290px;
+    padding: 20px;
+    position: relative;
+    background-color: #fff0f5;
+    border: 1px solid #ffcce0;
+    border-radius: 20px;
+    box-shadow: 0 5px 25px rgba(255, 105, 180, 0.3);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    text-align: center;
+}
+
+.transfer-actions-header {
+    margin-bottom: 15px;
+    color: #a35c7b;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.transfer-actions-body p {
+    margin: 0 0 25px;
+    color: #555;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.transfer-actions-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 15px;
+}
+
+.transfer-actions-footer .action-btn {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.transfer-actions-footer .action-btn:active {
+    transform: scale(0.95);
+}
+
+.transfer-actions-footer .action-btn.accept {
+    background: linear-gradient(135deg, #ff85b3, #ff69b4);
+    box-shadow: 0 4px 10px rgba(255, 105, 180, 0.4);
+}
+
+.transfer-actions-footer .action-btn.decline {
+    background: linear-gradient(135deg, #c2c2c2, #a0a0a0);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.transfer-actions-content .cancel-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    background-color: rgba(0, 0, 0, 0.1);
+    color: #a35c7b;
+    font-size: 20px;
+    line-height: 28px;
+    cursor: pointer;
+}
+
+/* Main chat-list unread badge */
+.unread-count-wrapper {
+    flex-shrink: 0;
+    width: 40px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 20px;
+}
+
+.unread-count {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    background-color: #ff3b30;
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 20px;
+    text-align: center;
+}
+
+#chat-list-title {
+    cursor: pointer;
+}
+
+/* Call history and transcript */
+#call-history-screen {
+    background-color: #f0f2f5;
+}
+
+.call-record-card {
+    padding: 15px;
+    background-color: var(--secondary-bg);
+    border-left: 5px solid var(--accent-color);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.call-record-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+}
+
+.call-record-card .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.call-record-card .card-header .duration {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.call-record-card .card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.call-record-card .custom-title {
+    margin-bottom: 4px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.call-record-card .participants-info,
+.call-record-card .participants-avatars {
+    display: flex;
+    align-items: center;
+}
+
+.call-record-card .participant-avatar {
+    width: 36px;
+    height: 36px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    object-fit: cover;
+}
+
+.call-record-card .participant-avatar:not(:first-child) {
+    margin-left: -12px;
+}
+
+.call-record-card .participants-names {
+    margin-left: 12px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+#call-transcript-modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 15px;
+}
+
+.transcript-entry {
+    max-width: 85%;
+    padding: 8px 12px;
+    border-radius: 10px;
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+.transcript-entry.user {
+    align-self: flex-end;
+    background-color: #dcf8c6;
+}
+
+.transcript-entry.assistant {
+    align-self: flex-start;
+    background-color: #fff;
+}
+
+/* Voice transcripts and translated message bubbles */
+.voice-transcript {
+    display: none;
+    margin-top: 6px;
+    padding: 8px 12px;
+    background-color: rgba(0, 0, 0, 0.04);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.6;
+    word-break: break-word;
+}
+
+#phone-screen.dark-mode .voice-transcript {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.translation-bubble {
+    width: fit-content;
+    max-width: 100%;
+    margin-top: 4px;
+    padding: 8px 12px;
+    background-color: rgba(0, 0, 0, 0.04);
+    border-radius: 6px;
+    box-sizing: border-box;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.6;
+    word-break: break-word;
+}
+
+#phone-screen.dark-mode .translation-bubble {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.message-wrapper.ai .translation-bubble {
+    align-self: flex-start;
+    margin-left: 50px;
+}
+
+.message-wrapper.user .translation-bubble {
+    align-self: flex-end;
+}
+
+/* Dark-mode fixes for social and favorites content */
+#phone-screen.dark-mode .qzone-post-item .post-nickname,
+#phone-screen.dark-mode .qzone-post-item .post-content,
+#phone-screen.dark-mode .favorite-item-card .fav-card-header .name,
+#phone-screen.dark-mode .favorite-item-card .fav-card-content {
+    color: #f0f0f0;
+}
+
+#phone-screen.dark-mode .favorite-item-card .fav-card-header .source,
+#phone-screen.dark-mode #favorites-search-input::placeholder {
+    color: #8d8d92;
+}
+
+#phone-screen.dark-mode .search-bar-container {
+    background-color: #000;
+}
+
+#phone-screen.dark-mode #favorites-search-input {
+    background-color: #1c1c1e;
+    border-color: #38383a;
+    color: #fff;
+}

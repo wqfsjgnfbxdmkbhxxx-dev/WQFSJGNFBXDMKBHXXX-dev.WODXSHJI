@@ -1,0 +1,1007 @@
+          body: JSON.stringify((() => {
+            let reqBody = {
+              model: model,
+              messages: messagesPayload,
+              temperature: state.globalSettings.apiTemperature || 0.8
+            };
+            if (state.globalSettings.apiTopPEnabled && state.globalSettings.apiTopP !== undefined) reqBody.top_p = state.globalSettings.apiTopP;
+            if (state.globalSettings.apiMaxTokensEnabled && state.globalSettings.apiMaxTokens > 0) reqBody.max_tokens = state.globalSettings.apiMaxTokens;
+            if (state.globalSettings.apiPresencePenaltyEnabled && state.globalSettings.apiPresencePenalty !== undefined) reqBody.presence_penalty = state.globalSettings.apiPresencePenalty;
+            if (state.globalSettings.apiFrequencyPenaltyEnabled && state.globalSettings.apiFrequencyPenalty !== undefined) reqBody.frequency_penalty = state.globalSettings.apiFrequencyPenalty;
+            return reqBody;
+          })())
+        });
+
+        if (!apiResponse.ok) {
+          const errorData = await apiResponse.json().catch(() => ({}));
+          const errorMsg = errorData.error?.message || errorData.message || `HTTP ${apiResponse.status}`;
+          throw new Error(`API调用失败: ${errorMsg}`);
+        }
+
+        const data = await apiResponse.json();
+        let reply = data.choices[0].message.content.trim();
+
+        // 移除可能的代码块标记
+        reply = reply.replace(/^```json\s*/i, '').replace(/^```\s*/m, '').replace(/```\s*$/m, '');
+
+        if (isOnlineMode) {
+          // 线上模式：解析JSON数组，AI可以发送多条消息
+          try {
+            const parsed = JSON.parse(reply);
+            if (Array.isArray(parsed)) {
+              // 为每条消息添加到历史
+              parsed.forEach(item => {
+                if (item.type === 'text' && item.content) {
+                  watchTogetherState.messages.push({
+                    role: 'assistant',
+                    content: item.content.trim(),
+                    timestamp: Date.now()
+                  });
+                }
+              });
+            } else {
+              // 如果不是数组，当作单条消息
+              watchTogetherState.messages.push({
+                role: 'assistant',
+                content: reply,
+                timestamp: Date.now()
+              });
+            }
+          } catch (e) {
+            // JSON解析失败，当作纯文本
+            console.error('JSON解析失败:', e);
+            watchTogetherState.messages.push({
+              role: 'assistant',
+              content: reply,
+              timestamp: Date.now()
+            });
+          }
+        } else {
+          // 线下模式：直接添加单条文本消息
+          // 尝试解析JSON格式（兼容某些模型可能返回JSON）
+          try {
+            const parsed = JSON.parse(reply);
+            if (Array.isArray(parsed) && parsed[0]) {
+              if (parsed[0].type === 'text' || parsed[0].type === 'offline_text') {
+                reply = parsed[0].content;
+              }
+            }
+          } catch (e) {
+            // 保持原样
+          }
+
+          watchTogetherState.messages.push({
+            role: 'assistant',
+            content: reply,
+            timestamp: Date.now()
+          });
+        }
+
+        // 清理超出限制的对话消息
+        const dialogMessages = watchTogetherState.messages.filter(m => m.role === 'user' || m.role === 'assistant');
+        if (dialogMessages.length > watchTogetherState.maxMessages) {
+          // 计算需要删除的数量
+          const deleteCount = dialogMessages.length - watchTogetherState.maxMessages;
+          for (let i = 0; i < deleteCount; i++) {
+            const oldestDialog = watchTogetherState.messages.find(m => m.role === 'user' || m.role === 'assistant');
+            const index = watchTogetherState.messages.indexOf(oldestDialog);
+            if (index !== -1) {
+              watchTogetherState.messages.splice(index, 1);
+            }
+          }
+        }
+
+        renderWatchTogetherMessages();
+
+      } catch (error) {
+        console.error('AI调用失败:', error);
+        addWatchTogetherSystemMessage('AI调用失败：' + error.message);
+
+        // 显示错误弹窗
+        let errorDetail = error.message;
+        if (error.message.includes('模型') || error.message.includes('vision') || error.message.includes('image')) {
+          errorDetail += '\n\n提示：当前模型可能不支持视觉功能（图片识别）。建议使用支持视觉的模型，如：gpt-4o、claude-3、gemini-pro-vision 等。';
+        }
+        alert('观影AI调用失败\n\n' + errorDetail);
+      } finally {
+        // 恢复原名字
+        const chat = state.chats[watchTogetherState.chatId];
+        const chatNameElement = document.getElementById('watch-together-chat-name');
+        if (chat) {
+          chatNameElement.textContent = chat.name;
+        }
+
+        document.getElementById('watch-together-call-api-btn').disabled = false;
+        document.getElementById('watch-together-chat-send').disabled = false;
+      }
+    }
+
+    // 渲染消息
+    function renderWatchTogetherMessages() {
+      const messagesDiv = document.getElementById('watch-together-chat-messages');
+      messagesDiv.innerHTML = '';
+
+      const chat = state.chats[watchTogetherState.chatId];
+      const defaultAvatar = 'https://i.postimg.cc/y8xWzCqj/anime-boy.jpg';
+      const userAvatar = chat.settings?.myAvatar || defaultAvatar;
+      const aiAvatar = chat.settings?.aiAvatar || defaultAvatar;
+
+      watchTogetherState.messages
+        .filter(m => m.role !== 'system')
+        .forEach(msg => {
+          const msgDiv = document.createElement('div');
+          msgDiv.className = `watch-together-message ${msg.role}`;
+
+          const avatar = document.createElement('img');
+          avatar.className = 'watch-together-message-avatar';
+          avatar.src = msg.role === 'user' ? userAvatar : aiAvatar;
+
+          const content = document.createElement('div');
+          content.className = 'watch-together-message-content';
+          content.textContent = msg.content;
+
+          // 添加长按监听器
+          addLongPressListener(content, () => showWatchTogetherMessageActions(msg.timestamp));
+
+          msgDiv.appendChild(avatar);
+          msgDiv.appendChild(content);
+          messagesDiv.appendChild(msgDiv);
+        });
+
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // ========== 观影消息菜单 ==========
+    let activeWatchTogetherMessageTimestamp = null;
+
+    function showWatchTogetherMessageActions(timestamp) {
+      activeWatchTogetherMessageTimestamp = timestamp;
+      const message = watchTogetherState.messages.find(m => m.timestamp === timestamp);
+      if (!message) return;
+
+      document.getElementById('message-actions-modal').classList.add('visible');
+
+      // 显示需要的按钮
+      document.getElementById('edit-message-btn').style.display = 'block';
+      document.getElementById('edit-message-btn').textContent = '编辑';
+      document.getElementById('copy-message-btn').style.display = 'block';
+      document.getElementById('recall-message-btn').style.display = 'block';
+      document.getElementById('recall-message-btn').textContent = message.role === 'assistant' ? '重说' : '删除';
+
+      // 隐藏不需要的按钮
+      document.getElementById('copy-timestamp-btn').style.display = 'none';
+      document.getElementById('translate-message-btn').style.display = 'none';
+      document.getElementById('publish-to-announcement-btn').style.display = 'none';
+      document.getElementById('quote-message-btn').style.display = 'none';
+      document.getElementById('forward-message-btn').style.display = 'none';
+      document.getElementById('select-message-btn').style.display = 'none';
+    }
+
+    function closeWatchTogetherMessageActions() {
+      document.getElementById('message-actions-modal').classList.remove('visible');
+      activeWatchTogetherMessageTimestamp = null;
+      document.getElementById('recall-message-btn').textContent = '撤回';
+    }
+
+    function restoreNormalMessageActionsFromWatchTogether() {
+      // 恢复所有正常消息菜单按钮的显示状态
+      document.getElementById('edit-message-btn').style.display = 'block';
+      document.getElementById('copy-message-btn').style.display = 'block';
+      document.getElementById('copy-timestamp-btn').style.display = 'block';
+      document.getElementById('translate-message-btn').style.display = 'block';
+      document.getElementById('recall-message-btn').style.display = 'block';
+      document.getElementById('quote-message-btn').style.display = 'block';
+      document.getElementById('forward-message-btn').style.display = 'block';
+      document.getElementById('select-message-btn').style.display = 'block';
+      document.getElementById('recall-message-btn').textContent = '撤回';
+
+      // 重置activeWatchTogetherMessageTimestamp
+      activeWatchTogetherMessageTimestamp = null;
+    }
+    // ========== 观影消息菜单结束 ==========
+
+    // 加载设置
+    function loadWatchTogetherSettings() {
+      const chat = state.chats[watchTogetherState.chatId];
+      const settings = chat.watchTogetherSettings || {};
+
+      document.getElementById('watch-together-mode-select').value = settings.mode || 'online';
+      document.getElementById('watch-together-interval-input').value = settings.captureInterval || 5;
+      document.getElementById('watch-together-speech-api-select').value = settings.speechApi || 'none';
+      document.getElementById('watch-together-whisper-key').value = settings.whisperKey || '';
+      document.getElementById('watch-together-whisper-url').value = settings.whisperUrl || 'https://api.openai.com/v1/audio/transcriptions';
+      document.getElementById('watch-together-max-screenshots').value = settings.maxScreenshots || 10;
+      document.getElementById('watch-together-max-audios').value = settings.maxAudios || 10;
+      document.getElementById('watch-together-max-messages').value = settings.maxMessages || 20;
+
+      const whisperConfig = document.getElementById('watch-together-whisper-config');
+      whisperConfig.style.display = (settings.speechApi === 'whisper') ? 'block' : 'none';
+    }
+
+    // 保存设置
+    async function saveWatchTogetherSettings() {
+      const chat = state.chats[watchTogetherState.chatId];
+
+      chat.watchTogetherSettings = {
+        mode: document.getElementById('watch-together-mode-select').value,
+        captureInterval: parseInt(document.getElementById('watch-together-interval-input').value) || 5,
+        speechApi: document.getElementById('watch-together-speech-api-select').value,
+        whisperKey: document.getElementById('watch-together-whisper-key').value,
+        whisperUrl: document.getElementById('watch-together-whisper-url').value,
+        maxScreenshots: parseInt(document.getElementById('watch-together-max-screenshots').value) || 10,
+        maxAudios: parseInt(document.getElementById('watch-together-max-audios').value) || 10,
+        maxMessages: parseInt(document.getElementById('watch-together-max-messages').value) || 20
+      };
+
+      watchTogetherState.mode = chat.watchTogetherSettings.mode;
+      watchTogetherState.captureInterval = chat.watchTogetherSettings.captureInterval;
+      watchTogetherState.speechApi = chat.watchTogetherSettings.speechApi;
+      watchTogetherState.whisperKey = chat.watchTogetherSettings.whisperKey;
+      watchTogetherState.whisperUrl = chat.watchTogetherSettings.whisperUrl;
+      watchTogetherState.maxScreenshots = chat.watchTogetherSettings.maxScreenshots;
+      watchTogetherState.maxAudios = chat.watchTogetherSettings.maxAudios;
+      watchTogetherState.maxMessages = chat.watchTogetherSettings.maxMessages;
+
+      // 重启监听
+      if (watchTogetherState.videoUrl) {
+        stopMonitoring();
+        startWatchTogetherMonitoring();
+      }
+
+      // 保存到数据库
+      await db.chats.put(chat);
+    }
+
+    // 停止监听
+    function stopMonitoring() {
+      if (watchTogetherState.captureTimer) {
+        clearInterval(watchTogetherState.captureTimer);
+        watchTogetherState.captureTimer = null;
+      }
+
+      if (watchTogetherState.speechRecognition) {
+        watchTogetherState.speechRecognition.stop();
+        watchTogetherState.speechRecognition = null;
+      }
+
+      if (watchTogetherState.mediaRecorder) {
+        if (watchTogetherState.mediaRecorder.state === 'recording') {
+          watchTogetherState.mediaRecorder.stop();
+        }
+        watchTogetherState.mediaRecorder = null;
+      }
+
+      if (watchTogetherState.audioContext) {
+        watchTogetherState.audioContext.close();
+        watchTogetherState.audioContext = null;
+      }
+    }
+
+    // 停止观影
+    function stopWatchTogether() {
+      watchTogetherState.isStopping = true;
+      closeWatchTogetherFloatingPlayer();
+      stopMonitoring();
+
+      // 销毁 HLS 实例
+      if (watchTogetherState.hlsInstance) {
+        watchTogetherState.hlsInstance.destroy();
+        watchTogetherState.hlsInstance = null;
+      }
+
+      const video = document.getElementById('watch-together-video');
+      video.pause();
+      video.removeAttribute('crossorigin');
+      video.src = '';
+
+      if (watchTogetherState.videoUrl && watchTogetherState.videoUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(watchTogetherState.videoUrl);
+      }
+
+      document.getElementById('watch-together-video').style.display = 'none';
+      document.getElementById('watch-together-placeholder').style.display = 'block';
+      document.getElementById('watch-together-modal').classList.remove('visible');
+
+      // 恢复正常的消息菜单
+      restoreNormalMessageActionsFromWatchTogether();
+
+      watchTogetherState.isActive = false;
+      watchTogetherState.isStopping = false;
+      watchTogetherState.videoUrl = null;
+      watchTogetherState.messages = [];
+
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = null;
+      }
+    }
+
+    // ========== 影视搜索功能 ==========
+
+    // 资源站配置
+    const movieApiSources = [
+      {
+        name: '最大资源',
+        url: 'https://api.apibdzy.com/api.php/provide/vod/',
+        params: { ac: 'detail', wd: '' }
+      },
+      {
+        name: 'OK资源',
+        url: 'https://cj.okzy.tv/inc/apijson_vod.php',
+        params: { wd: '' }
+      },
+      {
+        name: '量子资源',
+        url: 'https://cj.lziapi.com/api.php/provide/vod/',
+        params: { ac: 'detail', wd: '' }
+      },
+      {
+        name: '非凡资源',
+        url: 'https://cj.ffzyapi.com/api.php/provide/vod/',
+        params: { ac: 'detail', wd: '' }
+      },
+      {
+        name: '红牛资源',
+        url: 'https://www.hongniuzy2.com/api.php/provide/vod/',
+        params: { ac: 'detail', wd: '' }
+      }
+    ];
+
+    // 搜索影视
+    async function searchMovies(keyword) {
+      const statusDiv = document.getElementById('watch-together-search-status');
+      const resultsDiv = document.getElementById('watch-together-search-results');
+
+      statusDiv.textContent = '正在搜索中...';
+      resultsDiv.innerHTML = '<div style="text-align: center; padding: 40px; color: #999;">搜索中，请稍候...</div>';
+
+      const searchBtn = document.getElementById('watch-together-search-btn');
+      searchBtn.disabled = true;
+      searchBtn.textContent = '搜索中...';
+
+      const allResults = [];
+      let successCount = 0;
+      let failCount = 0;
+
+      // 并发搜索所有资源站
+      const searchPromises = movieApiSources.map(async (source) => {
+        try {
+          const params = new URLSearchParams({ ...source.params, wd: keyword });
+          const url = `${source.url}?${params.toString()}`;
+
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json'
+            }
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const data = await response.json();
+
+          // 解析数据
+          let movies = [];
+          if (data.list && Array.isArray(data.list)) {
+            movies = data.list;
+          } else if (data.data && Array.isArray(data.data)) {
+            movies = data.data;
+          }
+
+          // 为每个结果添加来源信息
+          movies.forEach(movie => {
+            movie._source = source.name;
+          });
+
+          successCount++;
+          return movies;
+
+        } catch (error) {
+          console.error(`${source.name} 搜索失败:`, error);
+          failCount++;
+          return [];
+        }
+      });
+
+      // 等待所有搜索完成
+      const results = await Promise.all(searchPromises);
+      results.forEach(movies => {
+        allResults.push(...movies);
+      });
+
+      // 更新状态
+      searchBtn.disabled = false;
+      searchBtn.textContent = '搜索';
+
+      if (allResults.length === 0) {
+        statusDiv.textContent = `搜索完成：未找到"${keyword}"相关的影视资源 (成功:${successCount} 失败:${failCount})`;
+        resultsDiv.innerHTML = '<div style="text-align: center; padding: 40px; color: #999;">未找到相关结果，请尝试其他关键词</div>';
+        return;
+      }
+
+      statusDiv.textContent = `搜索完成：找到 ${allResults.length} 个结果 (成功:${successCount} 失败:${failCount})`;
+
+      // 渲染搜索结果
+      renderSearchResults(allResults);
+    }
+
+    // 渲染搜索结果
+    function renderSearchResults(movies) {
+      const resultsDiv = document.getElementById('watch-together-search-results');
+      resultsDiv.innerHTML = '';
+
+      movies.forEach(movie => {
+        const movieCard = document.createElement('div');
+        movieCard.style.cssText = 'border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 15px; cursor: pointer; transition: all 0.2s;';
+        movieCard.addEventListener('mouseenter', () => {
+          movieCard.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+          movieCard.style.borderColor = '#667eea';
+        });
+        movieCard.addEventListener('mouseleave', () => {
+          movieCard.style.boxShadow = 'none';
+          movieCard.style.borderColor = '#e0e0e0';
+        });
+
+        // 标题和来源
+        const header = document.createElement('div');
+        header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;';
+        header.innerHTML = `
+          <h3 style="margin: 0; font-size: 16px; color: #333;">${escapeHTML(movie.vod_name || movie.name || '未知影片')}</h3>
+          <span style="background: #667eea; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;">${movie._source}</span>
+        `;
+        movieCard.appendChild(header);
+
+        // 信息
+        const info = document.createElement('div');
+        info.style.cssText = 'color: #666; font-size: 13px; line-height: 1.6; margin-bottom: 10px;';
+        const year = movie.vod_year || movie.year || '';
+        const type = movie.type_name || movie.vod_class || movie.type || '';
+        const area = movie.vod_area || movie.area || '';
+        const actor = movie.vod_actor || movie.actor || '';
+        const director = movie.vod_director || movie.director || '';
+
+        let infoHtml = [];
+        if (year) infoHtml.push(`年份: ${year}`);
+        if (type) infoHtml.push(`类型: ${type}`);
+        if (area) infoHtml.push(`地区: ${area}`);
+        if (director) infoHtml.push(`导演: ${director}`);
+        if (actor) infoHtml.push(`主演: ${actor.substring(0, 50)}${actor.length > 50 ? '...' : ''}`);
+
+        info.innerHTML = infoHtml.join(' | ');
+        movieCard.appendChild(info);
+
+        // 播放按钮
+        const playBtn = document.createElement('button');
+        playBtn.textContent = '选择播放源';
+        playBtn.style.cssText = 'background: #667eea; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 13px;';
+        playBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          showPlaySources(movie);
+        });
+        movieCard.appendChild(playBtn);
+
+        resultsDiv.appendChild(movieCard);
+      });
+    }
+
+    // 显示播放源选择
+    function showPlaySources(movie) {
+      const resultsDiv = document.getElementById('watch-together-search-results');
+      resultsDiv.innerHTML = '';
+
+      // 返回按钮
+      const backBtn = document.createElement('button');
+      backBtn.innerHTML = '&lt; 返回搜索结果';
+      backBtn.style.cssText = 'margin-bottom: 20px; padding: 8px 16px; background: #f0f0f0; border: none; border-radius: 4px; cursor: pointer;';
+      backBtn.addEventListener('click', () => {
+        const keyword = document.getElementById('watch-together-search-input').value.trim();
+        if (keyword) searchMovies(keyword);
+      });
+      resultsDiv.appendChild(backBtn);
+
+      // 影片信息
+      const movieInfo = document.createElement('div');
+      movieInfo.style.cssText = 'background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;';
+      movieInfo.innerHTML = `
+        <h2 style="margin: 0 0 10px 0; font-size: 18px;">${escapeHTML(movie.vod_name || movie.name || '未知影片')}</h2>
+        <p style="margin: 0; color: #666; font-size: 13px; line-height: 1.6;">${escapeHTML(movie.vod_content || movie.content || movie.vod_blurb || '暂无简介')}</p>
+      `;
+      resultsDiv.appendChild(movieInfo);
+
+      // 解析播放地址
+      const playUrlStr = movie.vod_play_url || movie.play_url || movie.vod_url || '';
+      if (!playUrlStr) {
+        resultsDiv.innerHTML += '<div style="text-align: center; padding: 40px; color: #999;">该影片暂无可用播放源</div>';
+        return;
+      }
+
+      // 解析播放源（格式: 播放组$名称$URL#名称$URL）
+      const playGroups = playUrlStr.split('$$$');
+
+      playGroups.forEach((group, groupIndex) => {
+        const episodes = group.split('#').filter(ep => ep.trim());
+
+        if (episodes.length === 0) return;
+
+        const groupDiv = document.createElement('div');
+        groupDiv.style.cssText = 'margin-bottom: 20px;';
+
+        const groupTitle = document.createElement('h3');
+        groupTitle.textContent = `播放源 ${groupIndex + 1}`;
+        groupTitle.style.cssText = 'margin: 0 0 10px 0; font-size: 15px; color: #333;';
+        groupDiv.appendChild(groupTitle);
+
+        const episodesGrid = document.createElement('div');
+        episodesGrid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;';
+
+        episodes.forEach(episode => {
+          const parts = episode.split('$');
+          const episodeName = parts[0] || '播放';
+          const episodeUrl = parts[1] || parts[0];
+
+          if (!episodeUrl) return;
+
+          const episodeBtn = document.createElement('button');
+          episodeBtn.textContent = episodeName;
+          episodeBtn.style.cssText = 'padding: 10px; background: white; border: 1px solid #d0d0d0; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.2s;';
+          episodeBtn.addEventListener('mouseenter', () => {
+            episodeBtn.style.background = '#667eea';
+            episodeBtn.style.color = 'white';
+            episodeBtn.style.borderColor = '#667eea';
+          });
+          episodeBtn.addEventListener('mouseleave', () => {
+            episodeBtn.style.background = 'white';
+            episodeBtn.style.color = '#333';
+            episodeBtn.style.borderColor = '#d0d0d0';
+          });
+          episodeBtn.addEventListener('click', () => {
+            playMovieUrl(episodeUrl, `${movie.vod_name || movie.name} - ${episodeName}`);
+          });
+
+          episodesGrid.appendChild(episodeBtn);
+        });
+
+        groupDiv.appendChild(episodesGrid);
+        resultsDiv.appendChild(groupDiv);
+      });
+    }
+
+    // 播放影片
+    function playMovieUrl(url, title) {
+      console.log('准备播放:', url);
+
+      // 关闭搜索弹窗
+      document.getElementById('watch-together-search-modal').classList.remove('visible');
+
+      // 加载视频
+      loadWatchTogetherVideoFromUrl(url);
+
+      // 显示提示
+      addWatchTogetherSystemMessage(`正在加载: ${title}`);
+    }
+
+    // 添加系统消息
+    function addWatchTogetherSystemMessage(text) {
+      const messagesDiv = document.getElementById('watch-together-chat-messages');
+      const msgDiv = document.createElement('div');
+      msgDiv.style.cssText = 'text-align: center; color: #999; font-size: 12px; padding: 10px; margin: 5px 0;';
+      msgDiv.textContent = text;
+      messagesDiv.appendChild(msgDiv);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // ========== 影视搜索功能结束 ==========
+    // ========== 一起看电影功能结束 ==========
+
+
+    document.getElementById('add-quick-reply-btn')?.addEventListener('click', addNewQuickReply);
+
+
+
+    document.getElementById('minimize-char-music-btn')?.addEventListener('click', minimizeCharMusicPlayer);
+
+
+    document.getElementById('char-music-restore-btn')?.addEventListener('click', restoreCharMusicPlayer);
+
+
+    makeDraggable(document.getElementById('char-music-restore-btn'), document.getElementById('char-music-restore-btn'));
+
+    document.getElementById('imgbb-enable-switch')?.addEventListener('change', (e) => {
+      document.getElementById('imgbb-settings-details').style.display = e.target.checked ? 'block' : 'none';
+    });
+
+    document.getElementById('imgbb-key-toggle')?.addEventListener('click', function () {
+      const input = document.getElementById('imgbb-api-key');
+      if (input.type === 'password') {
+        input.type = 'text';
+        this.textContent = '😌';
+      } else {
+        input.type = 'password';
+        this.textContent = '🧐';
+      }
+    });
+    document.getElementById('catbox-enable-switch')?.addEventListener('change', (e) => {
+      document.getElementById('catbox-settings-details').style.display = e.target.checked ? 'block' : 'none';
+    });
+
+    document.getElementById('catbox-key-toggle')?.addEventListener('click', function () {
+      const input = document.getElementById('catbox-userhash');
+      if (input.type === 'password') {
+        input.type = 'text';
+        this.textContent = '😌';
+      } else {
+        input.type = 'password';
+        this.textContent = '🧐';
+      }
+    });
+    const biliSearchBtn = document.getElementById('char-bilibili-search-btn');
+    if (biliSearchBtn) {
+      biliSearchBtn.addEventListener('click', handleCharBilibiliSearch);
+      console.log("B站搜索按钮已绑定"); // 调试日志
+    } else {
+      console.error("找不到B站搜索按钮 (char-bilibili-search-btn)，请检查HTML ID");
+    }
+    const regenBiliBtn = document.getElementById('regenerate-char-bilibili-btn');
+    if (regenBiliBtn) {
+      regenBiliBtn.addEventListener('click', handleGenerateSimulatedBilibili);
+    }
+    // 2. 绑定回车键搜索
+    const biliInput = document.getElementById('char-bilibili-search-input');
+    if (biliInput) {
+      biliInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleCharBilibiliSearch();
+      });
+    }
+    const ghSwitch = document.getElementById('github-enable-switch');
+    if (ghSwitch) {
+      ghSwitch.addEventListener('change', (e) => {
+        document.getElementById('github-settings-details').style.display = e.target.checked ? 'block' : 'none';
+      });
+    }
+
+    // GitHub 按钮功能绑定
+    const ghUploadBtn = document.getElementById('github-upload-btn');
+    if (ghUploadBtn) {
+      const uploadHandler = () => uploadToGitHub(false);
+      ghUploadBtn.addEventListener('click', uploadHandler);
+      ghUploadBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        uploadHandler();
+      }, { passive: false });
+    }
+
+    const ghUploadLargeBtn = document.getElementById('github-upload-large-btn');
+    if (ghUploadLargeBtn) {
+      const uploadLargeHandler = () => uploadToGitHubLargeData(false);
+      ghUploadLargeBtn.addEventListener('click', uploadLargeHandler);
+      ghUploadLargeBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        uploadLargeHandler();
+      }, { passive: false });
+    }
+
+    const ghDownloadBtn = document.getElementById('github-download-btn');
+    if (ghDownloadBtn) {
+      ghDownloadBtn.addEventListener('click', restoreFromGitHub);
+      ghDownloadBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        restoreFromGitHub();
+      }, { passive: false });
+    }
+    const ghTokenToggle = document.getElementById('github-token-toggle');
+    if (ghTokenToggle) {
+      ghTokenToggle.addEventListener('click', function () {
+        const input = document.getElementById('github-token');
+        if (input.type === 'password') {
+          input.type = 'text';
+          this.textContent = '😌'; // 睁眼
+        } else {
+          input.type = 'password';
+          this.textContent = '🧐'; // 闭眼
+        }
+      });
+    }
+    document.getElementById('toggle-reading-fullscreen-btn')?.addEventListener('click', toggleReadingFullscreen);
+
+    // ========================================
+    // ▼▼▼ 你画我猜功能（在DOMContentLoaded内部以访问state）▼▼▼
+    // ========================================
+
+    /**
+     * 打开你画我猜App
+     */
+    function openDrawAndGuess() {
+      // 重置所有UI到初始状态
+      document.getElementById('draw-guess-interactive-area').style.display = 'none';
+      document.getElementById('draw-guess-welcome-text').style.display = 'block';
+      document.getElementById('draw-guess-studio').style.display = 'none';
+      document.getElementById('draw-guess-bottom-bar').style.display = 'none';
+      document.getElementById('start-draw-guess-game-btn').textContent = '开始游戏';
+      document.getElementById('draw-guess-dialogue-box').textContent = '';
+      document.getElementById('draw-guess-input').value = '';
+      document.getElementById('draw-guess-action-bar').style.display = 'none';
+
+      // 重置所有游戏状态
+      drawGuessState.isActive = false;
+      drawGuessState.partnerId = null;
+      drawGuessState.history = [];
+      drawGuessState.isAiResponding = false;
+      drawGuessState.messageManager = { isOpen: false, mode: null, selectedTimestamps: new Set() };
+
+      showScreen('draw-guess-screen');
+    }
+
+    // 挂载到全局对象，使HTML的onclick可以调用
+    window.openDrawAndGuess = openDrawAndGuess;
+
+    /**
+     * 绘图板对象
+     */
+    const drawingBoard = {
+      canvas: null,
+      ctx: null,
+      isDrawing: false,
+      lastX: 0,
+      lastY: 0,
+      history: [],
+      tool: 'pen',
+      color: '#000000',
+      brushSize: 5,
+      penType: 'pen',
+
+      init(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.canvas.width = this.canvas.offsetWidth;
+        this.canvas.height = this.canvas.offsetHeight;
+        this.history = [];
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.saveState();
+        this.addEventListeners();
+      },
+
+      addEventListeners() {
+        this.handleDown = this.handleDown.bind(this);
+        this.handleMove = this.handleMove.bind(this);
+        this.handleUp = this.handleUp.bind(this);
+
+        this.canvas.addEventListener('mousedown', this.handleDown);
+        this.canvas.addEventListener('mousemove', this.handleMove);
+        this.canvas.addEventListener('mouseup', this.handleUp);
+        this.canvas.addEventListener('mouseleave', this.handleUp);
+
+        this.canvas.addEventListener('touchstart', this.handleDown, { passive: false });
+        this.canvas.addEventListener('touchmove', this.handleMove, { passive: false });
+        this.canvas.addEventListener('touchend', this.handleUp);
+      },
+
+      getCoords(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+        const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+        return {
+          x: clientX - rect.left,
+          y: clientY - rect.top
+        };
+      },
+
+      handleDown(e) {
+        e.preventDefault();
+        this.isDrawing = true;
+        const { x, y } = this.getCoords(e);
+        [this.lastX, this.lastY] = [x, y];
+        this.ctx.beginPath();
+        this.ctx.moveTo(x, y);
+      },
+
+      handleMove(e) {
+        if (!this.isDrawing) return;
+        e.preventDefault();
+        const { x, y } = this.getCoords(e);
+        this.drawLine(this.lastX, this.lastY, x, y);
+        [this.lastX, this.lastY] = [x, y];
+      },
+
+      handleUp() {
+        if (!this.isDrawing) return;
+        this.isDrawing = false;
+        this.ctx.closePath();
+        this.saveState();
+      },
+
+      drawLine(x1, y1, x2, y2) {
+        this.ctx.beginPath();
+
+        if (this.tool === 'eraser') {
+          this.ctx.globalCompositeOperation = 'destination-out';
+          this.ctx.strokeStyle = 'rgba(0,0,0,1)';
+        } else {
+          this.ctx.globalCompositeOperation = 'source-over';
+          this.ctx.strokeStyle = this.color;
+        }
+
+        this.ctx.lineWidth = this.brushSize;
+        this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
+
+        switch (this.penType) {
+          case 'pencil':
+            this.ctx.globalAlpha = 0.4;
+            this.ctx.lineWidth = this.brushSize * 0.5;
+            break;
+          case 'watercolor':
+            this.ctx.globalAlpha = 0.2;
+            break;
+          case 'brush':
+            this.ctx.globalAlpha = 0.8;
+            this.ctx.lineWidth = Math.random() * (this.brushSize - 2) + 2;
+            break;
+          case 'calligraphy':
+            this.ctx.globalAlpha = 1;
+            const distance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+            this.ctx.lineWidth = Math.max(this.brushSize - distance / 2, 1);
+            break;
+          case 'pen':
+          default:
+            this.ctx.globalAlpha = 1;
+            break;
+        }
+
+        this.ctx.moveTo(x1, y1);
+        this.ctx.lineTo(x2, y2);
+        this.ctx.stroke();
+        this.ctx.globalAlpha = 1.0;
+      },
+
+      saveState() {
+        if (this.history.length >= 20) {
+          this.history.shift();
+        }
+        this.history.push(this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height));
+      },
+
+      undo() {
+        if (this.history.length > 1) {
+          this.history.pop();
+          this.ctx.putImageData(this.history[this.history.length - 1], 0, 0);
+        } else {
+          this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+          this.history = [];
+          this.saveState();
+        }
+      },
+
+      setTool(tool) {
+        this.tool = tool;
+        document.getElementById('pen-settings').style.display = tool === 'pen' ? 'block' : 'none';
+      },
+
+      setColor(color) {
+        this.color = color;
+      },
+
+      setSize(size) {
+        this.brushSize = size;
+      },
+
+      setPenType(type) {
+        this.penType = type;
+      },
+
+      clearCanvas() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.history = [];
+        this.saveState();
+      }
+    };
+
+    /**
+     * 选择角色并开始游戏
+     */
+    async function setupDrawAndGuessSession(characterId) {
+      if (!characterId) return;
+
+      drawGuessState.isActive = true;
+      drawGuessState.partnerId = characterId;
+      drawGuessState.history = [];
+
+      const chat = state.chats[characterId];
+      if (!chat) return;
+
+      const userAvatar = chat.settings.myAvatar || defaultAvatar;
+      const userNickname = chat.settings.myNickname || '我';
+      const charAvatar = chat.settings.aiAvatar || defaultAvatar;
+      const charNickname = chat.name;
+
+      document.getElementById('draw-guess-user-avatar').src = userAvatar;
+      document.getElementById('draw-guess-user-name').textContent = userNickname;
+      document.getElementById('draw-guess-char-avatar').src = charAvatar;
+      document.getElementById('draw-guess-char-name').textContent = charNickname;
+
+      document.getElementById('draw-guess-interactive-area').style.display = 'flex';
+      document.getElementById('draw-guess-welcome-text').style.display = 'none';
+      document.getElementById('draw-guess-bottom-bar').style.display = 'block';
+
+      showScreen('draw-guess-screen');
+
+      await triggerDrawAndGuessAiResponse(true);
+      document.getElementById('draw-guess-action-bar').style.display = 'flex';
+    }
+
+    /**
+     * 发送消息
+     */
+    function sendDrawGuessMessage() {
+      const input = document.getElementById('draw-guess-input');
+      const content = input.value.trim();
+      if (!content || !drawGuessState.partnerId) return;
+
+      const chat = state.chats[drawGuessState.partnerId];
+      if (!chat) return;
+
+      const userMessage = {
+        sender: chat.settings.myNickname || '我',
+        content: content,
+        timestamp: Date.now()
+      };
+
+      drawGuessState.history.push(userMessage);
+      appendDrawGuessMessage(userMessage);
+
+      input.value = '';
+      handleDrawGuessInput();
+    }
+
+    /**
+     * 添加消息到对话框
+     */
+    function appendDrawGuessMessage(msg) {
+      const dialogueBox = document.getElementById('draw-guess-dialogue-box');
+      dialogueBox.removeAttribute('data-placeholder');
+
+      const p = document.createElement('p');
+      p.textContent = `${msg.sender}: ${msg.content}`;
+      p.style.margin = '4px 0';
+      p.style.color = 'var(--text-primary)';
+      p.dataset.timestamp = msg.timestamp;
+      dialogueBox.appendChild(p);
+      dialogueBox.scrollTop = dialogueBox.scrollHeight;
+      return p;
+    }
+
+    /**
+     * 处理输入框变化
+     */
+    function handleDrawGuessInput() {
+      const input = document.getElementById('draw-guess-input');
+      const actionBar = document.getElementById('draw-guess-action-bar');
+      if (input.value.trim()) {
+        actionBar.style.display = 'flex';
+      } else {
+        actionBar.style.display = 'none';
+      }
+    }
+
+    /**
+     * 重说功能
+     */
+    async function handleDrawGuessResay() {
+      const chat = state.chats[drawGuessState.partnerId];
+      if (!chat) return;
+
+      const userNickname = chat.settings.myNickname || '我';
+      const lastAiMsgIndex = drawGuessState.history.findLastIndex(msg => msg.sender !== userNickname);
+
+      if (lastAiMsgIndex === -1) {
+        alert("还没有AI的回复可供重说。");
+        return;
+      }
+
+      let firstAiMsgIndex = lastAiMsgIndex;
+      while (firstAiMsgIndex > 0 && drawGuessState.history[firstAiMsgIndex - 1].sender !== userNickname) {
+        firstAiMsgIndex--;
+      }
+
+      drawGuessState.history.splice(firstAiMsgIndex);
+
