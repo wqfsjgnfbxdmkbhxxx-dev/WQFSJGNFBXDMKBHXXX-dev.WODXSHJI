@@ -177,7 +177,6 @@
         // 仅当仍是当前通话世代时推进队列。
         if (generation === callTtsGeneration) processNextTts();
       };
-      console.log('[通话TTS诊断] Web Audio 播放开始 | duration:', audioBuffer.duration);
       source.start(0);
       return true;
     } catch (error) {
@@ -243,7 +242,6 @@
   let callTtsPlayerUnlocked = false;
   function unlockCallTtsPlayer() {
     const callPlayer = document.getElementById('call-tts-audio-player');
-    console.log('[通话TTS诊断] unlockCallTtsPlayer 进入 | 播放器存在:', !!callPlayer);
     if (!callPlayer) return;
     let silentUrl = '';
     try {
@@ -287,15 +285,13 @@
       callPlayer.src = silentUrl;
       const playPromise = callPlayer.play();
       if (playPromise && typeof playPromise.then === 'function') {
-        playPromise.then(() => { callTtsPlayerUnlocked = true; console.log('[通话TTS诊断] unlockCallTtsPlayer 解锁 play() 成功'); cleanup(); })
-          .catch((error) => { console.warn('[通话TTS诊断] unlockCallTtsPlayer 解锁 play() 失败 |', error && error.name ? error.name : error, '|', error && error.message ? error.message : ''); cleanup(); });
+        playPromise.then(() => { callTtsPlayerUnlocked = true; cleanup(); })
+          .catch((error) => { cleanup(); });
       } else {
         callTtsPlayerUnlocked = true;
-        console.log('[通话TTS诊断] unlockCallTtsPlayer 解锁完成（play 无 Promise）');
         cleanup();
       }
     } catch (error) {
-      console.warn('[通话TTS诊断] unlockCallTtsPlayer 解锁异常 |', error && error.name, '|', error && error.message);
       cleanup();
     }
   }
@@ -417,9 +413,7 @@
 
     try {
       const { minimaxApiKey } = state.apiConfig;
-      console.log('[通话TTS诊断] processNextTts 进入 | 剩余 queueLength:', ttsQueue.length, '| voiceIdExists:', !!voiceId, '| apiKey:', !!minimaxApiKey);
       if (!minimaxApiKey || !voiceId) {
-        console.log('[通话TTS诊断] processNextTts 提前结束：缺少 apiKey / voiceId');
         processNextTts();
         return;
       }
@@ -446,17 +440,14 @@
 
       // 挂断 / 新通话：丢弃旧结果，不播放、不推进新队列。
       if (generation !== callTtsGeneration) {
-        console.log('[通话TTS诊断] 中止：generation 变化（挂断/切换）');
         return;
       }
       if (!audioBytes) {
-        console.log('[通话TTS诊断] 本条无音频，跳到下一条');
         processNextTts();
         return;
       }
 
       const audioBlob = new Blob([audioBytes], { type: 'audio/mpeg' });
-      console.log('[通话TTS诊断] 音频就绪 | size:', audioBlob.size);
 
       // 在开始播放当前条的同时，后台预取下一条（最多 1 条）。
       prefetchNextTts(generation);
@@ -474,7 +465,6 @@
       currentCallTtsObjectUrl = audioUrl;
 
       const callPlayer = document.getElementById('call-tts-audio-player');
-      console.log('[通话TTS诊断] 回退 <audio> | callPlayer 元素存在:', !!callPlayer);
       callPlayer.src = audioUrl;
       callPlayer.dataset.currentText = text;
 
@@ -489,9 +479,7 @@
 
       try {
         await callPlayer.play();
-        console.log('[通话TTS诊断] 回退 <audio> play() 成功');
       } catch (playError) {
-        console.error('[通话TTS诊断] 回退 <audio> play() 失败 |', playError && playError.name, '|', playError && playError.message);
         throw playError;
       }
 
@@ -506,11 +494,9 @@
 
   // --- 视频/语音通话专用 TTS 播放函数（队列版） ---
   function playVideoCallPureTTS(text, voiceId) {
-    console.log('[通话TTS诊断] playVideoCallPureTTS 进入 | textExists:', !!text, '| textLen:', text ? String(text).length : 0, '| voiceIdExists:', !!voiceId);
     // 1. 正则去除括号及括号内的内容
     let cleanText = text.replace(/(\[.*?\]|\(.*?\)|（.*?）|【.*?】)/g, '').trim();
     if (!cleanText) {
-      console.log('[通话TTS诊断] 中止：cleanText 为空（原始文本被括号清洗规则清空）');
       return;
     }
 
@@ -524,16 +510,12 @@
     }
 
     if (!cleanText) {
-      console.log('[通话TTS诊断] 中止：cleanText 在仅读取对话处理后为空');
       return;
     }
-    console.log('[通话TTS诊断] cleanTextLen:', cleanText.length);
 
     // 2. 检查配置
     const { minimaxGroupId, minimaxApiKey } = state.apiConfig;
-    console.log('[通话TTS诊断] 配置检查 | groupId:', !!minimaxGroupId, '| apiKey:', !!minimaxApiKey, '| voiceId:', !!voiceId);
     if (!minimaxApiKey || !voiceId) {
-      console.log('[通话TTS诊断] 中止：缺少 apiKey / voiceId，未入队');
       return;
     }
 
@@ -551,7 +533,6 @@
 
     // 4. 推入队列，串行处理（复用现有 ttsQueue，不新建队列）。
     ttsQueue.push({ text: cleanText, voiceId, voice });
-    console.log('[通话TTS诊断] queue push | 当前 queueLength:', ttsQueue.length, '| voiceIdExists:', !!voiceId, '| isTtsPlaying:', isTtsPlaying);
 
     if (!isTtsPlaying) {
       processNextTts();

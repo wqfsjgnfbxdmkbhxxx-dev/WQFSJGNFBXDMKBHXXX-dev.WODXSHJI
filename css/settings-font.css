@@ -20,10 +20,13 @@
 /* 1. 顶部导航栏 (纯白清爽) */
 #font-settings-screen .font-ios-header {
     height: 48px;
+    /* iOS 安全区避让：整个顶栏从状态栏下方开始，避免返回/保存与系统时间信号电量重叠。
+       与支付宝等其他 App 顶栏一致，使用 env(safe-area-inset-top) 顶部内边距。 */
+    box-sizing: content-box;
+    padding: env(safe-area-inset-top, 0px) 16px 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 16px;
     background: #ffffff;
     border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
     z-index: 20;
