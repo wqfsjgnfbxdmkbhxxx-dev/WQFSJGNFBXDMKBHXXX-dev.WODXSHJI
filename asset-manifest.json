@@ -210,6 +210,8 @@
   "modules/social/douban/context-settings.js",
   "modules/social/douban/npc-and-groups.js",
   "modules/social/douban/management.js",
+  "modules/media/minimax-voice.js",
+  "modules/media/minimax-voice-preview.js",
   "modules/tts-audio.js",
   "modules/appearance-theme.js",
   "modules/notification-battery.js",
@@ -300,5 +302,5 @@
   "css/couple-invite.css",
   "css/floating-ball.css",
   "js/time-system.js",
-  "js/auth-system.js"
+  "js/intro-start.js"
 ]

@@ -172,6 +172,13 @@
   async function handleInitiateCall() {
     if (!state.activeChatId || videoCallState.isActive || videoCallState.isAwaitingResponse) return;
 
+    // 在用户点击“拨打视频电话”的同步手势里解锁通话播放器，确保后续 AI 回复的
+    // MiniMax TTS 能自动播放（规避浏览器 autoplay 限制）。
+    // 主方案：在手势栈内创建并 resume 通话专用 AudioContext（Web Audio）。
+    if (typeof window.unlockCallAudioContext === 'function') { void window.unlockCallAudioContext(); }
+    // 回退：<audio> 解锁（供不支持 Web Audio 的环境）。
+    if (typeof window.unlockCallTtsPlayer === 'function') window.unlockCallTtsPlayer();
+
     const chat = state.chats[state.activeChatId];
     videoCallState.isGroupCall = chat.isGroup;
     videoCallState.isAwaitingResponse = true;
@@ -880,6 +887,13 @@ ${linkedContents}
 
   async function handleInitiateVoiceCall() {
     if (!state.activeChatId || voiceCallState.isActive || voiceCallState.isAwaitingResponse) return;
+
+    // 在用户点击“拨打语音电话”的同步手势里解锁通话播放器，确保后续 AI 回复的
+    // MiniMax TTS 能自动播放（规避浏览器 autoplay 限制）。
+    // 主方案：在手势栈内创建并 resume 通话专用 AudioContext（Web Audio）。
+    if (typeof window.unlockCallAudioContext === 'function') { void window.unlockCallAudioContext(); }
+    // 回退：<audio> 解锁（供不支持 Web Audio 的环境）。
+    if (typeof window.unlockCallTtsPlayer === 'function') window.unlockCallTtsPlayer();
 
     const chat = state.chats[state.activeChatId];
     voiceCallState.isGroupCall = chat.isGroup;

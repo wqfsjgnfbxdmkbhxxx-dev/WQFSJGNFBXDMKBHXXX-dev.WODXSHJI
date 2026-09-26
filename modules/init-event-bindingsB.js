@@ -2899,6 +2899,11 @@ window.initEventBindingsB = function(state, db) {
     document.getElementById('accept-call-btn').addEventListener('click', async () => {
       hideIncomingCallModal();
 
+      // 在“接听电话”的用户手势同步栈里解锁通话音频上下文（Web Audio 主方案 + <audio> 回退），
+      // 确保后续 AI 回复的 MiniMax TTS 能在 Android 上自动播放。
+      if (typeof window.unlockCallAudioContext === 'function') { void window.unlockCallAudioContext(); }
+      if (typeof window.unlockCallTtsPlayer === 'function') window.unlockCallTtsPlayer();
+
       // 获取通话类型
       const modal = document.getElementById('incoming-call-modal');
       const callType = modal.dataset.callType || 'video';

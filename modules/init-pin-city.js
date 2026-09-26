@@ -94,6 +94,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   function requirePinActivation() {
+    // 已取消“功能激活码 / PIN”限制：这是自用实例，直接视为已激活并放行。
+    // 保留函数与调用点，仅让其无条件通过，兼容 `await requirePinActivation()` 用法。
+    isPinActivated = true;
+    try { localStorage.setItem('ephonePinActivated', 'true'); } catch (_) {}
+    return Promise.resolve(true);
+  }
+
+  function _legacyRequirePinActivation() {
 
     return new Promise(async (resolve, reject) => {
 
@@ -208,7 +216,8 @@ document.addEventListener('DOMContentLoaded', () => {
   window.requirePinActivation = requirePinActivation;
 
   function updateLockedFeatureUI() {
-    const isActivated = localStorage.getItem('ephonePinActivated') === 'true';
+    // 已取消 PIN 限制：始终按“已激活”处理，不再显示锁定视觉。
+    const isActivated = true;
     const presetImportBtn = document.getElementById('import-preset-btn');
 
 
